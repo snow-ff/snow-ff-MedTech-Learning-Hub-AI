@@ -49,6 +49,8 @@ export default function App() {
     setAnswer(null);
     setIsPreviewMode(false);
 
+    const frontendStartTime = Date.now();
+
     try {
       const res = await fetch("/api/gemini/generate", {
         method: "POST",
@@ -56,15 +58,36 @@ export default function App() {
         body: JSON.stringify({ prompt: queryToSubmit }),
       });
 
-      const data = await res.json();
+      const textBody = await res.text();
+      const networkAndGenDuration = Date.now() - frontendStartTime;
+      console.log(`[Perf Frontend] Fetch request completed in ${networkAndGenDuration}ms`);
+
+      let data: any = {};
+      try {
+        if (textBody.trim().startsWith("{") || textBody.trim().startsWith("[")) {
+          data = JSON.parse(textBody);
+        }
+      } catch (parseErr) {
+        // Not valid JSON
+      }
+
+      if (textBody.trim().toLowerCase().startsWith("<!doctype") || textBody.trim().toLowerCase().startsWith("<html")) {
+        throw new Error("เซิร์ฟเวอร์ตอบกลับเป็นหน้าเว็บ HTML แทนที่จะเป็น JSON (Unexpected HTML response) กรุณาลองใหม่อีกครั้งในภายหลัง");
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || "เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์");
+        throw new Error(data.error || textBody || "เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์");
+      }
+
+      if (!data.text) {
+        throw new Error(data.error || "ไม่ได้รับข้อมูลคำตอบจากเซิร์ฟเวอร์");
       }
 
       setAnswer(data.text);
+      console.log(`[Perf Frontend] Total roundtrip duration including render parse: ${Date.now() - frontendStartTime}ms`);
     } catch (err: any) {
       setError(err.message || "ไม่สามารถติดต่อกับ Gemini API ได้ในขณะนี้");
+      console.error(`[Perf Frontend] Error after ${Date.now() - frontendStartTime}ms:`, err.message);
     } finally {
       setIsLoading(false);
     }
@@ -366,12 +389,12 @@ export default function App() {
       {showConnectModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
-            <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0 mb-4">
               <Brain className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">สถานะการเชื่อมต่อ AI</h3>
             <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-              แอปพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-teal-700">gemini-3.8-flash</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว คีย์ API ถูกจัดเก็บอย่างปลอดภัยผ่านระบบ Secrets
+              แップพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-teal-700">gemini-3.8-flash</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว คีย์ API ถูกจัดเก็บอย่างปลอดภัยผ่านระบบ Secrets
             </p>
             <div className="flex justify-end gap-3">
               <button
