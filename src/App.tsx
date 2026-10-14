@@ -94,46 +94,46 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-teal-100 selection:text-teal-900">
+    <div className="min-h-screen bg-[#0F172A] text-[#F1F5F9] flex flex-col font-sans selection:bg-sky-900 selection:text-sky-200">
       {/* Top Bar Contract (Strict 3-zone layout) */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4">
+      <header className="sticky top-0 z-40 bg-[#0F172A]/90 backdrop-blur-md border-b border-[#334155] px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-8">
           {/* Zone 1: Single text element wordmark */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-sm">
               <Microscope className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0 flex items-center gap-2">
-                MedTech Learning Hub <span className="text-xs font-semibold px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full border border-teal-200">AI v1.1</span>
+              <h1 className="text-lg font-bold tracking-tight text-[#F1F5F9] whitespace-nowrap shrink-0 flex items-center gap-2">
+                MedTech Learning Hub <span className="text-xs font-semibold px-2 py-0.5 bg-sky-950 text-[#7DD3FC] rounded-full border border-sky-800">AI v1.1</span>
               </h1>
-              <p className="text-xs text-slate-500 hidden sm:block">ศูนย์การเรียนรู้เทคนิคการแพทย์อัจฉริยะ (Gemini Connected)</p>
+              <p className="text-xs text-[#CBD5E1] hidden sm:block">ศูนย์การเรียนรู้เทคนิคการแพทย์อัจฉริยะ (Gemini Connected)</p>
             </div>
           </div>
 
           {/* Zone 2: 4-5 concise single-line text navigation links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#CBD5E1]">
             <button 
               onClick={() => setActiveTab('home')} 
-              className={`hover:text-teal-700 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'home' ? 'text-teal-700 font-semibold' : ''}`}
+              className={`hover:text-[#7DD3FC] transition-colors whitespace-nowrap shrink-0 ${activeTab === 'home' ? 'text-[#7DD3FC] font-semibold' : ''}`}
             >
               หน้าแรก
             </button>
             <button 
               onClick={() => setActiveTab('knowledge')} 
-              className={`hover:text-teal-700 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'knowledge' ? 'text-teal-700 font-semibold' : ''}`}
+              className={`hover:text-[#7DD3FC] transition-colors whitespace-nowrap shrink-0 ${activeTab === 'knowledge' ? 'text-[#7DD3FC] font-semibold' : ''}`}
             >
               คลังความรู้
             </button>
             <button 
               onClick={() => setActiveTab('terms')} 
-              className={`hover:text-teal-700 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'terms' ? 'text-teal-700 font-semibold' : ''}`}
+              className={`hover:text-[#7DD3FC] transition-colors whitespace-nowrap shrink-0 ${activeTab === 'terms' ? 'text-[#7DD3FC] font-semibold' : ''}`}
             >
               ศัพท์เทคนิค
             </button>
             <button 
               onClick={() => setActiveTab('about')} 
-              className={`hover:text-teal-700 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'about' ? 'text-teal-700 font-semibold' : ''}`}
+              className={`hover:text-[#7DD3FC] transition-colors whitespace-nowrap shrink-0 ${activeTab === 'about' ? 'text-[#7DD3FC] font-semibold' : ''}`}
             >
               เกี่ยวกับระบบ
             </button>
@@ -143,7 +143,7 @@ export default function App() {
           <div className="flex items-center gap-3 shrink-0">
             <button 
               onClick={() => setShowConnectModal(true)}
-              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 shadow-sm"
+              className="px-4 py-2 text-xs font-semibold text-[#F1F5F9] bg-[#1E293B] hover:bg-slate-800 border border-[#334155] rounded-lg transition-colors whitespace-nowrap shrink-0 shadow-sm"
             >
               สถานะระบบ AI
             </button>
@@ -155,25 +155,25 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
         
         {/* Notice Banner about Gemini API connection */}
-        <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 text-teal-900 text-sm flex items-start gap-3 shadow-sm">
-          <Sparkles className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
+        <div className="bg-[#1E293B] border border-sky-900/50 rounded-xl p-4 text-[#F1F5F9] text-sm flex items-start gap-3 shadow-sm">
+          <Sparkles className="w-5 h-5 text-[#7DD3FC] shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold">เชื่อมต่อ Gemini AI สำเร็จ (Gemini-3.8-Flash):</span> พิมพ์คำถามด้านเทคนิคการแพทย์ของคุณเพื่อรับคำอธิบายเชิงวิชาการแบบเรียลไทม์ 
+            <span className="font-semibold text-[#7DD3FC]">เชื่อมต่อ Gemini AI สำเร็จ (Gemini-3.8-Flash):</span> พิมพ์คำถามด้านเทคนิคการแพทย์ของคุณเพื่อรับคำอธิบายเชิงวิชาการแบบเรียลไทม์ 
             (หมายเหตุ: เวอร์ชันนี้เป็นการเชื่อมต่อคำตอบจาก AI โดยตรง ยังไม่มีการสืบค้นหลักฐานหรือตรวจสอบแหล่งอ้างอิงอัตโนมัติ)
           </div>
         </div>
 
         {/* Hero / Intro Section */}
-        <section className="bg-gradient-to-br from-teal-900 via-slate-900 to-slate-950 text-white rounded-2xl p-8 sm:p-12 relative overflow-hidden shadow-xl">
-          <div className="absolute right-0 top-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <section className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F172A] text-[#F1F5F9] rounded-2xl p-8 sm:p-12 relative overflow-hidden shadow-xl border border-[#334155]">
+          <div className="absolute right-0 top-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="max-w-3xl relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 text-xs font-medium mb-4 border border-teal-500/30">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-950 text-[#7DD3FC] text-xs font-medium mb-4 border border-sky-800">
               <FlaskConical className="w-3.5 h-3.5" /> สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Powered by Gemini AI)
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-balance">
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-balance text-[#F1F5F9]">
               ยกระดับการเรียนรู้เทคนิคการแพทย์ด้วยความแม่นยำทางวิชาการ
             </h2>
-            <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-6">
+            <p className="text-[#CBD5E1] text-sm sm:text-base leading-relaxed mb-6">
               สอบถามหลักการตรวจวิเคราะห์ทางห้องปฏิบัติการ ศัพท์ภาษาอังกฤษทางการแพทย์ และกระบวนการวิเคราะห์ตัวอย่าง 
               ประมวลผลด้วยโมเดล Gemini สำหรับนักศึกษาและบุคลากรทางการแพทย์
             </p>
@@ -181,17 +181,17 @@ export default function App() {
         </section>
 
         {/* Question Input Section */}
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+        <section className="bg-[#1E293B] rounded-2xl border border-[#334155] p-6 sm:p-8 shadow-sm">
           <form onSubmit={(e) => handleSendQuestion(e)} className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <label htmlFor="question-input" className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                <Search className="w-4 h-4 text-teal-600" />
+              <label htmlFor="question-input" className="text-sm font-semibold text-[#F1F5F9] flex items-center gap-2">
+                <Search className="w-4 h-4 text-[#7DD3FC]" />
                 ตั้งคำถามหรือหัวข้อทางเทคนิคการแพทย์
               </label>
               <button
                 type="button"
                 onClick={() => setIsPreviewMode(!isPreviewMode)}
-                className="text-xs text-teal-700 hover:text-teal-800 font-medium underline underline-offset-2 transition-colors"
+                className="text-xs text-[#7DD3FC] hover:text-sky-300 font-medium underline underline-offset-2 transition-colors"
               >
                 {isPreviewMode ? "ซ่อนตัวอย่างโครงสร้าง" : "ดูตัวอย่างโครงสร้างคำตอบ"}
               </button>
@@ -204,20 +204,20 @@ export default function App() {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="พิมพ์คำถามด้านเทคนิคการแพทย์ของคุณ เช่น หลักการทำ CBC หรือ Flow Cytometry..."
-                className="w-full rounded-xl border border-slate-300 p-4 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm sm:text-base resize-none shadow-inner"
+                className="w-full rounded-xl bg-[#0F172A] border border-[#475569] p-4 text-[#F1F5F9] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7DD3FC] focus:border-transparent text-sm sm:text-base resize-none shadow-inner"
               />
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               {/* Quick Prompt Suggestions */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500 font-medium">คำถามแนะนำ:</span>
+                <span className="text-xs text-[#CBD5E1] font-medium">คำถามแนะนำ:</span>
                 {samplePrompts.slice(0, 2).map((promptText, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => handleSendQuestion(undefined, promptText)}
-                    className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition-colors text-left truncate max-w-[280px]"
+                    className="text-xs bg-[#0F172A] hover:bg-slate-800 text-[#CBD5E1] border border-[#334155] px-3 py-1.5 rounded-lg transition-colors text-left truncate max-w-[280px]"
                   >
                     {promptText}
                   </button>
@@ -228,11 +228,11 @@ export default function App() {
               <button
                 type="submit"
                 disabled={isLoading || !question.trim()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white font-medium px-6 py-3 rounded-xl transition-all shadow-md hover:shadow-lg text-sm shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-medium px-6 py-3 rounded-xl transition-all shadow-md hover:shadow-lg text-sm shrink-0 cursor-pointer disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin text-[#7DD3FC]" />
                     <span>กำลังประมวลผล...</span>
                   </>
                 ) : (
@@ -247,13 +247,13 @@ export default function App() {
         </section>
 
         {/* Response Area Container */}
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-teal-600" />
+        <section className="bg-[#1E293B] rounded-2xl border border-[#334155] p-6 sm:p-8 shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#334155] pb-4 mb-6">
+            <h3 className="text-lg font-bold text-[#F1F5F9] flex items-center gap-2">
+              <Layers className="w-5 h-5 text-[#7DD3FC]" />
               ผลลัพธ์จาก AI (Gemini Response)
             </h3>
-            <span className="text-xs font-medium px-2.5 py-1 bg-teal-50 text-teal-700 rounded-md border border-teal-200">
+            <span className="text-xs font-medium px-2.5 py-1 bg-sky-950 text-[#7DD3FC] rounded-md border border-sky-800">
               {isLoading ? "กำลังสร้างคำตอบ..." : answer ? "สำเร็จ (AI Generated)" : error ? "เกิดข้อผิดพลาด" : "พร้อมใช้งาน"}
             </span>
           </div>
@@ -261,19 +261,19 @@ export default function App() {
           {/* Loading State */}
           {isLoading && (
             <div className="py-16 px-4 text-center flex flex-col items-center justify-center">
-              <Loader2 className="w-10 h-10 text-teal-600 animate-spin mb-4" />
-              <h4 className="text-base font-semibold text-slate-800 mb-1">Gemini กำลังวิเคราะห์คำถามของคุณ...</h4>
-              <p className="text-xs text-slate-500">กรุณารอสักครู่ ระบบกำลังประมวลผลข้อมูลทางเทคนิคการแพทย์</p>
+              <Loader2 className="w-10 h-10 text-[#7DD3FC] animate-spin mb-4" />
+              <h4 className="text-base font-semibold text-[#F1F5F9] mb-1">Gemini กำลังวิเคราะห์คำถามของคุณ...</h4>
+              <p className="text-xs text-[#CBD5E1]">กรุณารอสักครู่ ระบบกำลังประมวลผลข้อมูลทางเทคนิคการแพทย์</p>
             </div>
           )}
 
           {/* Error State */}
           {error && !isLoading && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-900 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="bg-red-950/60 border border-red-900/60 rounded-xl p-6 text-red-200 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-semibold text-red-900 mb-1">ไม่สามารถประมวลผลคำขอได้</h4>
-                <p className="text-sm text-red-700 whitespace-pre-wrap">{error}</p>
+                <h4 className="font-semibold text-red-100 mb-1">ไม่สามารถประมวลผลคำขอได้</h4>
+                <p className="text-sm text-red-300 whitespace-pre-wrap">{error}</p>
               </div>
             </div>
           )}
@@ -281,24 +281,24 @@ export default function App() {
           {/* Real Gemini Answer State */}
           {answer && !isLoading && !error && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="bg-teal-50/50 border border-teal-200/60 rounded-xl p-4 text-teal-900 text-xs flex items-center justify-between">
-                <span className="font-semibold flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-teal-600" />
+              <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 text-[#F1F5F9] text-xs flex items-center justify-between">
+                <span className="font-semibold flex items-center gap-1.5 text-[#7DD3FC]">
+                  <Sparkles className="w-4 h-4 text-[#7DD3FC]" />
                   คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash)
                 </span>
-                <span className="text-slate-500">
+                <span className="text-[#CBD5E1]">
                   ภาษาไทย (พร้อมคำศัพท์เทคนิค)
                 </span>
               </div>
 
-              <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed whitespace-pre-wrap bg-slate-50/60 p-6 rounded-xl border border-slate-200/80 text-sm sm:text-base">
+              <div className="prose prose-invert max-w-none text-[#F1F5F9] leading-relaxed whitespace-pre-wrap bg-[#0F172A] p-6 rounded-xl border border-[#334155] text-sm sm:text-base">
                 {answer}
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-xs flex items-start gap-2">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="bg-amber-950/40 border border-amber-900/50 rounded-xl p-4 text-amber-200 text-xs flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold">หมายเหตุ:</span> คำตอบนี้เป็นผลลัพธ์จาก Generative AI สำหรับสนับสนุนการเรียนการสอน 
+                  <span className="font-semibold text-amber-100">หมายเหตุ:</span> คำตอบนี้เป็นผลลัพธ์จาก Generative AI สำหรับสนับสนุนการเรียนการสอน 
                   ยังไม่มีการเชื่อมต่อระบบสืบค้นเอกสารหรือยืนยันแหล่งอ้างอิงอัตโนมัติ (จะเพิ่มในขั้นตอนถัดไป)
                 </div>
               </div>
@@ -308,19 +308,19 @@ export default function App() {
           {/* Empty State / Preview Mode */}
           {!isLoading && !answer && !error && !isPreviewMode && (
             <div className="py-16 px-4 text-center flex flex-col items-center justify-center max-w-lg mx-auto">
-              <div className="w-16 h-16 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4 shadow-sm border border-teal-100">
+              <div className="w-16 h-16 rounded-2xl bg-[#0F172A] text-[#7DD3FC] flex items-center justify-center mb-4 shadow-sm border border-[#334155]">
                 <HelpCircle className="w-8 h-8" />
               </div>
-              <h4 className="text-lg font-semibold text-slate-800 mb-2">พร้อมรับคำถามทางเทคนิคการแพทย์</h4>
-              <p className="text-sm text-slate-500 leading-relaxed mb-6">
+              <h4 className="text-lg font-semibold text-[#F1F5F9] mb-2">พร้อมรับคำถามทางเทคนิคการแพทย์</h4>
+              <p className="text-sm text-[#CBD5E1] leading-relaxed mb-6">
                 พิมพ์คำถามของคุณในช่องด้านบน หรือเลือกคำถามตัวอย่างเพื่อเริ่มต้นเรียกใช้งาน Gemini AI ได้ทันที
               </p>
               <button
                 type="button"
                 onClick={() => setIsPreviewMode(true)}
-                className="inline-flex items-center gap-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 text-xs font-semibold bg-[#0F172A] hover:bg-slate-800 text-[#7DD3FC] border border-[#334155] px-4 py-2.5 rounded-lg transition-colors"
               >
-                <Layers className="w-4 h-4 text-teal-600" />
+                <Layers className="w-4 h-4 text-[#7DD3FC]" />
                 ดูตัวอย่างโครงสร้าง 6 ส่วน (UI Reference)
               </button>
             </div>
@@ -329,40 +329,40 @@ export default function App() {
           {/* UI Structure Preview Mode */}
           {!isLoading && !answer && !error && isPreviewMode && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-slate-700 text-xs sm:text-sm flex items-center justify-between">
-                <span className="font-semibold">ตัวอย่างโครงสร้างหน้าจอ 6 ส่วน (สำหรับตรวจสอบการจัดวาง UI):</span>
+              <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 text-[#CBD5E1] text-xs sm:text-sm flex items-center justify-between">
+                <span className="font-semibold text-[#F1F5F9]">ตัวอย่างโครงสร้างหน้าจอ 6 ส่วน (สำหรับตรวจสอบการจัดวาง UI):</span>
                 <button 
                   onClick={() => setIsPreviewMode(false)}
-                  className="text-teal-700 hover:underline font-medium"
+                  className="text-[#7DD3FC] hover:underline font-medium"
                 >
                   ปิดตัวอย่าง
                 </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">1. คำอธิบายภาษาไทย</h5>
-                  <p className="text-xs text-slate-600">คำอธิบายหลักการทางเทคนิคการแพทย์เป็นภาษาไทย</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">1. คำอธิบายภาษาไทย</h5>
+                  <p className="text-xs text-[#CBD5E1]">คำอธิบายหลักการทางเทคนิคการแพทย์เป็นภาษาไทย</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">2. ศัพท์ภาษาอังกฤษที่สำคัญ</h5>
-                  <p className="text-xs text-slate-600">Complete Blood Count, Flow Cytometry</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">2. ศัพท์ภาษาอังกฤษที่สำคัญ</h5>
+                  <p className="text-xs text-[#CBD5E1]">Complete Blood Count, Flow Cytometry</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">3. หลักฐานและแหล่งอ้างอิง</h5>
-                  <p className="text-xs text-slate-600">(จะเชื่อมต่อในขั้นตอนถัดไป)</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">3. หลักฐานและแหล่งอ้างอิง</h5>
+                  <p className="text-xs text-[#CBD5E1]">(จะเชื่อมต่อในขั้นตอนถัดไป)</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">4. ต้นฉบับภาษาอังกฤษ</h5>
-                  <p className="text-xs text-slate-600">(ข้อความต้นฉบับดั้งเดิม)</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">4. ต้นฉบับภาษาอังกฤษ</h5>
+                  <p className="text-xs text-[#CBD5E1]">(ข้อความต้นฉบับดั้งเดิม)</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">5. คำแปลภาษาไทย</h5>
-                  <p className="text-xs text-slate-600">(คำแปลตรงตัว)</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">5. คำแปลภาษาไทย</h5>
+                  <p className="text-xs text-[#CBD5E1]">(คำแปลตรงตัว)</p>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                  <h5 className="font-bold text-slate-900 text-sm mb-2">6. คำอธิบายเพิ่มเติมจาก AI</h5>
-                  <p className="text-xs text-slate-600">(เกร็ดความรู้และข้อสังเกตเพิ่มเติม)</p>
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
+                  <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">6. คำอธิบายเพิ่มเติมจาก AI</h5>
+                  <p className="text-xs text-[#CBD5E1]">(เกร็ดความรู้และข้อสังเกตเพิ่มเติม)</p>
                 </div>
               </div>
             </div>
@@ -373,10 +373,10 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-8 px-6 mt-12 text-center text-xs text-slate-500">
+      <footer className="bg-[#0F172A] border-t border-[#334155] py-8 px-6 mt-12 text-center text-xs text-[#CBD5E1]">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 font-semibold text-slate-800">
-            <Microscope className="w-4 h-4 text-teal-600" />
+          <div className="flex items-center gap-2 font-semibold text-[#F1F5F9]">
+            <Microscope className="w-4 h-4 text-[#7DD3FC]" />
             MedTech Learning Hub AI — ขับเคลื่อนด้วยโมเดล Gemini
           </div>
           <div>
@@ -387,20 +387,20 @@ export default function App() {
 
       {/* Connect AI Modal */}
       {showConnectModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fadeIn">
-            <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0 mb-4">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#1E293B] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#334155] animate-fadeIn">
+            <div className="w-12 h-12 rounded-xl bg-sky-950 text-[#7DD3FC] flex items-center justify-center flex-shrink-0 mb-4 border border-sky-800">
               <Brain className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">สถานะการเชื่อมต่อ AI</h3>
-            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-              แップพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-teal-700">gemini-3.8-flash</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว คีย์ API ถูกจัดเก็บอย่างปลอดภัยผ่านระบบ Secrets
+            <h3 className="text-lg font-bold text-[#F1F5F9] mb-2">สถานะการเชื่อมต่อ AI</h3>
+            <p className="text-sm text-[#CBD5E1] mb-6 leading-relaxed">
+              แอปพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-[#7DD3FC]">gemini-3.8-flash</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว คีย์ API ถูกจัดเก็บอย่างปลอดภัยผ่านระบบ Secrets
             </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setShowConnectModal(false)}
-                className="px-4 py-2 text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition-colors cursor-pointer"
               >
                 รับทราบ
               </button>
