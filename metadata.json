@@ -1,0 +1,6 @@
+{
+  "name": "MedTech Learning Hub AI",
+  "description": "ศูนย์การเรียนรู้เทคนิคการแพทย์อัจฉริยะสำหรับนักศึกษาเทคนิคการแพทย์ไทย พร้อมคำอธิบายเชิงวิชาการ คลังศัพท์เทคนิคภาษาอังกฤษ และแหล่งอ้างอิง",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
