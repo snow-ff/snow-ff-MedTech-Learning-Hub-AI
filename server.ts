@@ -25,7 +25,7 @@ const ai = new GoogleGenAI({
   }
 });
 
-// API endpoint for Gemini generation with retry, exponential backoff, and latency timing logs
+// API endpoint for Gemini generation with retry, exponential backoff, and quota error handling
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
   const { prompt } = req.body;
@@ -80,12 +80,16 @@ app.post("/api/gemini/generate", async (req, res) => {
       
       console.warn(`[Perf Backend] Gemini API attempt ${attempt} failed after ${attemptDuration}ms. Error: ${message}`);
 
-      const isTransient = 
+      // Do not treat quota exhaustion (RESOURCE_EXHAUSTED / free tier request limit) as transient
+      const isQuotaExhausted = message.includes("RESOURCE_EXHAUSTED") || message.includes("generate_content_free_tier_requests") || message.includes("Quota exceeded");
+
+      const isTransient = !isQuotaExhausted && (
         Number(status) === 503 || Number(status) === 429 || Number(status) === 500 || Number(status) === 408 ||
         message.includes("503") || message.includes("429") || message.includes("500") || 
-        message.includes("UNAVAILABLE") || message.includes("RESOURCE_EXHAUSTED") || 
+        message.includes("UNAVAILABLE") || 
         message.includes("overloaded") || message.includes("deadline") || message.includes("timeout") ||
-        message.includes("fetch failed");
+        message.includes("fetch failed")
+      );
 
       if (!isTransient || attempt >= maxAttempts) {
         break;
@@ -109,10 +113,13 @@ app.post("/api/gemini/generate", async (req, res) => {
   let userMessage = "เกิดข้อผิดพลาดในการประมวลผลคำขอจาก AI กรุณาลองใหม่อีกครั้ง";
   let httpStatus = 500;
 
-  if (errMessage.includes("503") || errMessage.includes("UNAVAILABLE") || errMessage.includes("overloaded") || errMessage.includes("Service Unavailable")) {
+  if (errMessage.includes("RESOURCE_EXHAUSTED") || errMessage.includes("generate_content_free_tier_requests") || errMessage.includes("Quota exceeded")) {
+    userMessage = "โควตาการใช้งานฟรีของ Gemini API หมดแล้ว (Resource Exhausted / Quota Limit สำหรับ generate_content_free_tier_requests) กรุณาตรวจสอบโควตาการใช้งานของคุณใน Google AI Studio หรือรอการรีเซ็ตโควตาตามรอบเวลาของระบบ";
+    httpStatus = 429;
+  } else if (errMessage.includes("503") || errMessage.includes("UNAVAILABLE") || errMessage.includes("overloaded") || errMessage.includes("Service Unavailable")) {
     userMessage = "ขณะนี้ระบบ Gemini กำลังมีผู้ใช้งานหนาแน่น (Service Unavailable / 503) ระบบได้พยายามเชื่อมต่อใหม่อัตโนมัติแล้วแต่ยังไม่สำเร็จ กรุณาลองใหม่อีกครั้งในภายหลัง";
     httpStatus = 503;
-  } else if (errMessage.includes("429") || errMessage.includes("RESOURCE_EXHAUSTED") || errMessage.includes("Rate Limit")) {
+  } else if (errMessage.includes("429") || errMessage.includes("Rate Limit")) {
     userMessage = "ระบบถูกจำกัดจำนวนคำขอชั่วคราว (Rate Limit / 429) กรุณารอสักครู่แล้วลองใหม่อีกครั้ง";
     httpStatus = 429;
   } else if (errMessage.includes("400") || errMessage.includes("INVALID_ARGUMENT")) {
