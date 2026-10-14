@@ -25,7 +25,7 @@ const ai = new GoogleGenAI({
   }
 });
 
-// API endpoint for Gemini generation with retry, exponential backoff, and quota error handling
+// API endpoint for Gemini generation with retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
   const { prompt } = req.body;
@@ -39,8 +39,7 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   const systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Medical Technology Students)
 โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคนิคที่สำคัญไว้ (เช่น Complete Blood Count, Flow Cytometry, PCR, Spectrophotometry เป็นต้น)
-ในการตอบ ให้ให้ข้อมูลวิชาการที่ถูกต้องและเป็นประโยชน์สำหรับนักศึกษาเทคนิคการแพทย์
-หมายเหตุ: นี่เป็นเวอร์ชันพื้นฐานในการเชื่อมต่อ Gemini AI โปรดระบุชัดเจนว่าเนื้อหานี้สร้างขึ้นโดย AI และยังไม่ได้เชื่อมต่อระบบสืบค้นหลักฐานหรือตรวจสอบแหล่งอ้างอิงอัตโนมัติ`;
+ในการตอบ ให้ให้ข้อมูลวิชาการที่ถูกต้องและเป็นประโยชน์สำหรับนักศึกษาเทคนิคการแพทย์ พร้อมอ้างอิงจากแหล่งข้อมูลที่น่าเชื่อถือ`;
 
   let attempt = 0;
   const maxAttempts = 3;
@@ -50,7 +49,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     attempt++;
     const attemptStartTime = Date.now();
     try {
-      // Use ThinkingLevel.LOW to optimize reasoning latency for standard academic Q&A
+      // Use ThinkingLevel.LOW and googleSearch grounding tool
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",
         contents: prompt,
@@ -58,6 +57,7 @@ app.post("/api/gemini/generate", async (req, res) => {
           systemInstruction,
           temperature: 0.3,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          tools: [{ googleSearch: {} }],
         },
       });
 
@@ -70,7 +70,29 @@ app.post("/api/gemini/generate", async (req, res) => {
         throw new Error("ไม่ได้รับคำตอบจากโมเดล Gemini");
       }
 
-      return res.json({ text });
+      // Safely extract grounding metadata references
+      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      const references: Array<{ title: string; uri: string }> = [];
+      if (groundingMetadata && groundingMetadata.groundingChunks) {
+        for (const chunk of groundingMetadata.groundingChunks) {
+          if (chunk.web && chunk.web.uri && chunk.web.title) {
+            const uri = chunk.web.uri;
+            if (uri.startsWith("http://") || uri.startsWith("https://")) {
+              if (!references.some(r => r.uri === uri)) {
+                references.push({
+                  title: chunk.web.title,
+                  uri: uri,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      return res.json({
+        text,
+        references: references.length > 0 ? references : undefined,
+      });
     } catch (err: any) {
       const attemptDuration = Date.now() - attemptStartTime;
       lastError = err;

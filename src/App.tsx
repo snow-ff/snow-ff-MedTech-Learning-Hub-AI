@@ -22,6 +22,7 @@ import {
 export default function App() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
+  const [references, setReferences] = useState<Array<{ title: string; uri: string }> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -47,6 +48,7 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setAnswer(null);
+    setReferences(null);
     setIsPreviewMode(false);
 
     const frontendStartTime = Date.now();
@@ -84,6 +86,10 @@ export default function App() {
       }
 
       setAnswer(data.text);
+      if (data.references && Array.isArray(data.references)) {
+        setReferences(data.references);
+      }
+
       console.log(`[Perf Frontend] Total roundtrip duration including render parse: ${Date.now() - frontendStartTime}ms`);
     } catch (err: any) {
       setError(err.message || "ไม่สามารถติดต่อกับ Gemini API ได้ในขณะนี้");
@@ -107,7 +113,7 @@ export default function App() {
               <h1 className="text-lg font-bold tracking-tight text-[#F1F5F9] whitespace-nowrap shrink-0 flex items-center gap-2">
                 MedTech Learning Hub <span className="text-xs font-semibold px-2 py-0.5 bg-sky-950 text-[#7DD3FC] rounded-full border border-sky-800">AI v1.1</span>
               </h1>
-              <p className="text-xs text-[#CBD5E1] hidden sm:block">ศูนย์การเรียนรู้เทคนิคการแพทย์อัจฉริยะ (Gemini Connected)</p>
+              <p className="text-xs text-[#CBD5E1] hidden sm:block">ศูนย์การเรียนรู้เทคนิคการแพทย์อัจฉริยะ (Gemini Grounding Connected)</p>
             </div>
           </div>
 
@@ -158,8 +164,7 @@ export default function App() {
         <div className="bg-[#1E293B] border border-sky-900/50 rounded-xl p-4 text-[#F1F5F9] text-sm flex items-start gap-3 shadow-sm">
           <Sparkles className="w-5 h-5 text-[#7DD3FC] shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold text-[#7DD3FC]">เชื่อมต่อ Gemini AI สำเร็จ (Gemini-3.8-Flash):</span> พิมพ์คำถามด้านเทคนิคการแพทย์ของคุณเพื่อรับคำอธิบายเชิงวิชาการแบบเรียลไทม์ 
-            (หมายเหตุ: เวอร์ชันนี้เป็นการเชื่อมต่อคำตอบจาก AI โดยตรง ยังไม่มีการสืบค้นหลักฐานหรือตรวจสอบแหล่งอ้างอิงอัตโนมัติ)
+            <span className="font-semibold text-[#7DD3FC]">เชื่อมต่อ Google Search Grounding สำเร็จ (Gemini-3.8-Flash):</span> พิมพ์คำถามด้านเทคนิคการแพทย์ของคุณเพื่อรับคำอธิบายพร้อมแหล่งอ้างอิงและลิงก์เว็บไซต์ที่ตรวจสอบได้แบบเรียลไทม์
           </div>
         </div>
 
@@ -168,14 +173,13 @@ export default function App() {
           <div className="absolute right-0 top-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
           <div className="max-w-3xl relative z-10">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-950 text-[#7DD3FC] text-xs font-medium mb-4 border border-sky-800">
-              <FlaskConical className="w-3.5 h-3.5" /> สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Powered by Gemini AI)
+              <FlaskConical className="w-3.5 h-3.5" /> สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Powered by Gemini AI + Search Grounding)
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-balance text-[#F1F5F9]">
               ยกระดับการเรียนรู้เทคนิคการแพทย์ด้วยความแม่นยำทางวิชาการ
             </h2>
             <p className="text-[#CBD5E1] text-sm sm:text-base leading-relaxed mb-6">
-              สอบถามหลักการตรวจวิเคราะห์ทางห้องปฏิบัติการ ศัพท์ภาษาอังกฤษทางการแพทย์ และกระบวนการวิเคราะห์ตัวอย่าง 
-              ประมวลผลด้วยโมเดล Gemini สำหรับนักศึกษาและบุคลากรทางการแพทย์
+              สอบถามหลักการตรวจวิเคราะห์ทางห้องปฏิบัติการ ศัพท์ภาษาอังกฤษทางการแพทย์ และกระบวนการวิเคราะห์ตัวอย่าง พร้อมลิงก์แหล่งอ้างอิงจากเว็บที่ตรวจสอบได้
             </p>
           </div>
         </section>
@@ -263,7 +267,7 @@ export default function App() {
             <div className="py-16 px-4 text-center flex flex-col items-center justify-center">
               <Loader2 className="w-10 h-10 text-[#7DD3FC] animate-spin mb-4" />
               <h4 className="text-base font-semibold text-[#F1F5F9] mb-1">Gemini กำลังวิเคราะห์คำถามของคุณ...</h4>
-              <p className="text-xs text-[#CBD5E1]">กรุณารอสักครู่ ระบบกำลังประมวลผลข้อมูลทางเทคนิคการแพทย์</p>
+              <p className="text-xs text-[#CBD5E1]">กรุณารอสักครู่ ระบบกำลังค้นหาข้อมูลและประมวลผลทางเทคนิคการแพทย์</p>
             </div>
           )}
 
@@ -284,7 +288,7 @@ export default function App() {
               <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 text-[#F1F5F9] text-xs flex items-center justify-between">
                 <span className="font-semibold flex items-center gap-1.5 text-[#7DD3FC]">
                   <Sparkles className="w-4 h-4 text-[#7DD3FC]" />
-                  คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash)
+                  คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash) + Google Search Grounding
                 </span>
                 <span className="text-[#CBD5E1]">
                   ภาษาไทย (พร้อมคำศัพท์เทคนิค)
@@ -295,11 +299,37 @@ export default function App() {
                 {answer}
               </div>
 
+              {/* References Section if available */}
+              {references && references.length > 0 && (
+                <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5 text-sm space-y-3">
+                  <h4 className="font-bold text-[#F1F5F9] flex items-center gap-2 text-xs uppercase tracking-wider text-[#7DD3FC]">
+                    <BookOpen className="w-4 h-4" />
+                    แหล่งอ้างอิงและแหล่งข้อมูลที่ตรวจสอบได้ (Google Search Grounding)
+                  </h4>
+                  <ul className="space-y-2">
+                    {references.map((ref, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-[#7DD3FC] text-xs font-mono mt-0.5">[{idx + 1}]</span>
+                        <a 
+                          href={ref.uri} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-[#7DD3FC] hover:underline text-xs sm:text-sm break-all flex items-center gap-1.5"
+                        >
+                          <span>{ref.title || ref.uri}</span>
+                          <Globe className="w-3 h-3 shrink-0 opacity-70" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="bg-amber-950/40 border border-amber-900/50 rounded-xl p-4 text-amber-200 text-xs flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold text-amber-100">หมายเหตุ:</span> คำตอบนี้เป็นผลลัพธ์จาก Generative AI สำหรับสนับสนุนการเรียนการสอน 
-                  ยังไม่มีการเชื่อมต่อระบบสืบค้นเอกสารหรือยืนยันแหล่งอ้างอิงอัตโนมัติ (จะเพิ่มในขั้นตอนถัดไป)
+                  <span className="font-semibold text-amber-100">หมายเหตุ:</span> คำตอบนี้ประมวลผลด้วย Generative AI ร่วมกับ Google Search Grounding 
+                  ควรตรวจสอบซ้ำกับตำราหรือแนวทางปฏิบัติมาตรฐานทางห้องปฏิบัติการ
                 </div>
               </div>
             </div>
@@ -313,7 +343,7 @@ export default function App() {
               </div>
               <h4 className="text-lg font-semibold text-[#F1F5F9] mb-2">พร้อมรับคำถามทางเทคนิคการแพทย์</h4>
               <p className="text-sm text-[#CBD5E1] leading-relaxed mb-6">
-                พิมพ์คำถามของคุณในช่องด้านบน หรือเลือกคำถามตัวอย่างเพื่อเริ่มต้นเรียกใช้งาน Gemini AI ได้ทันที
+                พิมพ์คำถามของคุณในช่องด้านบน หรือเลือกคำถามตัวอย่างเพื่อเริ่มต้นเรียกใช้งาน Gemini AI พร้อมค้นหาแหล่งอ้างอิง
               </p>
               <button
                 type="button"
@@ -350,7 +380,7 @@ export default function App() {
                 </div>
                 <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
                   <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">3. หลักฐานและแหล่งอ้างอิง</h5>
-                  <p className="text-xs text-[#CBD5E1]">(จะเชื่อมต่อในขั้นตอนถัดไป)</p>
+                  <p className="text-xs text-[#CBD5E1]">(สืบค้นอัตโนมัติผ่าน Google Search Grounding)</p>
                 </div>
                 <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5">
                   <h5 className="font-bold text-[#F1F5F9] text-sm mb-2">4. ต้นฉบับภาษาอังกฤษ</h5>
@@ -377,10 +407,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 font-semibold text-[#F1F5F9]">
             <Microscope className="w-4 h-4 text-[#7DD3FC]" />
-            MedTech Learning Hub AI — ขับเคลื่อนด้วยโมเดล Gemini
+            MedTech Learning Hub AI — ขับเคลื่อนด้วยโมเดล Gemini + Search Grounding
           </div>
           <div>
-            เวอร์ชันเชื่อมต่อ API จริง (Gemini Connected) · สำหรับนักศึกษาเทคนิคการแพทย์
+            เวอร์ชันเชื่อมต่อ API จริง (Grounding Connected) · สำหรับนักศึกษาเทคนิคการแพทย์
           </div>
         </div>
       </footer>
@@ -394,7 +424,7 @@ export default function App() {
             </div>
             <h3 className="text-lg font-bold text-[#F1F5F9] mb-2">สถานะการเชื่อมต่อ AI</h3>
             <p className="text-sm text-[#CBD5E1] mb-6 leading-relaxed">
-              แอปพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-[#7DD3FC]">gemini-3.8-flash</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว คีย์ API ถูกจัดเก็บอย่างปลอดภัยผ่านระบบ Secrets
+              แอปพลิเคชันเชื่อมต่อกับโมเดล <span className="font-mono font-semibold text-[#7DD3FC]">gemini-3.8-flash</span> พร้อมระบบ <span className="font-semibold text-[#7DD3FC]">Google Search Grounding</span> ผ่านเซิร์ฟเวอร์หลังบ้านเรียบร้อยแล้ว
             </p>
             <div className="flex justify-end gap-3">
               <button
