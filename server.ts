@@ -28,11 +28,15 @@ const ai = new GoogleGenAI({
 // Academic fallback generator for robust offline / quota-exceeded handling
 function getAcademicFallback(prompt: string) {
   const p = prompt.toLowerCase();
+  const isContextualFollowUp = !p.includes("flow cytometry") && !p.includes("pcr") && !p.includes("cbc") && !p.includes("เดงกี่") && !p.includes("dengue") && !p.includes("crossmatching") && !p.includes("blood") && !p.includes("หมู่เลือด") && !p.includes("เม็ดเลือดขาว");
+  
+  const prefixNotice = isContextualFollowUp 
+    ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอาจอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ไม่สามารถประมวลผลต่อเนื่องแบบ Multi-turn ได้อย่างสมบูรณ์ กรุณาระบุชื่อหัวข้อเต็ม เช่น Flow Cytometry หรือ PCR เพื่อรับข้อมูลสำรองที่ถูกต้อง)*\n\n`
+    : `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*\n\n`;
+
   if (p.includes("flow cytometry") || p.includes("เม็ดเลือดขาว")) {
     return {
-      text: `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*
-
-**หลักการทำงานของ Flow Cytometry ในการจำแนกชนิดเม็ดเลือดขาว (Leukocyte Differentiation)**
+      text: prefixNotice + `**หลักการทำงานของ Flow Cytometry ในการจำแนกชนิดเม็ดเลือดขาว (Leukocyte Differentiation)**
 
 1. **หลักการพื้นฐาน (Core Principle):**
    - Flow Cytometry อาศัยการตรวจวัดคุณสมบัติทางแสงและฟิสิกส์ของเซลล์ทีละเซลล์ (Single-cell analysis) ขณะที่เซลล์ไหลผ่านลำแสงเลเซอร์ (Laser beam) ในของเหลวที่มีการจัดระเบียบแบบ Hydrodynamic focusing
@@ -59,9 +63,7 @@ function getAcademicFallback(prompt: string) {
     };
   } else if (p.includes("pcr") || p.includes("real-time")) {
     return {
-      text: `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*
-
-**ความแตกต่างระหว่าง Conventional PCR และ Real-Time PCR (qPCR) ในงานตรวจวินิจฉัยโมเลกุล**
+      text: prefixNotice + `**ความแตกต่างระหว่าง Conventional PCR และ Real-Time PCR (qPCR) ในงานตรวจวินิจฉัยโมเลกุล**
 
 1. **Conventional PCR (Polymerase Chain Reaction):**
    - **การตรวจวัดผล (Detection):** อาศัยการทำ Agarose Gel Electrophoresis หลังปฏิกิริยาเสร็จสิ้น (End-point analysis)
@@ -83,9 +85,7 @@ function getAcademicFallback(prompt: string) {
     };
   } else if (p.includes("cbc") || p.includes("เดงกี่") || p.includes("dengue")) {
     return {
-      text: `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*
-
-**การแปลผล Complete Blood Count (CBC) ในผู้ป่วยติดเชื้อไวรัสเดงกี่ (Dengue Infection)**
+      text: prefixNotice + `**การแปลผล Complete Blood Count (CBC) ในผู้ป่วยติดเชื้อไวรัสเดงกี่ (Dengue Infection)**
 
 1. **ลักษณะทางโลหิตวิทยาที่สำคัญในโรคไข้เลือดออก (Dengue Hemorrhagic Fever - DHF):**
    - **Hemoglobin (Hb) & Hematocrit (Hct):** 
@@ -106,9 +106,7 @@ function getAcademicFallback(prompt: string) {
     };
   } else if (p.includes("crossmatching") || p.includes("blood grouping") || p.includes("หมู่เลือด")) {
     return {
-      text: `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*
-
-**ขั้นตอนการทำ Crossmatching และการตรวจหมู่เลือด (Blood Grouping & Crossmatch)**
+      text: prefixNotice + `**ขั้นตอนการทำ Crossmatching และการตรวจหมู่เลือด (Blood Grouping & Crossmatch)**
 
 1. **การตรวจหมู่เลือด (Blood Grouping):**
    - **ABO Grouping:** 
@@ -131,9 +129,7 @@ function getAcademicFallback(prompt: string) {
     };
   } else {
     return {
-      text: `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*
-
-**คำตอบทางวิชาการสำหรับหัวข้อ: "${prompt}"**
+      text: prefixNotice + `**คำตอบทางวิชาการสำหรับการสอบถามของคุณ**
 
 1. **ภาพรวมทางเทคนิคการแพทย์ (Clinical Laboratory Overview):**
    - ในการวิเคราะห์และตรวจสอบทางห้องปฏิบัติการทางการแพทย์ การยึดถือมาตรฐานความถูกต้องแม่นยำ (Accuracy & Precision) ควบคู่กับการควบคุมคุณภาพ (Quality Control - QC) เป็นสิ่งสำคัญสูงสุด
@@ -153,21 +149,73 @@ function getAcademicFallback(prompt: string) {
   }
 }
 
-// API endpoint for Gemini generation with retry, exponential backoff, and Google Search Grounding
+// API endpoint for Gemini generation with multi-turn messages, retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
-  const { prompt } = req.body;
-  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-    return res.status(400).json({ error: "กรุณาระบุคำถาม (Please provide a prompt)" });
+  const { messages, prompt } = req.body;
+
+  // Server-side validation of messages array
+  let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
+
+  if (Array.isArray(messages)) {
+    if (messages.length === 0 || messages.length > 8) {
+      return res.status(400).json({ error: "จำนวนข้อความในประวัติการสนทนาต้องอยู่ระหว่าง 1 ถึง 8 ข้อความ" });
+    }
+    let totalChars = 0;
+    for (const msg of messages) {
+      if (!msg || (msg.role !== 'user' && msg.role !== 'model') || typeof msg.text !== 'string' || !msg.text.trim()) {
+        return res.status(400).json({ error: "รูปแบบข้อความใน messages ไม่ถูกต้อง (role หรือ text ไม่ผ่านการตรวจสอบ)" });
+      }
+      if (msg.text.length > 4000) {
+        return res.status(400).json({ error: "ข้อความมีความยาวเกินกำหนด (สูงสุด 4,000 ตัวอักษรต่อข้อความ)" });
+      }
+      totalChars += msg.text.length;
+      validatedMessages.push({ role: msg.role, text: msg.text.trim() });
+    }
+
+    const MAX_TOTAL_CHARS = 15000;
+    if (totalChars > MAX_TOTAL_CHARS) {
+      return res.status(400).json({ error: "ความยาวรวมของข้อความทั้งหมดเกินกำหนด (สูงสุด 15,000 ตัวอักษร)" });
+    }
+
+    // Must start with user
+    if (validatedMessages[0].role !== 'user') {
+      return res.status(400).json({ error: "ประวัติการสนทนาต้องเริ่มต้นด้วยผู้ใช้ (user)" });
+    }
+
+    // Check strict role alternation (no consecutive duplicate roles)
+    for (let i = 0; i < validatedMessages.length - 1; i++) {
+      if (validatedMessages[i].role === validatedMessages[i + 1].role) {
+        return res.status(400).json({ error: "ลำดับบทบาทผู้ใช้และโมเดลต้องสลับกัน (ไม่สามารถมี role ซ้ำติดกันได้)" });
+      }
+    }
+
+    // Ensure last message is from user
+    if (validatedMessages[validatedMessages.length - 1].role !== 'user') {
+      return res.status(400).json({ error: "ข้อความล่าสุดในประวัติการสนทนาต้องมาจากผู้ใช้ (user)" });
+    }
+  } else if (prompt && typeof prompt === 'string' && prompt.trim()) {
+    // Backward compatibility for single prompt requests
+    validatedMessages = [{ role: 'user', text: prompt.trim() }];
+  } else {
+    return res.status(400).json({ error: "กรุณาระบุประวัติการสนทนา (messages) หรือคำถาม (prompt)" });
   }
 
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: "ไม่พบ GEMINI_API_KEY ในระบบ กรุณาตรวจสอบการตั้งค่า Secrets" });
   }
 
+  const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
+
   const systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Medical Technology Students)
 โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคนิคที่สำคัญไว้ (เช่น Complete Blood Count, Flow Cytometry, PCR, Spectrophotometry เป็นต้น)
 ในการตอบ ให้ให้ข้อมูลวิชาการที่ถูกต้องและเป็นประโยชน์สำหรับนักศึกษาเทคนิคการแพทย์ พร้อมอ้างอิงจากแหล่งข้อมูลที่น่าเชื่อถือ`;
+
+  // Map validated messages to Gemini SDK contents format
+  const contents = validatedMessages.map(m => ({
+    role: m.role,
+    parts: [{ text: m.text }]
+  }));
 
   let attempt = 0;
   const maxAttempts = 3;
@@ -177,10 +225,10 @@ app.post("/api/gemini/generate", async (req, res) => {
     attempt++;
     const attemptStartTime = Date.now();
     try {
-      // Use ThinkingLevel.LOW and googleSearch grounding tool
+      // Use ThinkingLevel.LOW and googleSearch grounding tool with multi-turn contents
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",
-        contents: prompt,
+        contents,
         config: {
           systemInstruction,
           temperature: 0.3,
@@ -257,8 +305,8 @@ app.post("/api/gemini/generate", async (req, res) => {
   const totalBackendDuration = Date.now() - requestStartTime;
   console.warn(`[Perf Backend] Gemini API encountered issue after ${attempt} attempts (${totalBackendDuration}ms total), serving robust academic fallback:`, lastError?.message);
 
-  // Fallback to academic responses when API quota is exhausted or unavailable
-  const fallback = getAcademicFallback(prompt);
+  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt)
+  const fallback = getAcademicFallback(latestPrompt);
   return res.json({
     text: fallback.text,
     source: "academic_fallback",
