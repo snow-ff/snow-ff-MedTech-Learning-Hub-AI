@@ -43,10 +43,26 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 
   const isInterfacingQuery = lowerQuery.includes('เชื่อมต่อ') || lowerQuery.includes('เครื่องตรวจวิเคราะห์') || lowerQuery.includes('analyzer') || lowerQuery.includes('ข้อควรระวัง') || lowerQuery.includes('middleware') || lowerQuery.includes('interface');
   const isInterferenceOrRefIntervalQuery = lowerQuery.includes('hemolysis') || lowerQuery.includes('icter') || lowerQuery.includes('lipem') || lowerQuery.includes('reference interval') || lowerQuery.includes('ค่าอ้างอิง') || lowerQuery.includes('ฮีโมไลซิส') || lowerQuery.includes('ดีซ่าน') || lowerQuery.includes('ไขมัน');
+  const isQcOrCalibrationQuery = lowerQuery.includes('ควบคุมคุณภาพ') || lowerQuery.includes('qc') || lowerQuery.includes('สอบเทียบ') || lowerQuery.includes('calibration');
 
   let selectedText = "";
 
-  if ((lowerQuery.includes('lis') && lowerQuery.includes('lims')) || lowerQuery.includes('เปรียบเทียบ') || lowerQuery.includes('ความแตกต่าง')) {
+  if (isQcOrCalibrationQuery) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - LIS และ LIMS กับการควบคุมคุณภาพ (QC) และการสอบเทียบเครื่องมือ (Equipment Calibration):
+
+1. ความเกี่ยวข้องของ LIS และ LIMS กับ QC และ Calibration:
+- LIS (Laboratory Information System): มีบทบาทหลักในการจัดการข้อมูลการควบคุมคุณภาพภายในห้องปฏิบัติการ (Internal Quality Control: IQC) เช่น การบันทึกและประเมินค่า QC ของการทดสอบผู้ป่วย (Levey-Jennings Chart และ Westgard Rules), การแจ้งเตือนเมื่อผล QC หลุดเกณฑ์ (Out of Control), รวมถึงการเชื่อมต่อข้อมูล QC จากเครื่องวิเคราะห์อัตโนมัติ
+- LIMS (Laboratory Information Management System): มักมีบทบาทสำคัญในการจัดการตารางเวลาและบันทึกประวัติการสอบเทียบเครื่องมือ (Equipment Calibration & Preventive Maintenance), การจัดการสารมาตรฐาน (Standards) และรีเอเจนต์, รวมถึงการควบคุมคุณภาพตัวอย่างทดสอบและสิ่งแวดล้อม (โดยเฉพาะในห้องปฏิบัติการทดสอบทั่วไปหรืออุตสาหกรรม)
+
+2. หน้าที่และความแตกต่างของทั้งสองระบบ:
+- LIS มุ่งเน้นการควบคุมคุณภาพที่เกี่ยวข้องกับการตรวจวิเคราะห์ตัวอย่างผู้ป่วยและการรายงานผลทางคลินิก (Clinical Laboratory Quality) สนับสนุนมาตรฐาน ISO 15189
+- LIMS มุ่งเน้นการจัดการทรัพยากรเครื่องมือ สต็อกสินค้า/น้ำยา การสอบเทียบเครื่องมือ และกระบวนการทดสอบภาพรวม (Resource & Instrument Management) สนับสนุนมาตรฐาน ISO/IEC 17025 หรือ ISO 15189
+
+3. ข้อควรระวังในห้องปฏิบัติการเทคนิคการแพทย์:
+- การห้ามรายงานผลผู้ป่วย (Patient Results): หากผล QC ของการทดสอบนั้นหลุดเกณฑ์ (Out of Control) LIS ที่ดีควรมีระบบ Block หรือเตือนไม่ให้รายงานผลจนกว่าจะแก้ไขและผ่านการอนุมัติ
+- Calibration Tracking: ต้องติดตามรอบการสอบเทียบเครื่องมืออย่างเคร่งครัด หากเครื่องมือหมดอายุการสอบเทียบหรือค่าเบี่ยงเบนเกินกำหนด จะส่งผลต่อความถูกต้องของผลตรวจ
+- Data Integrity & Traceability: ต้องมีการบันทึก Log การแก้ไขค่า QC หรือการปรับเทียบเครื่องมือทุกครั้งเพื่อการตรวจสอบย้อนกลับตามมาตรฐานสากล`;
+  } else if ((lowerQuery.includes('lis') && lowerQuery.includes('lims')) || lowerQuery.includes('เปรียบเทียบ') || lowerQuery.includes('ความแตกต่าง')) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS:
 
 1. หน้าที่หลักและขอบเขต:

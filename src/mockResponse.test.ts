@@ -42,4 +42,11 @@ describe('MedTech Learning Hub AI Mock Mode Logic', () => {
     expect(res.text).toContain('Reference Interval (ค่าอ้างอิง)');
     expect(res.text).toContain('Hemolysis (เม็ดเลือดแดงแตก)');
   });
+
+  it('answers LIS and LIMS relation to QC and calibration correctly', () => {
+    const res = getMockResponse("LIS และ LIMS เกี่ยวข้องกับการควบคุมคุณภาพ (Quality Control: QC) และการสอบเทียบเครื่องมือ (Equipment Calibration) อย่างไร หน้าที่ของทั้งสองระบบแตกต่างกันหรือไม่ และมีข้อควรระวังอะไรบ้างในห้องปฏิบัติการเทคนิคการแพทย์?", []);
+    expect(res.text).toContain('การควบคุมคุณภาพ (QC) และการสอบเทียบเครื่องมือ');
+    expect(res.text).toContain('Levey-Jennings');
+    expect(res.text).toContain('Westgard Rules');
+  });
 });
