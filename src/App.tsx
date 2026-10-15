@@ -25,9 +25,104 @@ export interface Message {
   id: string;
   role: 'user' | 'model';
   text: string;
-  references?: Array<{ title: string; uri: string; type?: string }>;
+  references?: Array<{ title?: string; uri: string; type?: string }>;
   source?: string;
   timestamp: number;
+}
+
+export function getMockResponse(queryToSubmit: string, currentMessages: Message[]) {
+  const selectedRefs = [
+    { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์ (Mock Reference)', uri: 'https://example.com/mock-lis', type: 'academic_textbook' },
+    { title: 'แนวทางระบบ LIS และ LIMS มาตรฐานสากล', uri: 'https://example.com/mock-lims', type: 'web_grounding' }
+  ];
+
+  const lowerQuery = queryToSubmit.toLowerCase();
+  const conversationTextSoFar = currentMessages.map(m => m.text.toLowerCase()).join(' ');
+  const isLisContext = conversationTextSoFar.includes('lis') || conversationTextSoFar.includes('laboratory information system') || conversationTextSoFar.includes('ระบบสารสนเทศห้องปฏิบัติการ');
+  const isLimsContext = conversationTextSoFar.includes('lims') || conversationTextSoFar.includes('laboratory information management system');
+
+  const isInterfacingQuery = lowerQuery.includes('เชื่อมต่อ') || lowerQuery.includes('เครื่องตรวจวิเคราะห์') || lowerQuery.includes('analyzer') || lowerQuery.includes('ข้อควรระวัง') || lowerQuery.includes('middleware') || lowerQuery.includes('interface');
+  const isInterferenceOrRefIntervalQuery = lowerQuery.includes('hemolysis') || lowerQuery.includes('icter') || lowerQuery.includes('lipem') || lowerQuery.includes('reference interval') || lowerQuery.includes('ค่าอ้างอิง') || lowerQuery.includes('ฮีโมไลซิส') || lowerQuery.includes('ดีซ่าน') || lowerQuery.includes('ไขมัน');
+
+  let selectedText = "";
+
+  if ((lowerQuery.includes('lis') && lowerQuery.includes('lims')) || lowerQuery.includes('เปรียบเทียบ') || lowerQuery.includes('ความแตกต่าง')) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS:
+
+1. หน้าที่หลักและขอบเขต:
+- LIS (Laboratory Information System): มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย เช่น การรับคำสั่งตรวจ (Test Ordering), การลงทะเบียนสิ่งส่งตรวจ (Specimen Registration), การติดตามสิ่งส่งตรวจ (Specimen Tracking), การเชื่อมต่อเครื่องวิเคราะห์ (Instrument Interfacing), และการตรวจสอบรับรองผล (Result Review & Validation)
+- LIMS (Laboratory Information Management System): มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) เช่น การติดตามตัวอย่างตั้งแต่รับเข้าจนถึงทำลาย, การจัดการเวิร์กโฟลว์การทดสอบ, และการจัดการข้อมูลเชิงวิเคราะห์
+- หมายเหตุ: ความสามารถของทั้งสองระบบอาจทับซ้อนกันได้ขึ้นอยู่กับการออกแบบของผลิตภัณฑ์ โดยไม่ได้จำกัดว่าระบบใดต้องกว้างกว่าเสมอ หรือจำกัดการใช้งานเฉพาะสถานที่ใดสถานที่หนึ่งเท่านั้น
+
+2. ความแตกต่างที่มักพบ:
+- การบูรณาการระบบ: LIS มักให้ความสำคัญสูงกับการเชื่อมต่อกับระบบสารสนเทศโรงพยาบาล (HIS/EMR Integration) เพื่อเชื่อมโยงข้อมูลผู้ป่วยและแพทย์ผู้รักษา ส่วน LIMS มักเน้นการจัดการข้อมูลตัวอย่าง สต็อก (Inventory) และการสอบเทียบเครื่องมือ (Equipment Calibration)
+- มาตรฐานที่เกี่ยวข้อง: LIS มักเกี่ยวข้องกับการสนับสนุนระบบคุณภาพตามมาตรฐาน ISO 15189 (ความสามารถและคุณภาพของห้องปฏิบัติการทางการแพทย์) ในขณะที่ LIMS มักเกี่ยวข้องกับมาตรฐาน ISO/IEC 17025 (ความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ) ทั้งนี้มาตรฐานเหล่านี้เป็นเกณฑ์ประเมินห้องปฏิบัติการ ไม่ใช่การรับรองตัวซอฟต์แวร์โดยตรง
+
+3. ปัจจัยในการเลือกใช้:
+- Workflow & Specimen Tracking: รูปแบบกระบวนการทำงานและการติดตามตัวอย่างที่สอดคล้องกับหน้างาน
+- HIS/EMR Integration: ความจำเป็นในการเชื่อมต่อระบบสารสนเทศโรงพยาบาล
+- Instrument Interfacing: ความสามารถในการเชื่อมต่อกับเครื่องมือตรวจวิเคราะห์
+- Data Security & Traceability: ระบบรักษาความปลอดภัยของข้อมูลและการตรวจสอบย้อนกลับ (Traceability)
+- คุณสมบัติเพิ่มเติม: เช่น การควบคุมคุณภาพ (QC), สต็อก (Inventory), และการสอบเทียบ (Equipment Calibration) ซึ่งขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งแต่ละราย`;
+  } else if (isInterferenceOrRefIntervalQuery) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - เรื่องค่าอ้างอิงและสิ่งรบกวนทางก่อนวิเคราะห์ (Pre-analytical Interferences):
+
+1. Reference Interval (ค่าอ้างอิง):
+- ช่วงค่าปกติที่ได้จากการศึกษาในประชากรกลุ่มอ้างอิงที่มีสุขภาพดี ซึ่งอาจแตกต่างกันไปตามช่วงอายุ เพศ วิธีการตรวจ และเครื่องมือที่ใช้
+
+2. ปัจจัยแทรกซ้อนก่อนวิเคราะห์ (Pre-analytical Interferences):
+- Hemolysis (เม็ดเลือดแดงแตก): ปล่อยสารภายในเซลล์ออกมา รบกวนการทดสอบเช่น Potassium, LDH, AST
+- Icterus (ภาวะบิลิรูบินสูง / ดีซ่าน): สีเหลืองเข้มรบกวนการวัดทางโฟโตเมตรี
+- Lipemia (ภาวะไขมันในเลือดสูง): ความขุ่นรบกวนปฏิกิริยาแสงผ่าน (Turbidity Interference)`;
+  } else if (isInterfacingQuery && (isLisContext || lowerQuery.includes('lis'))) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเชื่อมต่อระบบ LIS กับเครื่องตรวจวิเคราะห์ (Instrument Interfacing) และข้อควรระวัง:
+
+1. รูปแบบการเชื่อมต่อเครื่องตรวจวิเคราะห์ (Instrument Interfacing):
+- Direct Interfacing: เครื่องตรวจวิเคราะห์เชื่อมต่อตรงกับ LIS ผ่าน Serial Port (RS-232) หรือ Network (TCP/IP) โดยใช้ ASTM หรือ HL7 Protocol
+- Middleware Solution: ใช้ซอฟต์แวร์ตัวกลาง (Middleware) ในการจัดการและแปลข้อมูลระหว่างเครื่องวิเคราะห์หลายรุ่นหลายยี่ห้อกับ LIS เพื่อลดความซับซ้อนในการเชื่อมต่อ
+- การรับส่งข้อมูล:
+  * Barcode / Specimen ID: ส่งคำสั่งตรวจ (Worklist) จาก LIS ไปยังเครื่องวิเคราะห์ หรือสแกนบาร์โค้ดที่เครื่องเพื่อดึงค่า
+  * Test Code: จับคู่รหัสการทดสอบระหว่าง LIS และเครื่องวิเคราะห์
+  * Test Result: ส่งผลการวิเคราะห์กลับมายัง LIS โดยอัตโนมัติ
+
+2. ข้อควรระวังและการตรวจสอบความถูกต้อง (Precautions & Validation):
+- Specimen ID Matching: ต้องตรวจสอบความถูกต้องตรงกันของหมายเลขสิ่งส่งตรวจ (Barcode/ID) ระหว่างตัวอย่างและข้อมูลในระบบ เพื่อป้องกันการสลับสิ่งส่งตรวจ (Sample Mix-up)
+- Test Code Mapping: ตรวจสอบการแปลงรหัสการทดสอบให้ถูกต้องตรงกันระหว่างเครื่องวิเคราะห์และ LIS
+- Units and Data Format: ตรวจสอบหน่วยการวัด (Units) และรูปแบบข้อมูล (Data Format) ให้เป็นมาตรฐานเดียวกัน
+- Duplicate & Incomplete Data Check: ตรวจสอบข้อมูลซ้ำซ้อนหรือข้อมูลที่ไม่ครบถ้วนก่อนบันทึกเข้าฐานข้อมูลผู้ป่วย
+- Communication Errors: เฝ้าระวังข้อผิดพลาดในการสื่อสาร (Communication Timeout / Transmission Error) และมีระบบบันทึก Log เพื่อตรวจสอบย้อนกลับ
+- Result Review & Validation: ผลการตรวจที่รับจากเครื่องวิเคราะห์ต้องผ่านกระบวนการตรวจสอบและรับรองผล (Technical & Clinical Validation) โดยนักเทคนิคการแพทย์ตามมาตรฐาน ISO 15189 ก่อนรายงานผลให้แพทย์ผู้รักษา`;
+  } else if (lowerQuery.includes('lis') || lowerQuery.includes('laboratory information system') || lowerQuery.includes('ระบบสารสนเทศห้องปฏิบัติการ')) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIS (Laboratory Information System):
+
+LIS คือระบบสารสนเทศที่มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย มีหน้าที่สำคัญได้แก่:
+1. Test Ordering and Specimen Registration: การรับคำสั่งตรวจและลงทะเบียนสิ่งส่งตรวจ
+2. Specimen Tracking: การติดตามสถานะและตำแหน่งของสิ่งส่งตรวจ
+3. Instrument Interfacing: การเชื่อมต่อกับเครื่องตรวจวิเคราะห์เพื่อรับส่งข้อมูลอัตโนมัติ
+4. Result Review and Validation: การตรวจสอบและรับรองผลการตรวจ
+5. Result Reporting and Traceability: การรายงานผลและการตรวจสอบย้อนกลับ
+
+ข้อสังเกตเพิ่มเติม:
+- ความสามารถด้าน QC, Inventory, Equipment Calibration และฟังก์ชันอื่น ๆ จะขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งของแต่ละระบบ
+- มาตรฐาน ISO 15189 เกี่ยวข้องกับคุณภาพและความสามารถของห้องปฏิบัติการทางการแพทย์ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIS โดยตรง)`;
+  } else if (lowerQuery.includes('lims') || lowerQuery.includes('laboratory information management system') || isLimsContext) {
+    selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIMS (Laboratory Information Management System):
+
+LIMS คือระบบที่มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) มีหน้าที่สำคัญได้แก่:
+1. Sample Tracking & Workflow Management: การติดตามตัวอย่างและการจัดการขั้นตอนการทดสอบ
+2. Data Management & Traceability: การจัดการข้อมูลเชิงวิเคราะห์และการตรวจสอบย้อนกลับ
+3. Inventory & Equipment Management: การจัดการสต็อกและอุปกรณ์ (ขึ้นอยู่กับผลิตภัณฑ์และการติดตั้ง)
+
+ข้อสังเกตเพิ่มเติม:
+- ความสามารถของ LIS และ LIMS อาจทับซ้อนกันได้ โดย LIMS ไม่ได้จำกัดหรือกว้างกว่า LIS เสมอไป และไม่ได้จำกัดสถานที่ใช้งานตายตัว
+- มาตรฐาน ISO/IEC 17025 เกี่ยวข้องกับความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIMS โดยตรง)`;
+  } else {
+    selectedText = `คำตอบจำลอง (Mock Mode) สำหรับ "${queryToSubmit}":
+
+กระบวนการตรวจวิเคราะห์ทางเทคนิคการแพทย์นี้มีความสำคัญต่อการวินิจฉัยและติดตามการรักษาโรค โดยยึดถือตามระบบบริหารคุณภาพห้องปฏิบัติการ (Quality Management System) และมาตรฐานสากล ISO 15189 ทั้งในด้านการควบคุมคุณภาพภายใน (Internal QC) และการประกันคุณภาพภายนอก (EQA) เพื่อให้ได้ผลตรวจที่ถูกต้องแม่นยำและเชื่อถือได้`;
+  }
+
+  return { text: selectedText, references: selectedRefs };
 }
 
 export default function App() {
@@ -93,62 +188,7 @@ export default function App() {
     if (isMockMode) {
       setTimeout(() => {
         if (activeRequestId.current !== currentReqId) return;
-        let selectedText = "";
-        let selectedRefs = [
-          { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์ (Mock Reference)', uri: 'https://example.com/mock-lis', type: 'academic_textbook' },
-          { title: 'แนวทางระบบ LIS และ LIMS มาตรฐานสากล', uri: 'https://example.com/mock-lims', type: 'web_grounding' }
-        ];
-
-        const lowerQuery = queryToSubmit.toLowerCase();
-        if ((lowerQuery.includes('lis') && lowerQuery.includes('lims')) || lowerQuery.includes('เปรียบเทียบ') || lowerQuery.includes('ความแตกต่าง')) {
-          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS:
-
-1. หน้าที่หลักและขอบเขต:
-- LIS (Laboratory Information System): มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย เช่น การรับคำสั่งตรวจ (Test Ordering), การลงทะเบียนสิ่งส่งตรวจ (Specimen Registration), การติดตามสิ่งส่งตรวจ (Specimen Tracking), การเชื่อมต่อเครื่องวิเคราะห์ (Instrument Interfacing), และการตรวจสอบรับรองผล (Result Review & Validation)
-- LIMS (Laboratory Information Management System): มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) เช่น การติดตามตัวอย่างตั้งแต่รับเข้าจนถึงทำลาย, การจัดการเวิร์กโฟลว์การทดสอบ, และการจัดการข้อมูลเชิงวิเคราะห์
-- หมายเหตุ: ความสามารถของทั้งสองระบบอาจทับซ้อนกันได้ขึ้นอยู่กับการออกแบบของผลิตภัณฑ์ โดยไม่ได้จำกัดว่าระบบใดต้องกว้างกว่าเสมอ หรือจำกัดการใช้งานเฉพาะสถานที่ใดสถานที่หนึ่งเท่านั้น
-
-2. ความแตกต่างที่มักพบ:
-- การบูรณาการระบบ: LIS มักให้ความสำคัญสูงกับการเชื่อมต่อกับระบบสารสนเทศโรงพยาบาล (HIS/EMR Integration) เพื่อเชื่อมโยงข้อมูลผู้ป่วยและแพทย์ผู้รักษา ส่วน LIMS มักเน้นการจัดการข้อมูลตัวอย่าง สต็อก (Inventory) และการสอบเทียบเครื่องมือ (Equipment Calibration)
-- มาตรฐานที่เกี่ยวข้อง: LIS มักเกี่ยวข้องกับการสนับสนุนระบบคุณภาพตามมาตรฐาน ISO 15189 (ความสามารถและคุณภาพของห้องปฏิบัติการทางการแพทย์) ในขณะที่ LIMS มักเกี่ยวข้องกับมาตรฐาน ISO/IEC 17025 (ความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ) ทั้งนี้มาตรฐานเหล่านี้เป็นเกณฑ์ประเมินห้องปฏิบัติการ ไม่ใช่การรับรองตัวซอฟต์แวร์โดยตรง
-
-3. ปัจจัยในการเลือกใช้:
-- Workflow & Specimen Tracking: รูปแบบกระบวนการทำงานและการติดตามตัวอย่างที่สอดคล้องกับหน้างาน
-- HIS/EMR Integration: ความจำเป็นในการเชื่อมต่อระบบสารสนเทศโรงพยาบาล
-- Instrument Interfacing: ความสามารถในการเชื่อมต่อกับเครื่องมือตรวจวิเคราะห์
-- Data Security & Traceability: ระบบรักษาความปลอดภัยของข้อมูลและการตรวจสอบย้อนกลับ (Traceability)
-- คุณสมบัติเพิ่มเติม: เช่น การควบคุมคุณภาพ (QC), สต็อก (Inventory), และการสอบเทียบ (Equipment Calibration) ซึ่งขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งแต่ละราย`;
-        } else if (lowerQuery.includes('lis') || lowerQuery.includes('laboratory information system') || lowerQuery.includes('ระบบสารสนเทศห้องปฏิบัติการ')) {
-          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIS (Laboratory Information System):
-
-LIS คือระบบสารสนเทศที่มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย มีหน้าที่สำคัญได้แก่:
-1. Test Ordering and Specimen Registration: การรับคำสั่งตรวจและลงทะเบียนสิ่งส่งตรวจ
-2. Specimen Tracking: การติดตามสถานะและตำแหน่งของสิ่งส่งตรวจ
-3. Instrument Interfacing: การเชื่อมต่อกับเครื่องตรวจวิเคราะห์เพื่อรับส่งข้อมูลอัตโนมัติ
-4. Result Review and Validation: การตรวจสอบและรับรองผลการตรวจ
-5. Result Reporting and Traceability: การรายงานผลและการตรวจสอบย้อนกลับ
-
-ข้อสังเกตเพิ่มเติม:
-- ความสามารถด้าน QC, Inventory, Equipment Calibration และฟังก์ชันอื่น ๆ จะขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งของแต่ละระบบ
-- มาตรฐาน ISO 15189 เกี่ยวข้องกับคุณภาพและความสามารถของห้องปฏิบัติการทางการแพทย์ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIS โดยตรง)`;
-        } else if (lowerQuery.includes('lims') || lowerQuery.includes('laboratory information management system')) {
-          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIMS (Laboratory Information Management System):
-
-LIMS คือระบบที่มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) มีหน้าที่สำคัญได้แก่:
-1. Sample Tracking & Workflow Management: การติดตามตัวอย่างและการจัดการขั้นตอนการทดสอบ
-2. Data Management & Traceability: การจัดการข้อมูลเชิงวิเคราะห์และการตรวจสอบย้อนกลับ
-3. Inventory & Equipment Management: การจัดการสต็อกและอุปกรณ์ (ขึ้นอยู่กับผลิตภัณฑ์และการติดตั้ง)
-
-ข้อสังเกตเพิ่มเติม:
-- ความสามารถของ LIS และ LIMS อาจทับซ้อนกันได้ โดย LIMS ไม่ได้จำกัดหรือกว้างกว่า LIS เสมอไป และไม่ได้จำกัดสถานที่ใช้งานตายตัว
-- มาตรฐาน ISO/IEC 17025 เกี่ยวข้องกับความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIMS โดยตรง)`;
-        } else {
-          const mockAnswers = [
-            `คำตอบจำลอง (Mock Mode) สำหรับ "${queryToSubmit}":\n\nกระบวนการตรวจวิเคราะห์ทางเทคนิคการแพทย์นี้มีความสำคัญอย่างยิ่งในการวินิจฉัยโรค โดยต้องอาศัยการควบคุมคุณภาพภายใน (Internal QC) และการตรวจสอบสิ่งส่งตรวจตามมาตรฐานสากล ISO 15189`,
-            `ผลการจำลองการวิเคราะห์ (Mock AI Response): \n\nเกี่ยวกับหัวข้อ "${queryToSubmit}" นักเทคนิคการแพทย์ควรพิจารณาค่าอ้างอิง (Reference Interval) และระวังปัจจัยแทรกซ้อน เช่น Hemolysis, Icteric หรือ Lipemia ที่อาจส่งผลต่อความแม่นยำของผลการตรวจ`
-          ];
-          selectedText = mockAnswers[Math.floor(Math.random() * mockAnswers.length)];
-        }
+        const { text: selectedText, references: selectedRefs } = getMockResponse(queryToSubmit, messages);
 
         const modelMessage: Message = {
           id: String(Date.now() + 1),
@@ -388,7 +428,7 @@ LIMS คือระบบที่มักเน้นการจัดกา
                             : 'แหล่งอ้างอิงที่ตรวจสอบได้ (Google Search Grounding)'}
                         </h4>
                         <ul className="space-y-1.5">
-                          {msg.references.map((ref, rIdx) => (
+                          {msg.references.map((ref: { title?: string; uri: string; type?: string }, rIdx: number) => (
                             <li key={rIdx} className="flex items-start gap-2">
                               <span className="text-[#7DD3FC] text-xs font-mono mt-0.5">[{rIdx + 1}]</span>
                               <div className="flex-1">
