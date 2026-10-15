@@ -82,5 +82,14 @@ describe('MedTech Learning Hub AI Mock Mode Logic', () => {
     expect(res.text).toContain('การควบคุมคุณภาพ (QC)');
     expect(res.text).toContain('Equipment Calibration');
   });
+
+  it('verifies mock references have empty uri and are marked as simulated academic textbooks', () => {
+    const res = getMockResponse("ขอข้อมูล LIS", []);
+    expect(res.references).toBeDefined();
+    expect(res.references.length).toBeGreaterThan(0);
+    expect(res.references[0].uri).toBe('');
+    expect(res.references[0].type).toBe('academic_textbook');
+    expect(res.references[0].title).toContain('ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์');
+  });
 });
 

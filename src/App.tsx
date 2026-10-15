@@ -508,18 +508,34 @@ export default function App() {
                             <li key={rIdx} className="flex items-start gap-2">
                               <span className="text-[#7DD3FC] text-xs font-mono mt-0.5">[{rIdx + 1}]</span>
                               <div className="flex-1">
-                                <a 
-                                  href={ref.uri} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-[#7DD3FC] hover:underline text-xs sm:text-sm break-all flex items-center gap-1.5"
-                                >
-                                  <span>{ref.title || ref.uri}</span>
-                                  <Globe className="w-3 h-3 shrink-0 opacity-70" />
-                                </a>
-                                <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                  {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ' : msg.source === 'mock_mode_simulator' ? 'ข้อมูลตัวอย่าง (Mock Data)' : 'เว็บอ้างอิง (Web Search)'}
-                                </span>
+                                {ref.uri ? (
+                                  <a 
+                                    href={ref.uri} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-[#7DD3FC] hover:underline text-xs sm:text-sm break-all flex items-center gap-1.5"
+                                  >
+                                    <span>{ref.title || ref.uri}</span>
+                                    <Globe className="w-3 h-3 shrink-0 opacity-70" />
+                                  </a>
+                                ) : (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="text-[#F1F5F9] text-xs sm:text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                                      <span>{ref.title}</span>
+                                      <span className="text-[10px] text-amber-300 bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 rounded font-normal">
+                                        Mock Reference (ไม่มีลิงก์เว็บภายนอก)
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 italic">
+                                      * แหล่งอ้างอิงตำราและมาตรฐานทางวิชาการจำลองสำหรับการศึกษา (ไม่ใช่อุปกรณ์เชื่อมโยงเว็บภายนอก)
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                    {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ (จำลองเพื่อการศึกษา)' : msg.source === 'mock_mode_simulator' ? 'ข้อมูลตัวอย่าง (Mock Data)' : 'เว็บอ้างอิง (Web Search)'}
+                                  </span>
+                                </div>
                               </div>
                             </li>
                           ))}

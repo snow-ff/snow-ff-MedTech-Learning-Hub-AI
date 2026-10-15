@@ -57,8 +57,7 @@ function getAcademicFallback(prompt: string) {
    - การประเมินเซลล์เม็ดเลือดขาว CD4 ในผู้ป่วย HIV
    - การทดสอบความเข้ากันได้และการปลูกถ่ายเซลล์`,
       references: [
-        { title: "Flow Cytometry Principles - Clinical Laboratory Science", uri: "https://www.ncbi.nlm.nih.gov/books/NBK459275/" },
-        { title: "Leukocyte Differentiation via Immunophenotyping", uri: "https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/flow-cytometry" }
+        { title: "ScienceDirect Topics - Flow Cytometry", uri: "https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/flow-cytometry" }
       ]
     };
   } else if (p.includes("pcr") || p.includes("real-time")) {
@@ -78,10 +77,7 @@ function getAcademicFallback(prompt: string) {
 3. **การประยุกต์ทางเทคนิคการแพทย์:**
    - ตรวจหาเชื้อไวรัสและแบคทีเรีย (Viral Load testing เช่น HIV, HBV, HCV, SARS-CoV-2)
    - ตรวจสอบยีนกลายพันธุ์ในโรคมะเร็งและโรคทางพันธุกรรม`,
-      references: [
-        { title: "Real-Time PCR vs Conventional PCR Comparison", uri: "https://www.cdc.gov/labquality/pcr-basics.html" },
-        { title: "Molecular Diagnostics Principles - NCBI Bookshelf", uri: "https://www.ncbi.nlm.nih.gov/books/NBK21490/" }
-      ]
+      references: []
     };
   } else if (p.includes("cbc") || p.includes("เดงกี่") || p.includes("dengue")) {
     return {
@@ -100,8 +96,8 @@ function getAcademicFallback(prompt: string) {
 2. **ความสำคัญทางห้องปฏิบัติการ:**
    - การติดตามค่า Hct และ Platelet อย่างใกล้ชิดช่วยให้แพทย์ประเมินความรุนแรงของโรคและภาวะ Shock ได้ทันท่วงที`,
       references: [
-        { title: "Dengue Guidelines for Diagnosis and Treatment - WHO", uri: "https://www.who.int/publications/i/item/9789241547871" },
-        { title: "Complete Blood Count Interpretation in Dengue - CDC", uri: "https://www.cdc.gov/dengue/clinical-guidance/index.html" }
+        { title: "WHO Guidelines - Dengue: Guidelines for Diagnosis, Treatment, Prevention and Control (2009)", uri: "https://www.who.int/publications/i/item/9789241547871" },
+        { title: "CDC Clinical Guidance - Dengue", uri: "https://www.cdc.gov/dengue/clinical-guidance/index.html" }
       ]
     };
   } else if (p.includes("crossmatching") || p.includes("blood grouping") || p.includes("หมู่เลือด")) {
@@ -123,8 +119,8 @@ function getAcademicFallback(prompt: string) {
    - **37°C Incubation & AHG (Antiglobulin Test / Coombs' Test) Phase:** ตรวจสอบแอนติบอดีชนิด IgG ที่ไม่เกาะกลุ่มในเบื้องต้น (เช่น Anti-Rh, Anti-Kell) โดยใช้ AHG reagent
    - หากผลทดสอบทุกเฟส **ไม่มีการตกตะกอนหรือเม็ดเลือดแตก (No Agglutination & No Hemolysis)** ถือว่าเข้ากันได้ (Compatible) สามารถจ่ายเลือดให้ผู้ป่วยได้`,
       references: [
-        { title: "AABB Technical Manual - Blood Bank Crossmatching", uri: "https://www.aabb.org/standards-and-accreditation/technical-manual" },
-        { title: "Blood Grouping and Pre-transfusion Testing - NCBI", uri: "https://www.ncbi.nlm.nih.gov/books/NBK2265/" }
+        { title: "AABB Technical Manual Information", uri: "https://www.aabb.org/standards-and-accreditation/technical-manual" },
+        { title: "NCBI Bookshelf (NBK2265) - Blood Groups and Red Cell Antigens", uri: "https://www.ncbi.nlm.nih.gov/books/NBK2265/" }
       ]
     };
   } else {
@@ -142,8 +138,7 @@ function getAcademicFallback(prompt: string) {
 3. **การสืบค้นเพิ่มเติม:**
    - ขอแนะนำให้นักศึกษาศึกษาค้นคว้าเพิ่มเติมจากตำรามาตรฐานโลหิตวิทยา จุลชีววิทยาคลินิก เคมีคลินิก และระเบียบวิธีวิจัยทางเทคนิคการแพทย์`,
       references: [
-        { title: "Clinical Laboratory Science Standards - CLSI Guidelines", uri: "https://clsi.org/" },
-        { title: "Medical Technology Practice and Quality Control", uri: "https://www.ncbi.nlm.nih.gov/books/NBK535216/" }
+        { title: "CLSI (Clinical and Laboratory Standards Institute)", uri: "https://clsi.org/" }
       ]
     };
   }
