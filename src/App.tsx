@@ -31,11 +31,6 @@ export interface Message {
 }
 
 export function getMockResponse(queryToSubmit: string, currentMessages: Message[]) {
-  const selectedRefs = [
-    { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์ (Mock Reference)', uri: 'https://example.com/mock-lis', type: 'academic_textbook' },
-    { title: 'แนวทางระบบ LIS และ LIMS มาตรฐานสากล', uri: 'https://example.com/mock-lims', type: 'web_grounding' }
-  ];
-
   const lowerQuery = queryToSubmit.toLowerCase();
   const conversationTextSoFar = currentMessages.map(m => m.text.toLowerCase()).join(' ');
   const isLisContext = conversationTextSoFar.includes('lis') || conversationTextSoFar.includes('laboratory information system') || conversationTextSoFar.includes('ระบบสารสนเทศห้องปฏิบัติการ');
@@ -53,6 +48,7 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
   const hasLims = lowerQuery.includes('lims') || lowerQuery.includes('laboratory information management system') || isLimsContext;
 
   let selectedText = "";
+  let selectedRefs: Array<{ title?: string; uri: string; type?: string }> = [];
 
   if (hasComparisonWithQc) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS พร้อมบทบาทด้าน QC และ Calibration:
@@ -67,6 +63,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Equipment Calibration (การสอบเทียบเครื่องมือ): คือกระบวนการกำหนดหรือยืนยันความสัมพันธ์ระหว่างค่าที่วัดได้กับค่าอ้างอิงตามวิธีที่ใช้ ซึ่งการสอบเทียบ (Calibration) เป็นการตรวจสอบความถูกต้องโดยยังไม่จำเป็นต้องทำการปรับแต่ง (Adjustment) เครื่องมือทุกครั้ง เว้นแต่ผลการสอบเทียบจะแสดงค่าเบี่ยงเบนเกินเกณฑ์ที่กำหนดจึงต้องทำ Adjustment
 - Preventive Maintenance (การบำรุงรักษาเชิงป้องกัน): เป็นการดูแล บำรุงรักษา ทำความสะอาด หรือเปลี่ยนอะไหล่ตามรอบเวลา เพื่อป้องกันการเสื่อมสภาพของเครื่องมือ ซึ่งมีความแตกต่างจากกระบวนการ QC รายวันและการสอบเทียบเครื่องมือ
 - บทบาทของ LIS และ LIMS: LIS บันทึกและประมวลผลข้อมูล Internal QC (Levey-Jennings, Mean, SD, CV) และอาจรองรับการแจ้งเตือนหรือระงับการรายงานผลผู้ป่วยอัตโนมัติ (Out of Control Result Blocking) ขึ้นอยู่กับการตั้งค่า ส่วน LIMS จัดการตารางเวลาและเอกสารการสอบเทียบ (Calibration Schedule) และ PM ของเครื่องมือ`;
+    selectedRefs = [
+      { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์และมาตรฐาน ISO 15189', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasQc && hasInterference) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การควบคุมคุณภาพ (QC) และปัจจัยรบกวนก่อนวิเคราะห์ (Hemolysis):
 
@@ -79,6 +78,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Reference Interval (ค่าอ้างอิง): ช่วงค่าปกติที่ได้จากการศึกษาในประชากรกลุ่มอ้างอิงที่มีสุขภาพดี ซึ่งอาจแตกต่างกันไปตามช่วงอายุ เพศ วิธีการตรวจ และเครื่องมือที่ใช้
 - Hemolysis (เม็ดเลือดแดงแตก): ปล่อยสารภายในเซลล์ออกมา รบกวนการทดสอบเช่น Potassium, LDH, AST (ทำให้ค่าสูงกว่าความเป็นจริง)
 - Icterus (ภาวะบิลิรูบินสูง / ดีซ่าน) และ Lipemia (ภาวะไขมันในเลือดสูง): ความขุ่นหรือสีรบกวนการวัดทางโฟโตเมตรี`;
+    selectedRefs = [
+      { title: 'คู่มือการควบคุมคุณภาพห้องปฏิบัติการและปัจจัยแทรกซ้อนทางก่อนวิเคราะห์', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasQc) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การควบคุมคุณภาพ (QC), การสอบเทียบเครื่องมือ (Equipment Calibration) และการบำรุงรักษาเชิงป้องกัน (Preventive Maintenance) กับบทบาทของ LIS และ LIMS:
 
@@ -87,7 +89,7 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Equipment Calibration (การสอบเทียบเครื่องมือ): คือกระบวนการกำหนดหรือยืนยันความสัมพันธ์ระหว่างค่าที่วัดได้กับค่าอ้างอิงตามวิธีที่ใช้ ซึ่งการสอบเทียบ (Calibration) เป็นการตรวจสอบความถูกต้องโดยยังไม่จำเป็นต้องทำการปรับแต่ง (Adjustment) เครื่องมือทุกครั้ง เว้นแต่ผลการสอบเทียบจะแสดงค่าเบี่ยงเบนเกินเกณฑ์ที่กำหนดจึงต้องทำ Adjustment
 - Preventive Maintenance (การบำรุงรักษาเชิงป้องกัน): เป็นการดูแล บำรุงรักษา ทำความสะอาด หรือเปลี่ยนอะไหล่ตามรอบเวลา เพื่อป้องกันการเสื่อมสภาพของเครื่องมือ ซึ่งมีความแตกต่างจากกระบวนการ QC รายวันและการสอบเทียบเครื่องมือ
 
-2. บทบาทของ LIS และ LIMS (ขึ้นอยู่กับผลิตภัณฑ์และการตั้งค่าของแต่ละระบบ):
+2. บทบาทของ LIS และ LIMS (ขึ้นอยู่กับการออกแบบผลิตภัณฑ์และการตั้งค่า):
 - LIS (Laboratory Information System):
   * บันทึก จัดเก็บ และประมวลผลข้อมูล Internal QC คำนวณค่าทางสถิติ (Mean, SD, CV) และแสดงแผนภูมิ Levey-Jennings
   * ระบบอาจรองรับการแจ้งเตือนหรือระงับการรายงานผลผู้ป่วยอัตโนมัติ (Out of Control Result Blocking) ได้ ขึ้นอยู่กับการออกแบบและตั้งค่าของผลิตภัณฑ์ (ไม่ใช่ทุก LIS ที่ต้องมีฟังก์ชันบล็อกอัตโนมัติ)
@@ -101,6 +103,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - QC Failure Handling & Impact Evaluation: เมื่อผล QC ไม่ผ่านเกณฑ์ ต้องประเมินผลกระทบ (Impact Evaluation) ต่อตัวอย่างผู้ป่วยที่เกี่ยวข้อง ตรวจสอบหาสาเหตุ ดำเนินการแก้ไขตามขั้นตอนมาตรฐาน (SOP) และยืนยันความเหมาะสม (Verify appropriateness) ของระบบก่อนปล่อยผลตรวจที่ได้รับผลกระทบ
 - Calibration Triggers & Reagent Lot Change: การเปลี่ยนล็อตน้ำยาหลักหรือการพบ QC ผิดปกติ ไม่ได้หมายความว่าต้องทำการสอบเทียบใหม่ (Re-calibration) ทุกครั้งโดยอัตโนมัติ ต้องพิจารณาตามข้อกำหนดของวิธีวิเคราะห์ คำแนะนำของผู้ผลิต (Manufacturer's instructions) และขั้นตอนการปฏิบัติงานมาตรฐาน (SOP)
 - Traceability & Data Integrity: ทุกบันทึกการทำ QC, การบำรุงรักษา (PM) และการสอบเทียบ (Calibration) ต้องมีความโปร่งใส ตรวจสอบย้อนกลับได้เพื่อความปลอดภัยสูงสุดของผู้ป่วย`;
+    selectedRefs = [
+      { title: 'คู่มือการควบคุมคุณภาพห้องปฏิบัติการทางการแพทย์ (Internal QC & Westgard Rules)', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasComparison) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS:
 
@@ -119,6 +124,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Instrument Interfacing: ความสามารถในการเชื่อมต่อกับเครื่องมือตรวจวิเคราะห์
 - Data Security & Traceability: ระบบรักษาความปลอดภัยของข้อมูลและการตรวจสอบย้อนกลับ (Traceability)
 - คุณสมบัติเพิ่มเติม: เช่น การควบคุมคุณภาพ (QC), สต็อก (Inventory), และการสอบเทียบ (Equipment Calibration) ซึ่งขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งแต่ละราย`;
+    selectedRefs = [
+      { title: 'มาตรฐานระบบสารสนเทศห้องปฏิบัติการ ISO 15189 & ISO/IEC 17025', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasInterference) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - เรื่องค่าอ้างอิงและสิ่งรบกวนทางก่อนวิเคราะห์ (Pre-analytical Interferences):
 
@@ -129,6 +137,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Hemolysis (เม็ดเลือดแดงแตก): ปล่อยสารภายในเซลล์ออกมา รบกวนการทดสอบเช่น Potassium, LDH, AST
 - Icterus (ภาวะบิลิรูบินสูง / ดีซ่าน): สีเหลืองเข้มรบกวนการวัดทางโฟโตเมตรี
 - Lipemia (ภาวะไขมันในเลือดสูง): ความขุ่นรบกวนปฏิกิริยาแสงผ่าน (Turbidity Interference)`;
+    selectedRefs = [
+      { title: 'คู่มือปัจจัยแทรกซ้อนก่อนวิเคราะห์ (Pre-analytical Phase & Interferences)', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasInterfacing) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเชื่อมต่อระบบ LIS กับเครื่องตรวจวิเคราะห์ (Instrument Interfacing) และข้อควรระวัง:
 
@@ -147,6 +158,9 @@ export function getMockResponse(queryToSubmit: string, currentMessages: Message[
 - Duplicate & Incomplete Data Check: ตรวจสอบข้อมูลซ้ำซ้อนหรือข้อมูลที่ไม่ครบถ้วนก่อนบันทึกเข้าฐานข้อมูลผู้ป่วย
 - Communication Errors: เฝ้าระวังข้อผิดพลาดในการสื่อสาร (Communication Timeout / Transmission Error) และมีระบบบันทึก Log เพื่อตรวจสอบย้อนกลับ
 - Result Review & Validation: ผลการตรวจที่รับจากเครื่องวิเคราะห์ต้องผ่านกระบวนการตรวจสอบและรับรองผล (Technical & Clinical Validation) โดยนักเทคนิคการแพทย์ตามมาตรฐาน ISO 15189 ก่อนรายงานผลให้แพทย์ผู้รักษา`;
+    selectedRefs = [
+      { title: 'แนวทางการเชื่อมต่อเครื่องตรวจวิเคราะห์ (Instrument Interfacing & ASTM/HL7 Protocol)', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasLis) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIS (Laboratory Information System):
 
@@ -160,6 +174,9 @@ LIS คือระบบสารสนเทศที่มักเน้น�
 ข้อสังเกตเพิ่มเติม:
 - ความสามารถด้าน QC, Inventory, Equipment Calibration และฟังก์ชันอื่น ๆ จะขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งของแต่ละระบบ
 - มาตรฐาน ISO 15189 เกี่ยวข้องกับคุณภาพและความสามารถของห้องปฏิบัติการทางการแพทย์ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIS โดยตรง)`;
+    selectedRefs = [
+      { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์ (Laboratory Information Systems)', uri: '', type: 'academic_textbook' }
+    ];
   } else if (hasLims) {
     selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIMS (Laboratory Information Management System):
 
@@ -171,10 +188,14 @@ LIMS คือระบบที่มักเน้นการจัดกา
 ข้อสังเกตเพิ่มเติม:
 - ความสามารถของ LIS และ LIMS อาจทับซ้อนกันได้ โดย LIMS ไม่ได้จำกัดหรือกว้างกว่า LIS เสมอไป และไม่ได้จำกัดสถานที่ใช้งานตายตัว
 - มาตรฐาน ISO/IEC 17025 เกี่ยวข้องกับความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIMS โดยตรง)`;
+    selectedRefs = [
+      { title: 'ตำราการจัดการข้อมูลห้องปฏิบัติการ (LIMS & Workflow Management)', uri: '', type: 'academic_textbook' }
+    ];
   } else {
     selectedText = `คำตอบจำลอง (Mock Mode) สำหรับ "${queryToSubmit}":
 
 กระบวนการตรวจวิเคราะห์ทางเทคนิคการแพทย์นี้มีความสำคัญต่อการวินิจฉัยและติดตามการรักษาโรค โดยยึดถือตามระบบบริหารคุณภาพห้องปฏิบัติการ (Quality Management System) และมาตรฐานสากล ISO 15189 ทั้งในด้านการควบคุมคุณภาพภายใน (Internal QC) และการประกันคุณภาพภายนอก (EQA) เพื่อให้ได้ผลตรวจที่ถูกต้องแม่นยำและเชื่อถือได้`;
+    selectedRefs = [];
   }
 
   return { text: selectedText, references: selectedRefs };
