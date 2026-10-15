@@ -217,9 +217,11 @@ app.post("/api/gemini/generate", async (req, res) => {
         }
       }
 
+      const hasGrounding = references.length > 0;
       return res.json({
         text,
-        references: references.length > 0 ? references : undefined,
+        source: hasGrounding ? "gemini_grounding" : "gemini_standard",
+        references: hasGrounding ? references.map(r => ({ ...r, type: "web_search" })) : undefined,
       });
     } catch (err: any) {
       const attemptDuration = Date.now() - attemptStartTime;
@@ -259,7 +261,8 @@ app.post("/api/gemini/generate", async (req, res) => {
   const fallback = getAcademicFallback(prompt);
   return res.json({
     text: fallback.text,
-    references: fallback.references,
+    source: "academic_fallback",
+    references: fallback.references.map(r => ({ ...r, type: "academic_textbook" })),
   });
 });
 

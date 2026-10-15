@@ -22,7 +22,8 @@ import {
 export default function App() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
-  const [references, setReferences] = useState<Array<{ title: string; uri: string }> | null>(null);
+  const [references, setReferences] = useState<Array<{ title: string; uri: string; type?: string }> | null>(null);
+  const [responseSource, setResponseSource] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -49,6 +50,7 @@ export default function App() {
     setError(null);
     setAnswer(null);
     setReferences(null);
+    setResponseSource(null);
     setIsPreviewMode(false);
 
     const frontendStartTime = Date.now();
@@ -86,6 +88,7 @@ export default function App() {
       }
 
       setAnswer(data.text);
+      setResponseSource(data.source || (data.text?.includes("Academic Fallback Mode") ? "academic_fallback" : "gemini_standard"));
       if (data.references && Array.isArray(data.references)) {
         setReferences(data.references);
       }
@@ -285,10 +288,20 @@ export default function App() {
           {/* Real Gemini Answer State */}
           {answer && !isLoading && !error && (
             <div className="space-y-6 animate-fadeIn">
-              <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 text-[#F1F5F9] text-xs flex items-center justify-between">
-                <span className="font-semibold flex items-center gap-1.5 text-[#7DD3FC]">
-                  <Sparkles className="w-4 h-4 text-[#7DD3FC]" />
-                  คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash) + Google Search Grounding
+              <div className={`border rounded-xl p-4 text-xs flex items-center justify-between ${
+                responseSource === 'academic_fallback' 
+                  ? 'bg-amber-950/30 border-amber-900/50 text-amber-200' 
+                  : 'bg-[#0F172A] border-[#334155] text-[#F1F5F9]'
+              }`}>
+                <span className={`font-semibold flex items-center gap-1.5 ${
+                  responseSource === 'academic_fallback' ? 'text-amber-300' : 'text-[#7DD3FC]'
+                }`}>
+                  <Sparkles className="w-4 h-4" />
+                  {responseSource === 'academic_fallback' 
+                    ? 'ข้อมูลวิชาการสำรอง (Academic Fallback Mode - API Quota Full)'
+                    : responseSource === 'gemini_grounding'
+                    ? 'คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash) + Google Search Grounding'
+                    : 'คำตอบสร้างขึ้นโดยโมเดล Gemini AI (gemini-3.8-flash)'}
                 </span>
                 <span className="text-[#CBD5E1]">
                   ภาษาไทย (พร้อมคำศัพท์เทคนิค)
@@ -304,32 +317,46 @@ export default function App() {
                 <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-5 text-sm space-y-3">
                   <h4 className="font-bold text-[#F1F5F9] flex items-center gap-2 text-xs uppercase tracking-wider text-[#7DD3FC]">
                     <BookOpen className="w-4 h-4" />
-                    แหล่งอ้างอิงและแหล่งข้อมูลที่ตรวจสอบได้ (Google Search Grounding)
+                    {responseSource === 'academic_fallback'
+                      ? 'ตำราและแหล่งอ้างอิงทางวิชาการ (Academic Textbooks & Standards)'
+                      : 'แหล่งอ้างอิงและแหล่งข้อมูลที่ตรวจสอบได้ (Google Search Grounding)'}
                   </h4>
                   <ul className="space-y-2">
                     {references.map((ref, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="text-[#7DD3FC] text-xs font-mono mt-0.5">[{idx + 1}]</span>
-                        <a 
-                          href={ref.uri} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-[#7DD3FC] hover:underline text-xs sm:text-sm break-all flex items-center gap-1.5"
-                        >
-                          <span>{ref.title || ref.uri}</span>
-                          <Globe className="w-3 h-3 shrink-0 opacity-70" />
-                        </a>
+                        <div className="flex-1">
+                          <a 
+                            href={ref.uri} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[#7DD3FC] hover:underline text-xs sm:text-sm break-all flex items-center gap-1.5"
+                          >
+                            <span>{ref.title || ref.uri}</span>
+                            <Globe className="w-3 h-3 shrink-0 opacity-70" />
+                          </a>
+                          <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ' : 'เว็บอ้างอิง (Web Search)'}
+                          </span>
+                        </div>
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
 
-              <div className="bg-amber-950/40 border border-amber-900/50 rounded-xl p-4 text-amber-200 text-xs flex items-start gap-2">
+              <div className={`border rounded-xl p-4 text-xs flex items-start gap-2 ${
+                responseSource === 'academic_fallback'
+                  ? 'bg-amber-950/40 border-amber-900/50 text-amber-200'
+                  : 'bg-amber-950/40 border-amber-900/50 text-amber-200'
+              }`}>
                 <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold text-amber-100">หมายเหตุ:</span> คำตอบนี้ประมวลผลด้วย Generative AI ร่วมกับ Google Search Grounding 
-                  ควรตรวจสอบซ้ำกับตำราหรือแนวทางปฏิบัติมาตรฐานทางห้องปฏิบัติการ
+                  <span className="font-semibold text-amber-100">หมายเหตุ:</span> {
+                    responseSource === 'academic_fallback'
+                      ? 'คำตอบนี้แสดงผลจากคลังข้อมูลสำรองทางวิชาการเนื่องจากโควตาการใช้งานฟรีชั่วคราวเต็ม กรุณาตรวจสอบซ้ำกับตำราหรือแนวทางปฏิบัติมาตรฐานทางห้องปฏิบัติการ'
+                      : 'คำตอบนี้ประมวลผลด้วย Generative AI ร่วมกับ Google Search Grounding ควรตรวจสอบซ้ำกับตำราหรือแนวทางปฏิบัติมาตรฐานทางห้องปฏิบัติการ'
+                  }
                 </div>
               </div>
             </div>
