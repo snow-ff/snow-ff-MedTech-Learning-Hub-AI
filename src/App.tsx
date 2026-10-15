@@ -38,6 +38,7 @@ export default function App() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'knowledge' | 'terms' | 'about'>('home');
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [isMockMode, setIsMockMode] = useState(false);
 
   const activeRequestId = useRef<number>(Date.now());
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -88,6 +89,80 @@ export default function App() {
 
     const currentReqId = activeRequestId.current;
     const frontendStartTime = Date.now();
+
+    if (isMockMode) {
+      setTimeout(() => {
+        if (activeRequestId.current !== currentReqId) return;
+        let selectedText = "";
+        let selectedRefs = [
+          { title: 'ตำราสารสนเทศห้องปฏิบัติการทางการแพทย์ (Mock Reference)', uri: 'https://example.com/mock-lis', type: 'academic_textbook' },
+          { title: 'แนวทางระบบ LIS และ LIMS มาตรฐานสากล', uri: 'https://example.com/mock-lims', type: 'web_grounding' }
+        ];
+
+        const lowerQuery = queryToSubmit.toLowerCase();
+        if ((lowerQuery.includes('lis') && lowerQuery.includes('lims')) || lowerQuery.includes('เปรียบเทียบ') || lowerQuery.includes('ความแตกต่าง')) {
+          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) - การเปรียบเทียบระหว่าง LIS และ LIMS:
+
+1. หน้าที่หลักและขอบเขต:
+- LIS (Laboratory Information System): มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย เช่น การรับคำสั่งตรวจ (Test Ordering), การลงทะเบียนสิ่งส่งตรวจ (Specimen Registration), การติดตามสิ่งส่งตรวจ (Specimen Tracking), การเชื่อมต่อเครื่องวิเคราะห์ (Instrument Interfacing), และการตรวจสอบรับรองผล (Result Review & Validation)
+- LIMS (Laboratory Information Management System): มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) เช่น การติดตามตัวอย่างตั้งแต่รับเข้าจนถึงทำลาย, การจัดการเวิร์กโฟลว์การทดสอบ, และการจัดการข้อมูลเชิงวิเคราะห์
+- หมายเหตุ: ความสามารถของทั้งสองระบบอาจทับซ้อนกันได้ขึ้นอยู่กับการออกแบบของผลิตภัณฑ์ โดยไม่ได้จำกัดว่าระบบใดต้องกว้างกว่าเสมอ หรือจำกัดการใช้งานเฉพาะสถานที่ใดสถานที่หนึ่งเท่านั้น
+
+2. ความแตกต่างที่มักพบ:
+- การบูรณาการระบบ: LIS มักให้ความสำคัญสูงกับการเชื่อมต่อกับระบบสารสนเทศโรงพยาบาล (HIS/EMR Integration) เพื่อเชื่อมโยงข้อมูลผู้ป่วยและแพทย์ผู้รักษา ส่วน LIMS มักเน้นการจัดการข้อมูลตัวอย่าง สต็อก (Inventory) และการสอบเทียบเครื่องมือ (Equipment Calibration)
+- มาตรฐานที่เกี่ยวข้อง: LIS มักเกี่ยวข้องกับการสนับสนุนระบบคุณภาพตามมาตรฐาน ISO 15189 (ความสามารถและคุณภาพของห้องปฏิบัติการทางการแพทย์) ในขณะที่ LIMS มักเกี่ยวข้องกับมาตรฐาน ISO/IEC 17025 (ความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ) ทั้งนี้มาตรฐานเหล่านี้เป็นเกณฑ์ประเมินห้องปฏิบัติการ ไม่ใช่การรับรองตัวซอฟต์แวร์โดยตรง
+
+3. ปัจจัยในการเลือกใช้:
+- Workflow & Specimen Tracking: รูปแบบกระบวนการทำงานและการติดตามตัวอย่างที่สอดคล้องกับหน้างาน
+- HIS/EMR Integration: ความจำเป็นในการเชื่อมต่อระบบสารสนเทศโรงพยาบาล
+- Instrument Interfacing: ความสามารถในการเชื่อมต่อกับเครื่องมือตรวจวิเคราะห์
+- Data Security & Traceability: ระบบรักษาความปลอดภัยของข้อมูลและการตรวจสอบย้อนกลับ (Traceability)
+- คุณสมบัติเพิ่มเติม: เช่น การควบคุมคุณภาพ (QC), สต็อก (Inventory), และการสอบเทียบ (Equipment Calibration) ซึ่งขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งแต่ละราย`;
+        } else if (lowerQuery.includes('lis') || lowerQuery.includes('laboratory information system') || lowerQuery.includes('ระบบสารสนเทศห้องปฏิบัติการ')) {
+          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIS (Laboratory Information System):
+
+LIS คือระบบสารสนเทศที่มักเน้นกระบวนการตรวจทางห้องปฏิบัติการทางการแพทย์และการรายงานผลผู้ป่วย มีหน้าที่สำคัญได้แก่:
+1. Test Ordering and Specimen Registration: การรับคำสั่งตรวจและลงทะเบียนสิ่งส่งตรวจ
+2. Specimen Tracking: การติดตามสถานะและตำแหน่งของสิ่งส่งตรวจ
+3. Instrument Interfacing: การเชื่อมต่อกับเครื่องตรวจวิเคราะห์เพื่อรับส่งข้อมูลอัตโนมัติ
+4. Result Review and Validation: การตรวจสอบและรับรองผลการตรวจ
+5. Result Reporting and Traceability: การรายงานผลและการตรวจสอบย้อนกลับ
+
+ข้อสังเกตเพิ่มเติม:
+- ความสามารถด้าน QC, Inventory, Equipment Calibration และฟังก์ชันอื่น ๆ จะขึ้นอยู่กับผลิตภัณฑ์และการติดตั้งของแต่ละระบบ
+- มาตรฐาน ISO 15189 เกี่ยวข้องกับคุณภาพและความสามารถของห้องปฏิบัติการทางการแพทย์ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIS โดยตรง)`;
+        } else if (lowerQuery.includes('lims') || lowerQuery.includes('laboratory information management system')) {
+          selectedText = `คำตอบจำลอง (UI Mock Mode - ไม่ใช่ผลจาก Gemini AI) สำหรับ LIMS (Laboratory Information Management System):
+
+LIMS คือระบบที่มักเน้นการจัดการตัวอย่างและเวิร์กโฟลว์ของห้องปฏิบัติการ (Sample Management & Workflows) มีหน้าที่สำคัญได้แก่:
+1. Sample Tracking & Workflow Management: การติดตามตัวอย่างและการจัดการขั้นตอนการทดสอบ
+2. Data Management & Traceability: การจัดการข้อมูลเชิงวิเคราะห์และการตรวจสอบย้อนกลับ
+3. Inventory & Equipment Management: การจัดการสต็อกและอุปกรณ์ (ขึ้นอยู่กับผลิตภัณฑ์และการติดตั้ง)
+
+ข้อสังเกตเพิ่มเติม:
+- ความสามารถของ LIS และ LIMS อาจทับซ้อนกันได้ โดย LIMS ไม่ได้จำกัดหรือกว้างกว่า LIS เสมอไป และไม่ได้จำกัดสถานที่ใช้งานตายตัว
+- มาตรฐาน ISO/IEC 17025 เกี่ยวข้องกับความสามารถของห้องปฏิบัติการทดสอบและสอบเทียบ (ไม่ใช่การรับรองตัวซอฟต์แวร์ LIMS โดยตรง)`;
+        } else {
+          const mockAnswers = [
+            `คำตอบจำลอง (Mock Mode) สำหรับ "${queryToSubmit}":\n\nกระบวนการตรวจวิเคราะห์ทางเทคนิคการแพทย์นี้มีความสำคัญอย่างยิ่งในการวินิจฉัยโรค โดยต้องอาศัยการควบคุมคุณภาพภายใน (Internal QC) และการตรวจสอบสิ่งส่งตรวจตามมาตรฐานสากล ISO 15189`,
+            `ผลการจำลองการวิเคราะห์ (Mock AI Response): \n\nเกี่ยวกับหัวข้อ "${queryToSubmit}" นักเทคนิคการแพทย์ควรพิจารณาค่าอ้างอิง (Reference Interval) และระวังปัจจัยแทรกซ้อน เช่น Hemolysis, Icteric หรือ Lipemia ที่อาจส่งผลต่อความแม่นยำของผลการตรวจ`
+          ];
+          selectedText = mockAnswers[Math.floor(Math.random() * mockAnswers.length)];
+        }
+
+        const modelMessage: Message = {
+          id: String(Date.now() + 1),
+          role: 'model',
+          text: selectedText,
+          source: 'mock_mode_simulator',
+          references: selectedRefs,
+          timestamp: Date.now()
+        };
+        setMessages(prev => [...prev, modelMessage]);
+        setIsLoading(false);
+      }, 700);
+      return;
+    }
 
     try {
       // Turn-aware history trimming: max 8 messages, must start with 'user'
@@ -286,6 +361,8 @@ export default function App() {
                                 ? 'ข้อมูลวิชาการสำรอง (Academic Fallback Mode)'
                                 : msg.source === 'gemini_grounding'
                                 ? 'Gemini AI + Google Search Grounding'
+                                : msg.source === 'mock_mode_simulator'
+                                ? 'UI Mock Mode — คำตอบจำลอง ไม่ใช่ผลจาก Gemini AI'
                                 : 'Gemini AI Standard'}
                             </span>
                           </>
@@ -306,6 +383,8 @@ export default function App() {
                           <BookOpen className="w-3.5 h-3.5" />
                           {msg.source === 'academic_fallback'
                             ? 'ตำราและแหล่งอ้างอิงทางวิชาการ (Academic Textbooks)'
+                            : msg.source === 'mock_mode_simulator'
+                            ? 'แหล่งอ้างอิงตัวอย่าง (Mock Reference Examples)'
                             : 'แหล่งอ้างอิงที่ตรวจสอบได้ (Google Search Grounding)'}
                         </h4>
                         <ul className="space-y-1.5">
@@ -323,7 +402,7 @@ export default function App() {
                                   <Globe className="w-3 h-3 shrink-0 opacity-70" />
                                 </a>
                                 <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                  {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ' : 'เว็บอ้างอิง (Web Search)'}
+                                  {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ' : msg.source === 'mock_mode_simulator' ? 'ข้อมูลตัวอย่าง (Mock Data)' : 'เว็บอ้างอิง (Web Search)'}
                                 </span>
                               </div>
                             </li>
@@ -341,18 +420,29 @@ export default function App() {
             {/* Question Input Section */}
             <section className="bg-[#1E293B] rounded-2xl border border-[#334155] p-6 sm:p-8 shadow-sm">
               <form onSubmit={(e) => handleSendQuestion(e)} className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <label htmlFor="question-input" className="text-sm font-semibold text-[#F1F5F9] flex items-center gap-2">
                     <Search className="w-4 h-4 text-[#7DD3FC]" />
                     {messages.length > 0 ? "ถามคำถามต่อเนื่อง (Follow-up Question)" : "ตั้งคำถามหรือหัวข้อทางเทคนิคการแพทย์"}
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsPreviewMode(!isPreviewMode)}
-                    className="text-xs text-[#7DD3FC] hover:text-sky-300 font-medium underline underline-offset-2 transition-colors"
-                  >
-                    {isPreviewMode ? "ซ่อนตัวอย่างโครงสร้าง" : "ดูตัวอย่างโครงสร้างคำตอบ"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-[#7DD3FC] cursor-pointer font-medium bg-sky-950/60 px-2.5 py-1 rounded-lg border border-sky-800">
+                      <input 
+                        type="checkbox" 
+                        checked={isMockMode} 
+                        onChange={(e) => setIsMockMode(e.target.checked)} 
+                        className="rounded bg-[#0F172A] border-sky-700 text-sky-600 focus:ring-0 cursor-pointer"
+                      />
+                      <span>โหมดจำลอง (Mock Mode)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsPreviewMode(!isPreviewMode)}
+                      className="text-xs text-[#7DD3FC] hover:text-sky-300 font-medium underline underline-offset-2 transition-colors cursor-pointer"
+                    >
+                      {isPreviewMode ? "ซ่อนตัวอย่างโครงสร้าง" : "ดูตัวอย่างโครงสร้างคำตอบ"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -543,6 +633,12 @@ export default function App() {
               <div className="bg-[#0F172A] p-3 rounded-xl border border-[#334155] flex justify-between items-center">
                 <span>Multi-turn Conversation:</span>
                 <span className="text-emerald-400 font-semibold">Enabled (Max 8 turns)</span>
+              </div>
+              <div className="bg-[#0F172A] p-3 rounded-xl border border-[#334155] flex justify-between items-center">
+                <span>UI Mock Chat Mode:</span>
+                <span className={isMockMode ? "text-amber-400 font-semibold" : "text-slate-400 font-semibold"}>
+                  {isMockMode ? "Active (No API Quota)" : "Inactive (Standard API)"}
+                </span>
               </div>
             </div>
             <button
