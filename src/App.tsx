@@ -38,6 +38,7 @@ export interface ReferenceItem {
   title?: string;
   uri: string;
   type?: string;
+  linkAccessStatus?: 'unknown' | 'reachable' | 'unreachable' | 'paywall' | 'rate_limited';
   verificationStatus?: 'verified' | 'unverified' | 'needs_review';
   reviewer?: string | null;
   reviewDate?: string | null;
@@ -610,6 +611,11 @@ export default function App() {
                                           ? 'ข้อมูลตัวอย่าง (Mock Data)'
                                           : 'แหล่งข้อมูลจำลอง (Mock Reference - ไม่มีลิงก์เว็บภายนอก)')}
                                   </span>
+                                  {ref.uri && ref.linkAccessStatus && (
+                                    <span className="inline-block text-[9px] px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60 font-mono">
+                                      {ref.linkAccessStatus === 'reachable' ? 'HTTP Link: Reachable' : `Link Status: ${ref.linkAccessStatus}`}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </li>

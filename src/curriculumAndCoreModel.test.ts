@@ -6,9 +6,14 @@ import {
   medtechSubjects, 
   curatedLessons, 
   curatedGlossary, 
-  curatedReferences 
+  curatedReferences,
+  curatedClaims,
+  curatedEvidenceLinks,
+  curatedAuditTrail,
+  evaluateEvidenceLinkAlignment
 } from './data/curriculumData';
 import { Message, ReferenceItem } from './App';
+import { EvidenceLink } from './models/coreModel';
 
 describe('Phase B: DTM Curriculum Crosswalk & Evidentiary Verification Tests', () => {
   it('contains exactly 45 baseline crosswalk entries for DTM (2567-2569)', () => {
@@ -126,5 +131,95 @@ describe('Phase B: DTM Curriculum Crosswalk & Evidentiary Verification Tests', (
     for (let i = 0; i < historyPairs.length - 1; i++) {
       expect(historyPairs[i].role).not.toBe(historyPairs[i + 1].role);
     }
+  });
+});
+
+describe('Phase C1: Evidentiary Verification, Version Drift Guard & Access Status Tests', () => {
+  it('binds EvidenceLink strictly to both Claim version and Reference version', () => {
+    expect(curatedEvidenceLinks.length).toBeGreaterThanOrEqual(3);
+    for (const link of curatedEvidenceLinks) {
+      expect(link.claimVersion).toBeDefined();
+      expect(link.referenceVersion).toBeDefined();
+      expect(link.claimVersion).toMatch(/^1\.\d+$/);
+      expect(link.referenceVersion).toMatch(/^1\.\d+$/);
+    }
+  });
+
+  it('detects version drift and automatically degrades status to needs_review when versions mismatch', () => {
+    // Aligned versions: evaluation retains unverified or pending state
+    const alignedLink: EvidenceLink = {
+      id: "TEST-ALIGN-01",
+      claimId: "CLAIM-CBC-WBC-REF",
+      claimVersion: "1.2",
+      referenceId: "REF-CLSI-H20-3RD",
+      referenceVersion: "1.2",
+      supportStatus: "supported"
+    };
+    const alignedResult = evaluateEvidenceLinkAlignment(alignedLink);
+    expect(alignedResult.isVersionAligned).toBe(true);
+    expect(alignedResult.effectiveStatus).toBe('needs_review');
+
+    // Mismatched versions (e.g. claim bumped to 1.3 but reference remains 1.2)
+    const driftedLink: EvidenceLink = {
+      id: "TEST-DRIFT-01",
+      claimId: "CLAIM-CBC-WBC-REF",
+      claimVersion: "1.3",
+      referenceId: "REF-CLSI-H20-3RD",
+      referenceVersion: "1.2",
+      supportStatus: "supported",
+      reviewDecision: "verified",
+      reviewedBy: "Dr. Expert",
+      reviewedAt: "2026-10-16"
+    };
+    const driftedResult = evaluateEvidenceLinkAlignment(driftedLink);
+    // Even if previously marked verified, version drift must force re-review
+    expect(driftedResult.isVersionAligned).toBe(false);
+    expect(driftedResult.effectiveStatus).toBe('needs_review');
+    expect(driftedResult.reason).toContain('Version drift detected');
+  });
+
+  it('strictly separates technical LinkAccessStatus from academic VerificationStatus', () => {
+    // References with external URL have reachable linkAccessStatus, but verificationStatus remains unverified
+    const clsiRef = curatedReferences.find(r => r.referenceId === 'REF-CLSI-H20-3RD');
+    expect(clsiRef).toBeDefined();
+    expect(clsiRef?.linkAccessStatus).toBe('reachable');
+    expect(clsiRef?.verificationStatus).toBe('unverified');
+
+    // References without URL have unknown linkAccessStatus and unverified verificationStatus
+    const isoRef = curatedReferences.find(r => r.referenceId === 'REF-ISO-15189');
+    expect(isoRef).toBeDefined();
+    expect(isoRef?.linkAccessStatus).toBe('unknown');
+    expect(isoRef?.verificationStatus).toBe('unverified');
+  });
+
+  it('maintains append-only immutable audit trail records with mandatory actor and timestamp', () => {
+    expect(curatedAuditTrail.length).toBeGreaterThanOrEqual(3);
+    for (const record of curatedAuditTrail) {
+      expect(record.recordId).toBeDefined();
+      expect(record.entityType).toBeDefined();
+      expect(record.entityId).toBeDefined();
+      expect(record.actorId).toBeDefined();
+      expect(record.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(record.action).toBeDefined();
+      expect(record.newStatus).toBeDefined();
+    }
+  });
+
+  it('rejects simulated client attempt to assert verified status without authorized review decision', () => {
+    const unverifiedLink: EvidenceLink = {
+      id: "TEST-UNAUTH-01",
+      claimId: "CLAIM-CBC-EDTA-PLATELET",
+      claimVersion: "1.2",
+      referenceId: "REF-PUBMED-25425098",
+      referenceVersion: "1.2",
+      supportStatus: "supported",
+      reviewDecision: undefined,
+      reviewedBy: undefined,
+      reviewedAt: undefined
+    };
+
+    const evaluation = evaluateEvidenceLinkAlignment(unverifiedLink);
+    expect(evaluation.effectiveStatus).not.toBe('verified');
+    expect(evaluation.effectiveStatus).toBe('needs_review');
   });
 });

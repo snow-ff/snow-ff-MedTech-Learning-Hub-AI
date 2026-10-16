@@ -10,7 +10,11 @@ import {
   Topic,
   Lesson,
   GlossaryTerm,
-  Reference
+  Reference,
+  Claim,
+  EvidenceLink,
+  AuditTrailRecord,
+  LinkAccessStatus
 } from '../models/coreModel';
 
 export const dtmCurriculumVersion: CurriculumVersion = {
@@ -173,6 +177,7 @@ export const curatedReferences: Reference[] = [
     title: "CLSI H20: Reference Leukocyte Differential Count (Proportional) and Evaluation of Instrumental Methods (3rd Edition)",
     uri: "https://clsi.org/shop/standards/h20/",
     sourceType: "clsi",
+    linkAccessStatus: "reachable",
     verificationStatus: "unverified", // Default to unverified until authorized human audit recorded
     reviewer: undefined,
     reviewDate: undefined,
@@ -184,6 +189,7 @@ export const curatedReferences: Reference[] = [
     title: "Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia",
     uri: "https://pubmed.ncbi.nlm.nih.gov/25425098/",
     sourceType: "pubmed",
+    linkAccessStatus: "reachable",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -195,6 +201,7 @@ export const curatedReferences: Reference[] = [
     title: "MIQE 2.0: Revision of the Minimum Information for Publication of Quantitative Real-Time PCR Experiments Guidelines",
     uri: "https://academic.oup.com/clinchem/article/71/6/634/8119148",
     sourceType: "guideline",
+    linkAccessStatus: "reachable",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -206,6 +213,7 @@ export const curatedReferences: Reference[] = [
     title: "Flow Cytometry Blood Cell Identification",
     uri: "https://www.ncbi.nlm.nih.gov/books/NBK608011/",
     sourceType: "textbook",
+    linkAccessStatus: "reachable",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -216,6 +224,7 @@ export const curatedReferences: Reference[] = [
     referenceId: "REF-ISO-15189",
     title: "ISO 15189: Medical laboratories - Requirements for quality and competence",
     sourceType: "standard",
+    linkAccessStatus: "unknown",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -417,3 +426,134 @@ export const curatedGlossary: GlossaryTerm[] = [
     suggestedPrompt: "อธิบายหลักการทำงานของ Flow Cytometry และการใช้ Forward Scatter (FSC) และ Side Scatter (SSC) ในการแยกชนิดเม็ดเลือดขาว"
   }
 ];
+
+// Phase C1: Evidentiary Claims
+export const curatedClaims: Claim[] = [
+  {
+    claimId: "CLAIM-CBC-WBC-REF",
+    claimText: "CLSI H20 3rd Edition (2026) establishes reference method for automated and semiautomated WBC differential counts, replacing H20-A2.",
+    subjectArea: "suppl-hema",
+    sourceScope: "CLSI H20 3rd Ed",
+    contentVersion: "1.2"
+  },
+  {
+    claimId: "CLAIM-CBC-EDTA-PLATELET",
+    claimText: "Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia requires peripheral smear review and alternative anticoagulant.",
+    subjectArea: "suppl-hema",
+    sourceScope: "PubMed 25425098",
+    contentVersion: "1.2"
+  },
+  {
+    claimId: "CLAIM-QC-WESTGARD-REJECT",
+    claimText: "Westgard 1-3s and 2-2s multirule violations in Levey-Jennings charts detect random and systematic errors requiring analytical run rejection.",
+    subjectArea: "dtm-lab-mgmt",
+    sourceScope: "ISO 15189 & Westgard QC",
+    contentVersion: "1.2"
+  },
+  {
+    claimId: "CLAIM-FLOW-FSC-SSC",
+    claimText: "In Flow Cytometry, Forward Scatter (FSC) correlates with cell volume/size while Side Scatter (SSC) correlates with internal complexity/granularity.",
+    subjectArea: "suppl-hema",
+    sourceScope: "NCBI NBK608011",
+    contentVersion: "1.2"
+  }
+];
+
+// Phase C1: Evidence Links explicitly binding Claim Version and Reference Version
+export const curatedEvidenceLinks: EvidenceLink[] = [
+  {
+    id: "EV-LINK-01",
+    claimId: "CLAIM-CBC-WBC-REF",
+    claimVersion: "1.2",
+    referenceId: "REF-CLSI-H20-3RD",
+    referenceVersion: "1.2",
+    supportStatus: "supported",
+    evidenceExcerpt: "CLSI H20 (3rd ed., April 2026) specifies reference manual visual differential count.",
+    isVersionAligned: true
+  },
+  {
+    id: "EV-LINK-02",
+    claimId: "CLAIM-CBC-EDTA-PLATELET",
+    claimVersion: "1.2",
+    referenceId: "REF-PUBMED-25425098",
+    referenceVersion: "1.2",
+    supportStatus: "supported",
+    evidenceExcerpt: "PubMed PMID 25425098 describes diagnostic workup for spurious thrombocytopenia.",
+    isVersionAligned: true
+  },
+  {
+    id: "EV-LINK-03",
+    claimId: "CLAIM-FLOW-FSC-SSC",
+    claimVersion: "1.2",
+    referenceId: "REF-NCBI-NBK608011",
+    referenceVersion: "1.2",
+    supportStatus: "supported",
+    evidenceExcerpt: "StatPearls NBK608011 notes FSC cell size and SSC inner complexity correlation.",
+    isVersionAligned: true
+  }
+];
+
+// Phase C1: Immutable Audit Trail Records
+export const curatedAuditTrail: AuditTrailRecord[] = [
+  {
+    recordId: "AUDIT-001",
+    entityType: "reference",
+    entityId: "REF-CLSI-H20-3RD",
+    action: "create",
+    newStatus: "unverified",
+    actorId: "system_initializer",
+    timestamp: "2026-10-16T11:00:00.000Z",
+    reason: "Initial baseline ingestion with CLSI H20 3rd Edition (2026)"
+  },
+  {
+    recordId: "AUDIT-002",
+    entityType: "reference",
+    entityId: "REF-PUBMED-25425098",
+    action: "create",
+    newStatus: "unverified",
+    actorId: "system_initializer",
+    timestamp: "2026-10-16T11:00:00.000Z",
+    reason: "Added focused research reference for EDTA pseudothrombocytopenia"
+  },
+  {
+    recordId: "AUDIT-003",
+    entityType: "evidence_link",
+    entityId: "EV-LINK-01",
+    action: "create",
+    newStatus: "unverified",
+    actorId: "system_initializer",
+    timestamp: "2026-10-16T11:00:00.000Z",
+    reason: "Binds CLAIM-CBC-WBC-REF v1.2 with REF-CLSI-H20-3RD v1.2"
+  }
+];
+
+// Phase C1: Evidence Version Alignment and Degradation Evaluator
+export function evaluateEvidenceLinkAlignment(link: EvidenceLink): {
+  isVersionAligned: boolean;
+  effectiveStatus: 'verified' | 'needs_review' | 'unverified';
+  reason?: string;
+} {
+  // If claim version and reference version do not match, flag as version drift and degrade status
+  if (link.claimVersion !== link.referenceVersion) {
+    return {
+      isVersionAligned: false,
+      effectiveStatus: 'needs_review',
+      reason: `Version drift detected: Claim v${link.claimVersion} vs Reference v${link.referenceVersion}. Re-review required.`
+    };
+  }
+
+  // Without authorized reviewer and verified decision, it cannot be verified
+  if (link.reviewDecision === 'verified' && link.reviewedBy && link.reviewedAt) {
+    return {
+      isVersionAligned: true,
+      effectiveStatus: 'verified',
+      reason: `Verified by ${link.reviewedBy} on ${link.reviewedAt}`
+    };
+  }
+
+  return {
+    isVersionAligned: true,
+    effectiveStatus: link.supportStatus === 'supported' ? 'needs_review' : 'unverified',
+    reason: 'Awaiting authorized reviewer confirmation'
+  };
+}

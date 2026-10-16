@@ -90,6 +90,7 @@ export interface LessonBlock {
   titleTh?: string;
   contentTh: string;
   contentEn?: string;
+  contentVersion?: string;
 }
 
 export interface Lesson {
@@ -103,6 +104,7 @@ export interface Lesson {
   keyEnglishTerms: string[];
   suggestedPrompt: string;
   referenceIds: string[];
+  contentVersion?: string;
 }
 
 export interface GlossaryTerm {
@@ -124,6 +126,20 @@ export interface TopicGlossaryLink {
 }
 
 // Evidentiary Verification Entities (Strictly separating URL availability from verification)
+export type LinkAccessStatus = 'unknown' | 'reachable' | 'unreachable' | 'paywall' | 'rate_limited';
+
+export interface AuditTrailRecord {
+  recordId: string;
+  entityType: 'claim' | 'reference' | 'evidence_link';
+  entityId: string;
+  action: 'create' | 'review' | 'invalidate' | 'version_bump';
+  previousStatus?: string;
+  newStatus: string;
+  actorId: string;
+  timestamp: string; // ISO 8601
+  reason?: string;
+}
+
 export interface Claim {
   claimId: string;
   claimText: string;
@@ -144,19 +160,27 @@ export interface Reference {
   title: string;
   uri?: string;
   sourceType: 'clsi' | 'guideline' | 'pubmed' | 'textbook' | 'standard' | 'web';
-  verificationStatus: 'verified' | 'unverified' | 'needs_review';
+  linkAccessStatus?: LinkAccessStatus; // Technical network reachability
+  verificationStatus: 'verified' | 'unverified' | 'needs_review'; // Academic evidence validation
   reviewer?: string; // Authorized reviewer name/ID
   reviewDate?: string; // ISO date of audit
   evidenceLocator?: string; // e.g. "Section 4.2, p. 18" or "PMID: 25425098"
   contentVersion?: string; // e.g. "1.2"
+  auditTrail?: AuditTrailRecord[];
 }
 
 export interface EvidenceLink {
   id: string;
   claimId: string;
+  claimVersion: string; // Explicit binding to Claim version
   referenceId: string;
+  referenceVersion: string; // Explicit binding to Reference version
   supportStatus: 'supported' | 'refuted' | 'partial' | 'unverified';
   evidenceExcerpt?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewDecision?: 'verified' | 'rejected' | 'needs_review';
+  isVersionAligned?: boolean; // Evaluated: claimVersion === referenceVersion
 }
 
 export interface ChatContext {

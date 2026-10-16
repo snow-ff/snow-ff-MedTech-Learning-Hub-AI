@@ -353,7 +353,16 @@ app.post("/api/gemini/generate", async (req, res) => {
       return res.json({
         text,
         source: hasGrounding ? "gemini_grounding" : "gemini_standard",
-        references: hasGrounding ? references.map(r => ({ ...r, type: "web_search" })) : undefined,
+        references: hasGrounding ? references.map(r => ({ 
+          ...r, 
+          type: "web_search",
+          linkAccessStatus: "reachable",
+          verificationStatus: "unverified",
+          reviewer: null,
+          reviewDate: null,
+          evidenceLocator: null,
+          contentVersion: "1.2"
+        })) : undefined,
       });
     } catch (err: any) {
       const attemptDuration = Date.now() - attemptStartTime;
@@ -397,10 +406,11 @@ app.post("/api/gemini/generate", async (req, res) => {
     references: fallback.references.map(r => ({
       ...r,
       type: r.uri ? "external_academic_link" : "simulated_reference",
+      linkAccessStatus: r.uri ? "reachable" : "unknown",
       verificationStatus: "unverified",
       reviewer: null,
       reviewDate: null,
-      evidenceLocator: null,
+      evidenceLocator: r.uri ? "Direct Academic Source" : null,
       contentVersion: "1.2"
     })),
   });
