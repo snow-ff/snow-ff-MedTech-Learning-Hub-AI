@@ -356,7 +356,7 @@ app.post("/api/gemini/generate", async (req, res) => {
         references: hasGrounding ? references.map(r => ({ 
           ...r, 
           type: "web_search",
-          linkAccessStatus: "reachable",
+          linkAccessStatus: "unknown",
           verificationStatus: "unverified",
           reviewer: null,
           reviewDate: null,
@@ -406,7 +406,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     references: fallback.references.map(r => ({
       ...r,
       type: r.uri ? "external_academic_link" : "simulated_reference",
-      linkAccessStatus: r.uri ? "reachable" : "unknown",
+      linkAccessStatus: "unknown",
       verificationStatus: "unverified",
       reviewer: null,
       reviewDate: null,

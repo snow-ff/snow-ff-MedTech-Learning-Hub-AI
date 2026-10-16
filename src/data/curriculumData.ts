@@ -177,7 +177,7 @@ export const curatedReferences: Reference[] = [
     title: "CLSI H20: Reference Leukocyte Differential Count (Proportional) and Evaluation of Instrumental Methods (3rd Edition)",
     uri: "https://clsi.org/shop/standards/h20/",
     sourceType: "clsi",
-    linkAccessStatus: "reachable",
+    linkAccessStatus: "unknown", // Unknown until live network reachability check is conducted
     verificationStatus: "unverified", // Default to unverified until authorized human audit recorded
     reviewer: undefined,
     reviewDate: undefined,
@@ -189,7 +189,7 @@ export const curatedReferences: Reference[] = [
     title: "Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia",
     uri: "https://pubmed.ncbi.nlm.nih.gov/25425098/",
     sourceType: "pubmed",
-    linkAccessStatus: "reachable",
+    linkAccessStatus: "unknown",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -201,7 +201,7 @@ export const curatedReferences: Reference[] = [
     title: "MIQE 2.0: Revision of the Minimum Information for Publication of Quantitative Real-Time PCR Experiments Guidelines",
     uri: "https://academic.oup.com/clinchem/article/71/6/634/8119148",
     sourceType: "guideline",
-    linkAccessStatus: "reachable",
+    linkAccessStatus: "unknown",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -213,7 +213,7 @@ export const curatedReferences: Reference[] = [
     title: "Flow Cytometry Blood Cell Identification",
     uri: "https://www.ncbi.nlm.nih.gov/books/NBK608011/",
     sourceType: "textbook",
-    linkAccessStatus: "reachable",
+    linkAccessStatus: "unknown",
     verificationStatus: "unverified",
     reviewer: undefined,
     reviewDate: undefined,
@@ -493,8 +493,8 @@ export const curatedEvidenceLinks: EvidenceLink[] = [
   }
 ];
 
-// Phase C1: Immutable Audit Trail Records
-export const curatedAuditTrail: AuditTrailRecord[] = [
+// Phase C1.1: Static Baseline Audit Trail Records (Read-only sample log in memory, not a production ledger)
+export const curatedAuditTrail: readonly AuditTrailRecord[] = Object.freeze([
   {
     recordId: "AUDIT-001",
     entityType: "reference",
@@ -525,20 +525,51 @@ export const curatedAuditTrail: AuditTrailRecord[] = [
     timestamp: "2026-10-16T11:00:00.000Z",
     reason: "Binds CLAIM-CBC-WBC-REF v1.2 with REF-CLSI-H20-3RD v1.2"
   }
-];
+]);
 
-// Phase C1: Evidence Version Alignment and Degradation Evaluator
-export function evaluateEvidenceLinkAlignment(link: EvidenceLink): {
+// Phase C1.1: Semantic Evidence Version Alignment and Degradation Evaluator
+// Compares link.claimVersion against the target Claim's current version,
+// and link.referenceVersion against the target Reference's current version.
+// Does NOT compare claimVersion directly with referenceVersion.
+export function evaluateEvidenceLinkAlignment(
+  link: EvidenceLink,
+  allClaims: Claim[] = curatedClaims,
+  allReferences: Reference[] = curatedReferences
+): {
   isVersionAligned: boolean;
   effectiveStatus: 'verified' | 'needs_review' | 'unverified';
   reason?: string;
 } {
-  // If claim version and reference version do not match, flag as version drift and degrade status
-  if (link.claimVersion !== link.referenceVersion) {
+  const targetClaim = allClaims.find(c => c.claimId === link.claimId);
+  const targetRef = allReferences.find(r => r.referenceId === link.referenceId);
+
+  // If target claim or reference entity is missing, cannot infer alignment
+  if (!targetClaim || !targetRef) {
     return {
       isVersionAligned: false,
       effectiveStatus: 'needs_review',
-      reason: `Version drift detected: Claim v${link.claimVersion} vs Reference v${link.referenceVersion}. Re-review required.`
+      reason: `Target entity missing for audit (claim found: ${!!targetClaim}, reference found: ${!!targetRef}). Re-review required.`
+    };
+  }
+
+  // Semantic version check:
+  // 1) link.claimVersion must match targetClaim.contentVersion
+  // 2) link.referenceVersion must match targetRef.contentVersion
+  const claimMatches = link.claimVersion === targetClaim.contentVersion;
+  const refMatches = link.referenceVersion === targetRef.contentVersion;
+
+  if (!claimMatches || !refMatches) {
+    const driftDetails: string[] = [];
+    if (!claimMatches) {
+      driftDetails.push(`Claim v${link.claimVersion} (current: v${targetClaim.contentVersion})`);
+    }
+    if (!refMatches) {
+      driftDetails.push(`Reference v${link.referenceVersion} (current: v${targetRef.contentVersion})`);
+    }
+    return {
+      isVersionAligned: false,
+      effectiveStatus: 'needs_review',
+      reason: `Version drift detected: ${driftDetails.join(', ')}. Re-review required.`
     };
   }
 

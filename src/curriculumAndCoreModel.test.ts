@@ -134,7 +134,7 @@ describe('Phase B: DTM Curriculum Crosswalk & Evidentiary Verification Tests', (
   });
 });
 
-describe('Phase C1: Evidentiary Verification, Version Drift Guard & Access Status Tests', () => {
+describe('Phase C1.1: Semantic Evidentiary Verification, Version Drift Guard & Access Status Tests', () => {
   it('binds EvidenceLink strictly to both Claim version and Reference version', () => {
     expect(curatedEvidenceLinks.length).toBeGreaterThanOrEqual(3);
     for (const link of curatedEvidenceLinks) {
@@ -145,8 +145,8 @@ describe('Phase C1: Evidentiary Verification, Version Drift Guard & Access Statu
     }
   });
 
-  it('detects version drift and automatically degrades status to needs_review when versions mismatch', () => {
-    // Aligned versions: evaluation retains unverified or pending state
+  it('detects version drift by comparing against target entity versions, not against each other', () => {
+    // Aligned versions: link.claimVersion matches targetClaim (1.2) and link.referenceVersion matches targetRef (1.2)
     const alignedLink: EvidenceLink = {
       id: "TEST-ALIGN-01",
       claimId: "CLAIM-CBC-WBC-REF",
@@ -159,41 +159,79 @@ describe('Phase C1: Evidentiary Verification, Version Drift Guard & Access Statu
     expect(alignedResult.isVersionAligned).toBe(true);
     expect(alignedResult.effectiveStatus).toBe('needs_review');
 
-    // Mismatched versions (e.g. claim bumped to 1.3 but reference remains 1.2)
-    const driftedLink: EvidenceLink = {
-      id: "TEST-DRIFT-01",
-      claimId: "CLAIM-CBC-WBC-REF",
-      claimVersion: "1.3",
-      referenceId: "REF-CLSI-H20-3RD",
-      referenceVersion: "1.2",
-      supportStatus: "supported",
-      reviewDecision: "verified",
-      reviewedBy: "Dr. Expert",
-      reviewedAt: "2026-10-16"
+    // Semantic alignment with distinct numbering schemes (claim v1.2, ref 3rd-ed)
+    const mockClaims = [{
+      claimId: "CLAIM-CUSTOM-01",
+      claimText: "Custom test claim",
+      subjectArea: "suppl-hema",
+      sourceScope: "CLSI",
+      contentVersion: "1.2"
+    }];
+    const mockRefs = [{
+      referenceId: "REF-CUSTOM-01",
+      title: "Custom Reference Standard",
+      uri: "https://example.org",
+      sourceType: "standard" as const,
+      linkAccessStatus: "unknown" as const,
+      verificationStatus: "unverified" as const,
+      contentVersion: "3rd-Ed-2026"
+    }];
+    const customSchemeLink: EvidenceLink = {
+      id: "TEST-CUSTOM-01",
+      claimId: "CLAIM-CUSTOM-01",
+      claimVersion: "1.2", // Matches claim
+      referenceId: "REF-CUSTOM-01",
+      referenceVersion: "3rd-Ed-2026", // Matches reference
+      supportStatus: "supported"
     };
-    const driftedResult = evaluateEvidenceLinkAlignment(driftedLink);
-    // Even if previously marked verified, version drift must force re-review
+    const customResult = evaluateEvidenceLinkAlignment(customSchemeLink, mockClaims, mockRefs);
+    // Must be recognized as aligned because each matches its respective entity!
+    expect(customResult.isVersionAligned).toBe(true);
+
+    // Mismatched versions: claim in entity is bumped to v1.3 but link still records v1.2
+    const bumpedClaimList = [{
+      ...curatedClaims[0],
+      contentVersion: "1.3" // Bumped
+    }, ...curatedClaims.slice(1)];
+
+    const driftedResult = evaluateEvidenceLinkAlignment(alignedLink, bumpedClaimList, curatedReferences);
+    // Version drift must be detected and force re-review
     expect(driftedResult.isVersionAligned).toBe(false);
     expect(driftedResult.effectiveStatus).toBe('needs_review');
-    expect(driftedResult.reason).toContain('Version drift detected');
+    expect(driftedResult.reason).toContain('Claim v1.2 (current: v1.3)');
+
+    // Missing entity handling: unknown claim ID must not be assumed aligned
+    const missingEntityLink: EvidenceLink = {
+      id: "TEST-MISSING-01",
+      claimId: "CLAIM-DOES-NOT-EXIST",
+      claimVersion: "1.2",
+      referenceId: "REF-CLSI-H20-3RD",
+      referenceVersion: "1.2",
+      supportStatus: "supported"
+    };
+    const missingResult = evaluateEvidenceLinkAlignment(missingEntityLink);
+    expect(missingResult.isVersionAligned).toBe(false);
+    expect(missingResult.effectiveStatus).toBe('needs_review');
   });
 
-  it('strictly separates technical LinkAccessStatus from academic VerificationStatus', () => {
-    // References with external URL have reachable linkAccessStatus, but verificationStatus remains unverified
+  it('defaults linkAccessStatus to unknown even when URL is present, preventing reachability overclaiming', () => {
+    // References with external URL must have linkAccessStatus: 'unknown' (no network reachability check performed)
     const clsiRef = curatedReferences.find(r => r.referenceId === 'REF-CLSI-H20-3RD');
     expect(clsiRef).toBeDefined();
-    expect(clsiRef?.linkAccessStatus).toBe('reachable');
+    expect(clsiRef?.uri).toBeDefined();
+    expect(clsiRef?.linkAccessStatus).toBe('unknown'); // Not 'reachable'
     expect(clsiRef?.verificationStatus).toBe('unverified');
 
-    // References without URL have unknown linkAccessStatus and unverified verificationStatus
+    // References without URL also have unknown linkAccessStatus
     const isoRef = curatedReferences.find(r => r.referenceId === 'REF-ISO-15189');
     expect(isoRef).toBeDefined();
     expect(isoRef?.linkAccessStatus).toBe('unknown');
     expect(isoRef?.verificationStatus).toBe('unverified');
   });
 
-  it('maintains append-only immutable audit trail records with mandatory actor and timestamp', () => {
+  it('maintains read-only static baseline audit trail records with mandatory actor and timestamp', () => {
     expect(curatedAuditTrail.length).toBeGreaterThanOrEqual(3);
+    expect(Object.isFrozen(curatedAuditTrail)).toBe(true);
     for (const record of curatedAuditTrail) {
       expect(record.recordId).toBeDefined();
       expect(record.entityType).toBeDefined();
