@@ -57,15 +57,19 @@ describe('Backend Academic Fallback Mode (`getAcademicFallback`)', () => {
     expect(res.references[1].uri).toBe('https://www.cdc.gov/dengue/hcp/clinical-care/');
   });
 
-  it('handles general CBC queries correctly with Automated vs Manual smear confirmation and Westgard rules', () => {
+  it('handles general CBC queries correctly with CLSI H20 3rd Edition, EDTA paper, and Westgard rules', () => {
     const res = getAcademicFallback("หลักการตรวจ CBC และการควบคุมคุณภาพ");
     expect(res.text).toContain('Complete Blood Count (CBC)');
-    expect(res.text).toContain('Automated vs. Manual Blood Smear Confirmation');
+    expect(res.text).toContain('CLSI H20 3rd Edition');
+    expect(res.text).toContain('EDTA-Dependent Pseudothrombocytopenia');
     expect(res.text).toContain('Westgard Multirules');
     expect(res.references).toBeDefined();
-    expect(res.references.length).toBe(2);
-    expect(res.references[0].title).toContain('CLSI H20-A2');
-    expect(res.references[1].uri).toBe('https://pubmed.ncbi.nlm.nih.gov/7201955/');
+    expect(res.references.length).toBe(3);
+    expect(res.references[0].title).toBe('CLSI H20: Reference Leukocyte Differential Count (Proportional) and Evaluation of Instrumental Methods (3rd Edition)');
+    expect(res.references[0].uri).toBe('https://clsi.org/shop/standards/h20/');
+    expect(res.references[1].title).toBe('Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia');
+    expect(res.references[1].uri).toBe('https://pubmed.ncbi.nlm.nih.gov/25425098/');
+    expect(res.references[2].uri).toBe('https://pubmed.ncbi.nlm.nih.gov/7201955/');
   });
 
   it('handles Crossmatching and Blood Grouping queries correctly with AABB 22nd Edition, NBK2261, and SOP disclaimer', () => {

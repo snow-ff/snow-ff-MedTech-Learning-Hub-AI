@@ -152,22 +152,25 @@ export function getAcademicFallback(prompt: string) {
     };
   } else if (p.includes("cbc") || p.includes("เม็ดเลือด")) {
     return {
-      text: prefixNotice + `**หลักการตรวจวิเคราะห์ Complete Blood Count (CBC), การตรวจยืนยันสเมียร์เลือด และการควบคุมคุณภาพด้วย Westgard Rules**
+      text: prefixNotice + `**หลักการตรวจวิเคราะห์ Complete Blood Count (CBC), การตรวจแยกชนิดเม็ดเลือดขาว และการควบคุมคุณภาพด้วย Westgard Rules**
 
 1. **หลักการตรวจวัดด้วยเครื่องวิเคราะห์อัตโนมัติ (Automated Hematology Analyzer):**
    - **Electrical Impedance (Coulter Principle):** อาศัยการเปลี่ยนแปลงความต้านทานไฟฟ้าเมื่อเซลล์ผ่านช่อง Aperture เพื่อตรวจนับจำนวนและประเมินขนาดของเม็ดเลือดแดง (RBC) และเกล็ดเลือด (Platelets)
    - **Optical Light Scatter / Flow-based Detection:** ใช้แสงเลเซอร์วัดการกระเจิงของแสง (Forward Scatter วัดขนาดเซลล์, Side Scatter วัดความซับซ้อนภายใน) ร่วมกับการย้อมไซโตเคมีเพื่อจำแนกชนิดเม็ดเลือดขาว (WBC 5-Part Differential)
 
-2. **ความแตกต่างระหว่างเครื่องตรวจอัตโนมัติกับการตรวจยืนยันด้วยแผ่นสเมียร์เลือด (Automated vs. Manual Blood Smear Confirmation):**
-   *(อ้างอิงมาตรฐานวิธีตรวจและเกณฑ์การทบทวนผล: CLSI H20-A2)*
-   - **เครื่องตรวจอัตโนมัติ:** ให้ความรวดเร็วและมีความเที่ยงตรงสูงในตัวอย่างปกติ แต่มีข้อจำกัดในการจำแนกความผิดปกติทางสัณฐานวิทยา (Cellular Morphology)
-   - **การตรวจยืนยันด้วยแผ่นฟิล์มเลือด (Manual Blood Smear Confirmation):** มีความจำเป็นอย่างยิ่งตามเกณฑ์ทบทวนผล (Criteria for Smear Review) เมื่อเครื่องตรวจแสดงสัญญาณเตือน (Analyzer Flags) หรือพบค่าวิกฤต เช่น:
-     - การยืนยันเม็ดเลือดขาวตัวอ่อน (Blasts, Band forms, Metamyelocytes)
-     - การประเมินรูปร่างเม็ดเลือดแดงผิดปกติ (เช่น Schistocytes ในภาวะ MAHA, Spherocytes, Sickle cells)
-     - การตรวจหาภาวะเกล็ดเลือดเกาะกลุ่มลวง (Platelet clumping / Pseudothrombocytopenia) จากสารกันเลือดแข็ง EDTA ซึ่งต้องเจาะเลือดซ้ำด้วย Sodium Citrate หรือ Heparin เพื่อตรวจยืนยัน
+2. **การตรวจแยกชนิดเม็ดเลือดขาวและข้อจำกัดของเครื่องอัตโนมัติ (Leukocyte Differential & Smear Review):**
+   - **วิธีอ้างอิงสำหรับการนับแยกชนิดเม็ดเลือดขาว:**
+     *(อ้างอิงมาตรฐาน: CLSI H20 3rd Edition — มีขอบเขตเฉพาะวิธีอ้างอิงแมนนวลเพื่อประเมินความถูกต้องของเครื่องตรวจนับ WBC Differential)*
+     - มาตรฐาน CLSI H20 ฉบับที่ 3 (Third Edition, เผยแพร่ 29 เมษายน 2026 แทนที่ H20-A2 เดิม) กำหนดวิธีอ้างอิงในการนับแยกชนิดเม็ดเลือดขาวด้วยสายตา (Reference visual WBC differential) เพื่อใช้ประเมินและทวนสอบความแม่นยำของเครื่องตรวจอัตโนมัติ
+   - **การตรวจยืนยันสัณฐานวิทยาทางโลหิตวิทยา (Hematologic Morphology Review):**
+     *(หมายเหตุ: เกณฑ์การตรวจสเมียร์เลือดเมื่อพบสัญญาณเตือน Analyzer Flags หรือสงสัยเซลล์ตัวอ่อน เช่น Blasts เป็นแนวทางปฏิบัติทั่วไปของห้องปฏิบัติการตามเกณฑ์ทบทวนสไลด์ระดับสถาบัน มิได้ครอบคลุมอยู่ในมาตรฐาน CLSI H20)*
+     - เมื่อเครื่องตรวจส่งสัญญาณเตือน (Flags) หรือตรวจพบความผิดปกติที่เครื่องไม่สามารถจำแนกได้อย่างแม่นยำ นักเทคนิคการแพทย์จำเป็นต้องย้อมและตรวจดูแผ่นฟิล์มเลือดเพื่อตรวจยืนยันความผิดปกติทางสัณฐานวิทยา เช่น การพบเม็ดเลือดขาวตัวอ่อน หรือความผิดปกติของเม็ดเลือดแดง (เช่น Schistocytes ในภาวะ MAHA)
+   - **ภาวะเกล็ดเลือดต่ำลวงจากสารกันเลือดแข็ง EDTA (EDTA-Dependent Pseudothrombocytopenia):**
+     *(อ้างอิงบทความวิจัย: Lippi G, et al. PubMed 25425098)*
+     - เป็นปรากฏการณ์ภายนอกร่างกาย (In vitro artifact) ที่เกิดจากแอนติบอดีจับกับเกล็ดเลือดเมื่อมีสาร EDTA ทำให้เกิดการเกาะกลุ่ม (Platelet clumping) จนเครื่องตรวจนับผิดพลาดเป็นเกล็ดเลือดต่ำ การยืนยันทำได้โดยการตรวจดูสเมียร์เลือดและเจาะเลือดซ้ำด้วยหลอดเก็บเลือดที่มีสารกันเลือดแข็งชนิดอื่น เช่น Sodium Citrate หรือ Heparin
 
 3. **การควบคุมคุณภาพเชิงสถิติ (Statistical Quality Control & Westgard Multirules):**
-   *(อ้างอิงกฎการควบคุมคุณภาพ: Westgard JO, et al. Clin Chem 1981)*
+   *(อ้างอิงเฉพาะกฎการควบคุมคุณภาพ: Westgard JO, et al. Clin Chem 1981)*
    - ทำ Internal QC อย่างน้อย 2-3 ระดับ (Low, Normal, High) บันทึกลง Levey-Jennings Chart ประเมินด้วย Westgard Multirules:
      - **1_2s:** กฎเตือน (Warning Rule) เมื่อมี 1 ค่าหลุดเกิน ±2SD (ให้ตรวจสอบเพิ่มเติม ไม่ปฏิเสธ Run ทันที)
      - **1_3s:** ปฏิเสธการทดสอบ (Rejection / Random Error) เมื่อมี 1 ค่าหลุดเกิน ±3SD
@@ -175,7 +178,8 @@ export function getAcademicFallback(prompt: string) {
      - **R_4s:** ปฏิเสธการทดสอบ (Rejection / Random Error) เมื่อผลต่างระหว่าง 2 ค่าใน Run เดียวกันห่างกันเกิน 4SD
      - **4_1s และ 10_x:** ตรวจจับ Systematic Bias เมื่อมี 4 ค่าต่อเนื่องเกิน ±1SD หรือ 10 ค่าต่อเนื่องอยู่ฝั่งเดียวกันของ Mean`,
       references: [
-        { title: "CLSI H20-A2: Reference Leukocyte (WBC) Differential Count and Evaluation of Instrumental Methods", uri: "https://clsi.org/standards/products/hematology/documents/h20/" },
+        { title: "CLSI H20: Reference Leukocyte Differential Count (Proportional) and Evaluation of Instrumental Methods (3rd Edition)", uri: "https://clsi.org/shop/standards/h20/" },
+        { title: "Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia", uri: "https://pubmed.ncbi.nlm.nih.gov/25425098/" },
         { title: "Westgard JO, et al. A Multi-Rule Shewhart Chart for Quality Control in Clinical Chemistry (Clin Chem 1981 / PubMed 7201955)", uri: "https://pubmed.ncbi.nlm.nih.gov/7201955/" }
       ]
     };
