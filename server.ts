@@ -26,7 +26,7 @@ const ai = new GoogleGenAI({
 });
 
 // Academic fallback generator for robust offline / quota-exceeded handling
-function getAcademicFallback(prompt: string) {
+export function getAcademicFallback(prompt: string) {
   const p = prompt.toLowerCase();
   const isContextualFollowUp = !p.includes("flow cytometry") && !p.includes("pcr") && !p.includes("cbc") && !p.includes("เดงกี่") && !p.includes("dengue") && !p.includes("crossmatching") && !p.includes("blood") && !p.includes("หมู่เลือด") && !p.includes("เม็ดเลือดขาว");
   
