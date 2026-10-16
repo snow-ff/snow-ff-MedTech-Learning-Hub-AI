@@ -396,7 +396,12 @@ app.post("/api/gemini/generate", async (req, res) => {
     source: "academic_fallback",
     references: fallback.references.map(r => ({
       ...r,
-      type: r.uri ? "verified_academic" : "simulated_reference"
+      type: r.uri ? "external_academic_link" : "simulated_reference",
+      verificationStatus: "unverified",
+      reviewer: null,
+      reviewDate: null,
+      evidenceLocator: null,
+      contentVersion: "1.2"
     })),
   });
 });

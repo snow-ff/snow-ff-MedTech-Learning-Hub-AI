@@ -18,16 +18,41 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  ExternalLink,
+  ChevronRight,
+  ShieldAlert,
+  GraduationCap,
+  Filter
 } from 'lucide-react';
+import { 
+  dtmCurriculumVersion, 
+  dtmCrosswalk45, 
+  medtechSubjects, 
+  curatedLessons, 
+  curatedGlossary 
+} from './data/curriculumData';
+import { Lesson, GlossaryTerm } from './models/coreModel';
+
+export interface ReferenceItem {
+  title?: string;
+  uri: string;
+  type?: string;
+  verificationStatus?: 'verified' | 'unverified' | 'needs_review';
+  reviewer?: string | null;
+  reviewDate?: string | null;
+  evidenceLocator?: string | null;
+  contentVersion?: string;
+}
 
 export interface Message {
   id: string;
   role: 'user' | 'model';
   text: string;
-  references?: Array<{ title?: string; uri: string; type?: string }>;
+  references?: ReferenceItem[];
   source?: string;
   timestamp: number;
+  status?: 'sent' | 'failed';
 }
 
 export function getMockResponse(queryToSubmit: string, currentMessages: Message[]) {
@@ -210,6 +235,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'knowledge' | 'terms' | 'about'>('home');
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [isMockMode, setIsMockMode] = useState(false);
+  const [knowledgeSearch, setKnowledgeSearch] = useState('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
+  const [glossarySearch, setGlossarySearch] = useState('');
+  const [selectedGlossarySubject, setSelectedGlossarySubject] = useState<string>('all');
+  const [showCurriculumModal, setShowCurriculumModal] = useState(false);
 
   const activeRequestId = useRef<number>(Date.now());
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -248,7 +278,8 @@ export default function App() {
       id: userMsgId,
       role: 'user',
       text: queryToSubmit.trim(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      status: 'sent'
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -281,11 +312,27 @@ export default function App() {
     }
 
     try {
-      // Turn-aware history trimming: max 8 messages, must start with 'user'
-      let trimmed = updatedMessages.slice(-8).map(m => ({
-        role: (m.role === 'model' ? 'model' : 'user') as 'user' | 'model',
-        text: m.text
-      }));
+      // Build strictly sanitized alternating history for payload:
+      // Exclude past messages that failed. Ensure strict user -> model alternation.
+      const historyPairs: Array<{ role: 'user' | 'model'; text: string }> = [];
+      for (const m of messages) {
+        if (m.status === 'failed') continue;
+        if (historyPairs.length === 0) {
+          if (m.role === 'user') historyPairs.push({ role: 'user', text: m.text });
+        } else {
+          const lastRole = historyPairs[historyPairs.length - 1].role;
+          if (m.role !== lastRole) {
+            historyPairs.push({ role: m.role, text: m.text });
+          }
+        }
+      }
+      // If history ends with 'user', remove it so we can cleanly append the new query
+      while (historyPairs.length > 0 && historyPairs[historyPairs.length - 1].role === 'user') {
+        historyPairs.pop();
+      }
+      historyPairs.push({ role: 'user', text: queryToSubmit.trim() });
+
+      let trimmed = historyPairs.slice(-8);
       while (trimmed.length > 0 && trimmed[0].role !== 'user') {
         trimmed.shift();
       }
@@ -342,6 +389,16 @@ export default function App() {
     } catch (err: any) {
       if (activeRequestId.current !== currentReqId) return;
       setError(err.message || "ไม่สามารถติดต่อกับ Gemini API ได้ในขณะนี้");
+      // Mark the failed message so it remains visible for the user but does not poison future payload history
+      setMessages(prev => {
+        const idx = prev.findIndex(m => m.id === userMsgId);
+        if (idx !== -1) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], status: 'failed' };
+          return updated;
+        }
+        return prev;
+      });
       console.error(`[Perf Frontend] Error after ${Date.now() - frontendStartTime}ms:`, err.message);
     } finally {
       if (activeRequestId.current === currentReqId) {
@@ -492,6 +549,14 @@ export default function App() {
                       {msg.text}
                     </div>
 
+                    {/* Failed Message Indicator */}
+                    {msg.status === 'failed' && (
+                      <div className="mt-2 bg-red-950/80 border border-red-800/80 rounded-xl p-3 text-xs text-red-200 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                        <span>การส่งคำถามนี้ล้มเหลว (คำถามนี้จะไม่ถูกส่งซ้ำในบริบทของบทสนทนาถัดไป เพื่อป้องกันประวัติแชตผิดพลาด)</span>
+                      </div>
+                    )}
+
                     {/* References for Model Messages */}
                     {msg.role === 'model' && msg.references && msg.references.length > 0 && (
                       <div className="bg-[#0F172A] border border-[#334155] rounded-xl p-4 text-xs sm:text-sm space-y-2 mt-2">
@@ -504,7 +569,7 @@ export default function App() {
                             : 'แหล่งอ้างอิงจากการค้นหา (Google Search Grounding)'}
                         </h4>
                         <ul className="space-y-1.5">
-                          {msg.references.map((ref: { title?: string; uri: string; type?: string }, rIdx: number) => (
+                          {msg.references.map((ref: ReferenceItem, rIdx: number) => (
                             <li key={rIdx} className="flex items-start gap-2">
                               <span className="text-[#7DD3FC] text-xs font-mono mt-0.5">[{rIdx + 1}]</span>
                               <div className="flex-1">
@@ -534,11 +599,13 @@ export default function App() {
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                                   <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                                     {ref.uri
-                                      ? (msg.source === 'academic_fallback'
-                                          ? 'แหล่งอ้างอิงวิชาการภายนอก (External Academic Link)'
+                                      ? (ref.verificationStatus === 'verified' && ref.reviewer
+                                          ? `แหล่งอ้างอิงผ่านการทวนสอบ (Verified: ${ref.reviewer})`
+                                          : msg.source === 'academic_fallback'
+                                          ? 'แหล่งอ้างอิงภายนอก (ยังไม่ผ่านการทวนสอบหลักฐาน - Unverified External Link)'
                                           : msg.source === 'gemini_grounding'
-                                          ? 'เว็บอ้างอิงจากการค้นหา (Web Search Grounding)'
-                                          : 'ลิงก์อ้างอิงภายนอก (External Link)')
+                                          ? 'เว็บอ้างอิงจากการค้นหา (Web Search - Unverified)'
+                                          : 'ลิงก์ภายนอก (Unverified External Link)')
                                       : (msg.source === 'mock_mode_simulator'
                                           ? 'ข้อมูลตัวอย่าง (Mock Data)'
                                           : 'แหล่งข้อมูลจำลอง (Mock Reference - ไม่มีลิงก์เว็บภายนอก)')}
@@ -701,34 +768,367 @@ export default function App() {
             )}
           </>
         ) : activeTab === 'knowledge' ? (
-          <div className="bg-[#1E293B] rounded-2xl border border-[#334155] p-8 space-y-6">
-            <h2 className="text-2xl font-bold text-[#F1F5F9] flex items-center gap-3">
-              <BookOpen className="w-6 h-6 text-[#7DD3FC]" />
-              คลังความรู้เทคนิคการแพทย์ (Knowledge Repository)
-            </h2>
-            <p className="text-[#CBD5E1] text-sm leading-relaxed">
-              แหล่งรวมเนื้อหาวิชาการและหัวข้อสำคัญสำหรับนักศึกษาเทคนิคการแพทย์ ครอบคลุมโลหิตวิทยา เคมีคลินิก จุลชีววิทยา และภูมิคุ้มกันวิทยา
-            </p>
+          <div className="space-y-6">
+            {/* Knowledge Repository Header */}
+            <div className="bg-gradient-to-r from-[#1E293B] to-[#0F172A] rounded-2xl border border-[#334155] p-6 sm:p-8 shadow-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-950 border border-sky-800 text-[#7DD3FC] text-xs font-medium mb-3">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    <span>{dtmCurriculumVersion.university} — {dtmCurriculumVersion.programNameTh}</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-[#F1F5F9] flex items-center gap-3">
+                    <BookOpen className="w-6 h-6 text-[#7DD3FC]" />
+                    <span>คลังความรู้และบทเรียนวิชาการ (Knowledge Repository)</span>
+                  </h2>
+                  <p className="text-[#CBD5E1] text-xs sm:text-sm mt-2 max-w-3xl leading-relaxed">
+                    รวมบทเรียนระดับพื้นฐานถึงขั้นสูง เชื่อมโยงหลักสูตรการจัดการเทคโนโลยีการตรวจวินิจฉัย (DTM) และความรู้เสริมทางเทคนิคการแพทย์ พร้อมปุ่มส่งหัวข้อเข้าสนทนากับ AI ได้ทันที
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCurriculumModal(true)}
+                  className="px-4 py-2.5 bg-sky-950 hover:bg-sky-900 border border-sky-800 rounded-xl text-xs font-semibold text-[#7DD3FC] flex items-center gap-2 shrink-0 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>ดู DTM Crosswalk (45 รายการ)</span>
+                </button>
+              </div>
+
+              {/* Curriculum Status Badges */}
+              <div className="mt-6 pt-6 border-t border-[#334155] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="bg-[#0F172A] p-3 rounded-xl border border-[#334155] flex items-center justify-between">
+                  <span className="text-[#CBD5E1]">สถานะ Crosswalk Baseline:</span>
+                  <span className="text-emerald-400 font-semibold">45 รายการ (2567-2569)</span>
+                </div>
+                <div className="bg-[#0F172A] p-3 rounded-xl border border-[#334155] flex items-center justify-between">
+                  <span className="text-[#CBD5E1]">วิชาเลือกโท (Minor Track):</span>
+                  <span className="text-amber-400 font-semibold">ต้องเลือก 1 กลุ่ม (15 หน่วยกิต)</span>
+                </div>
+                <div className="bg-[#0F172A] p-3 rounded-xl border border-[#334155] flex items-center justify-between">
+                  <span className="text-[#CBD5E1]">ปี 4 Catalogue Candidates:</span>
+                  <span className="text-sky-400 font-semibold">5 วิชา (รอแผนรายภาคเรียน)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Subject Filter Bar */}
+            <div className="bg-[#1E293B] rounded-2xl border border-[#334155] p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={knowledgeSearch}
+                    onChange={(e) => setKnowledgeSearch(e.target.value)}
+                    placeholder="ค้นหาบทเรียน หลักการ หรือคำศัพท์ภาษาไทย/อังกฤษ..."
+                    className="w-full bg-[#0F172A] border border-[#334155] rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-[#F1F5F9] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#7DD3FC]"
+                  />
+                </div>
+                {knowledgeSearch && (
+                  <button
+                    onClick={() => setKnowledgeSearch('')}
+                    className="px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
+                  >
+                    ล้างการค้นหา
+                  </button>
+                )}
+              </div>
+
+              {/* Subject Tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  onClick={() => setSelectedSubjectId('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                    selectedSubjectId === 'all'
+                      ? 'bg-sky-600 text-white font-semibold'
+                      : 'bg-[#0F172A] text-[#CBD5E1] hover:bg-slate-800 border border-[#334155]'
+                  }`}
+                >
+                  ทั้งหมด ({curatedLessons.length})
+                </button>
+                {medtechSubjects.map((sub) => {
+                  const count = curatedLessons.filter(l => {
+                    if (sub.id === 'suppl-hema') return l.topicId.includes('HEMA');
+                    if (sub.id === 'dtm-qc-mgmt') return l.topicId.includes('QC') || l.topicId.includes('LIS');
+                    if (sub.id === 'dtm-mol-dx') return l.topicId.includes('MOL');
+                    return false;
+                  }).length;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSelectedSubjectId(sub.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        selectedSubjectId === sub.id
+                          ? 'bg-sky-600 text-white font-semibold'
+                          : 'bg-[#0F172A] text-[#CBD5E1] hover:bg-slate-800 border border-[#334155]'
+                      }`}
+                    >
+                      <span>{sub.nameTh.split('(')[0].trim()}</span>
+                      {sub.isSupplementary && (
+                        <span className="text-[10px] bg-slate-800 text-amber-300 px-1.5 py-0.2 rounded border border-amber-800/40">
+                          เสริม
+                        </span>
+                      )}
+                      <span className="text-slate-400 font-mono text-[10px]">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Lessons Grid */}
+            <div className="grid grid-cols-1 gap-6">
+              {curatedLessons
+                .filter(lesson => {
+                  const matchesSearch = !knowledgeSearch.trim() || 
+                    lesson.titleTh.toLowerCase().includes(knowledgeSearch.toLowerCase()) ||
+                    lesson.titleEn.toLowerCase().includes(knowledgeSearch.toLowerCase()) ||
+                    lesson.summaryTh.toLowerCase().includes(knowledgeSearch.toLowerCase()) ||
+                    lesson.keyEnglishTerms.some(t => t.toLowerCase().includes(knowledgeSearch.toLowerCase()));
+
+                  const matchesSubject = selectedSubjectId === 'all' || 
+                    (selectedSubjectId === 'suppl-hema' && lesson.topicId.includes('HEMA')) ||
+                    (selectedSubjectId === 'dtm-qc-mgmt' && (lesson.topicId.includes('QC') || lesson.topicId.includes('LIS'))) ||
+                    (selectedSubjectId === 'dtm-mol-dx' && lesson.topicId.includes('MOL'));
+
+                  return matchesSearch && matchesSubject;
+                })
+                .map(lesson => (
+                  <div key={lesson.id} className="bg-[#1E293B] rounded-2xl border border-[#334155] p-6 space-y-4 hover:border-sky-700 transition-all shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                          lesson.level === 'advanced'
+                            ? 'bg-red-950/80 text-red-300 border border-red-800/60'
+                            : lesson.level === 'intermediate'
+                            ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
+                            : 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                        }`}>
+                          {lesson.level} Level
+                        </span>
+                        {lesson.topicId.includes('HEMA') && (
+                          <span className="text-[10px] bg-slate-800 text-amber-300 px-2 py-0.5 rounded border border-amber-800/60 font-medium">
+                            ความรู้เสริมทางโลหิตวิทยา
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-400 font-mono">{lesson.id}</span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold text-[#F1F5F9] leading-snug">{lesson.titleTh}</h3>
+                      <h4 className="text-xs text-[#7DD3FC] font-medium mt-0.5">{lesson.titleEn}</h4>
+                      <p className="text-xs sm:text-sm text-[#CBD5E1] mt-2 leading-relaxed">{lesson.summaryTh}</p>
+                    </div>
+
+                    {/* Lesson Blocks */}
+                    <div className="space-y-3 pt-2">
+                      {lesson.blocks.map(block => (
+                        <div key={block.id} className="bg-[#0F172A] rounded-xl p-4 border border-[#334155] space-y-1">
+                          {block.titleTh && (
+                            <h5 className="text-xs font-semibold text-[#7DD3FC] flex items-center gap-1.5">
+                              {block.blockType === 'warning' ? <AlertCircle className="w-3.5 h-3.5 text-amber-400" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                              <span>{block.titleTh}</span>
+                            </h5>
+                          )}
+                          <p className="text-xs text-[#CBD5E1] leading-relaxed whitespace-pre-line">{block.contentTh}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Key English Terms */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                      <span className="text-[11px] text-slate-400 font-medium">ศัพท์สำคัญ:</span>
+                      {lesson.keyEnglishTerms.map((term, tIdx) => (
+                        <span key={tIdx} className="text-[11px] bg-slate-800 text-[#CBD5E1] px-2 py-0.5 rounded border border-slate-700">
+                          {term}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Action Bar */}
+                    <div className="pt-3 border-t border-[#334155] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <span className="text-[11px] text-slate-400">
+                        พร้อมส่งคำถามเจาะลึกเข้าสู่ Gemini AI / Academic Fallback
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('home');
+                          handleSendQuestion(undefined, lesson.suggestedPrompt);
+                        }}
+                        className="inline-flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow cursor-pointer shrink-0"
+                      >
+                        <span>ถาม AI เกี่ยวกับบทเรียนนี้</span>
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         ) : activeTab === 'terms' ? (
-          <div className="bg-[#1E293B] rounded-2xl border border-[#334155] p-8 space-y-6">
-            <h2 className="text-2xl font-bold text-[#F1F5F9] flex items-center gap-3">
-              <BookMarked className="w-6 h-6 text-[#7DD3FC]" />
-              คลังศัพท์เทคนิค (Medical Technology Glossary)
-            </h2>
-            <p className="text-[#CBD5E1] text-sm leading-relaxed">
-              รวบรวมคำศัพท์เทคนิคการแพทย์ พร้อมคำแปลและคำอ่านออกเสียงที่จำเป็น
-            </p>
+          <div className="space-y-6">
+            {/* Glossary Header */}
+            <div className="bg-gradient-to-r from-[#1E293B] to-[#0F172A] rounded-2xl border border-[#334155] p-6 sm:p-8 shadow-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-950 border border-sky-800 text-[#7DD3FC] text-xs font-medium mb-3">
+                <BookMarked className="w-3.5 h-3.5" />
+                <span>พจนานุกรมและคลังศัพท์เทคนิคการแพทย์สองภาษา</span>
+              </div>
+              <h2 className="text-2xl font-bold text-[#F1F5F9] flex items-center gap-3">
+                <BookMarked className="w-6 h-6 text-[#7DD3FC]" />
+                <span>คลังศัพท์เทคนิค (Medical Technology Glossary)</span>
+              </h2>
+              <p className="text-[#CBD5E1] text-xs sm:text-sm mt-2 max-w-3xl leading-relaxed">
+                รวบรวมคำศัพท์เทคนิคภาษาอังกฤษ คำแปลภาษาไทย คำอ่านออกเสียง และบริบทการใช้งานทางห้องปฏิบัติการ พร้อมปุ่มส่งถามในระบบแชตได้ทันที
+              </p>
+            </div>
+
+            {/* Search and Filter */}
+            <div className="bg-[#1E293B] rounded-2xl border border-[#334155] p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={glossarySearch}
+                    onChange={(e) => setGlossarySearch(e.target.value)}
+                    placeholder="ค้นหาศัพท์ภาษาอังกฤษ คำแปล หรือคำอ่านออกเสียง..."
+                    className="w-full bg-[#0F172A] border border-[#334155] rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-[#F1F5F9] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#7DD3FC]"
+                  />
+                </div>
+                {glossarySearch && (
+                  <button
+                    onClick={() => setGlossarySearch('')}
+                    className="px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
+                  >
+                    ล้างการค้นหา
+                  </button>
+                )}
+              </div>
+
+              {/* Subject filter */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  onClick={() => setSelectedGlossarySubject('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                    selectedGlossarySubject === 'all'
+                      ? 'bg-sky-600 text-white font-semibold'
+                      : 'bg-[#0F172A] text-[#CBD5E1] hover:bg-slate-800 border border-[#334155]'
+                  }`}
+                >
+                  ทั้งหมด ({curatedGlossary.length})
+                </button>
+                {medtechSubjects.map((sub) => {
+                  const count = curatedGlossary.filter(t => t.subjectId === sub.id).length;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSelectedGlossarySubject(sub.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        selectedGlossarySubject === sub.id
+                          ? 'bg-sky-600 text-white font-semibold'
+                          : 'bg-[#0F172A] text-[#CBD5E1] hover:bg-slate-800 border border-[#334155]'
+                      }`}
+                    >
+                      <span>{sub.nameTh.split('(')[0].trim()}</span>
+                      <span className="text-slate-400 font-mono text-[10px]">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Glossary Terms List */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {curatedGlossary
+                .filter(term => {
+                  const matchesSearch = !glossarySearch.trim() ||
+                    term.termEn.toLowerCase().includes(glossarySearch.toLowerCase()) ||
+                    term.termTh.toLowerCase().includes(glossarySearch.toLowerCase()) ||
+                    (term.phoneticTh && term.phoneticTh.toLowerCase().includes(glossarySearch.toLowerCase())) ||
+                    term.definitionTh.toLowerCase().includes(glossarySearch.toLowerCase());
+
+                  const matchesSubject = selectedGlossarySubject === 'all' || term.subjectId === selectedGlossarySubject;
+                  return matchesSearch && matchesSubject;
+                })
+                .map(term => (
+                  <div key={term.id} className="bg-[#1E293B] rounded-2xl border border-[#334155] p-5 space-y-3 flex flex-col justify-between hover:border-sky-700 transition-all shadow-md">
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-base font-bold text-[#F1F5F9]">{term.termEn}</h4>
+                          <div className="text-xs text-[#7DD3FC] font-medium mt-0.5">{term.termTh}</div>
+                        </div>
+                        {term.phoneticTh && (
+                          <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded font-mono">
+                            🗣 {term.phoneticTh}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-[#CBD5E1] leading-relaxed mt-3">
+                        {term.definitionTh}
+                      </p>
+
+                      <div className="mt-3 bg-[#0F172A] p-3 rounded-xl border border-[#334155] text-xs text-slate-300">
+                        <span className="text-[#7DD3FC] font-semibold block mb-0.5">บริบททางห้องปฏิบัติการ:</span>
+                        {term.clinicalContext}
+                      </div>
+
+                      {term.originalSourceUrl && (
+                        <div className="mt-2 flex items-center gap-1.5 text-xs">
+                          <span className="text-slate-400 text-[10px]">แหล่งข้อมูลอ้างอิง:</span>
+                          <a
+                            href={term.originalSourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#7DD3FC] hover:underline flex items-center gap-1 text-[11px] truncate max-w-[200px]"
+                          >
+                            <span>เปิดอ่านลิงก์ต้นฉบับ</span>
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-[#334155] flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('home');
+                          handleSendQuestion(undefined, term.suggestedPrompt);
+                        }}
+                        className="inline-flex items-center gap-1.5 bg-sky-950 hover:bg-sky-900 border border-sky-800 text-[#7DD3FC] text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <span>สอบถามคำศัพท์นี้ในแชต</span>
+                        <Send className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         ) : (
           <div className="bg-[#1E293B] rounded-2xl border border-[#334155] p-8 space-y-6">
             <h2 className="text-2xl font-bold text-[#F1F5F9] flex items-center gap-3">
               <Info className="w-6 h-6 text-[#7DD3FC]" />
-              เกี่ยวกับ MedTech Learning Hub AI
+              <span>เกี่ยวกับ MedTech Learning Hub AI v1.2</span>
             </h2>
-            <p className="text-[#CBD5E1] text-sm leading-relaxed">
-              แพลตฟอร์มการเรียนรู้อัจฉริยะสำหรับนักศึกษาเทคนิคการแพทย์ไทย ขับเคลื่อนด้วยโมเดล Gemini และระบบสำรองข้อมูลทางวิชาการ
-            </p>
+            <div className="space-y-4 text-xs sm:text-sm text-[#CBD5E1] leading-relaxed max-w-3xl">
+              <p>
+                แพลตฟอร์มการเรียนรู้อัจฉริยะสำหรับนักศึกษาเทคนิคการแพทย์และการจัดการเทคโนโลยีการตรวจวินิจฉัย (DTM) ขับเคลื่อนด้วยโมเดล Gemini 3.8 Flash พร้อมระบบสำรองข้อมูลทางวิชาการ (Academic Fallback Mode)
+              </p>
+              <div className="bg-[#0F172A] p-4 rounded-xl border border-[#334155] space-y-2">
+                <h4 className="font-bold text-[#F1F5F9]">หลักการความน่าเชื่อถือและการทวนสอบ (Evidentiary Verification Policy):</h4>
+                <ul className="list-disc pl-5 space-y-1 text-slate-300">
+                  <li>การมี URL ทางการ (เช่น CLSI, PubMed) ไม่ได้หมายความว่าเอกสารถูกรับรองเป็น Verified โดยอัตโนมัติ</li>
+                  <li>เอกสารจะได้รับการระบุเป็น <span className="text-emerald-400 font-semibold">Verified</span> ก็ต่อเมื่อมีผู้ตรวจที่ได้รับสิทธิ์บันทึก Reviewer, วันที่ตรวจ, และหลักฐานระบุตำแหน่ง (Evidence Locator) ชัดเจน</li>
+                  <li>คำตอบจาก Gemini Grounding และ Academic Fallback จะเริ่มต้นด้วยสถานะ <span className="text-amber-400 font-semibold">Unverified</span> เพื่อความโปร่งใสทางวิชาการ</li>
+                </ul>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -787,6 +1187,103 @@ export default function App() {
             >
               ปิดหน้าต่าง
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Curriculum Crosswalk Modal (45 entries) */}
+      {showCurriculumModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#1E293B] border border-[#334155] rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-[#334155] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[#F1F5F9] flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-[#7DD3FC]" />
+                  <span>DTM Curriculum Alignment Crosswalk Baseline (45 รายการ)</span>
+                </h3>
+                <p className="text-xs text-[#CBD5E1] mt-0.5">
+                  {dtmCurriculumVersion.university} — {dtmCurriculumVersion.programNameTh} (ปีการศึกษา 2567–2569)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCurriculumModal(false)}
+                className="text-slate-400 hover:text-white text-base p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Caveats Notice */}
+            <div className="p-4 bg-[#0F172A] border-b border-[#334155] text-xs text-[#CBD5E1] space-y-1">
+              <div className="flex items-center gap-2 text-amber-300 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>ข้อกำหนดสำคัญตามหลักสูตรทางการ:</span>
+              </div>
+              <p className="pl-6 text-[11px] text-slate-300">
+                1. วิชาเลือกโท (Minor Track) กำหนดให้เลือกเพียงกลุ่มเดียวครบ 15 หน่วยกิต (รายวิชาที่อาจขัดแย้งถูกระบุเป็น needs_review)
+              </p>
+              <p className="pl-6 text-[11px] text-slate-300">
+                2. รายวิชาชั้นปีที่ 4 (DTM67-333, 482, 484, 491, 492) เป็น Catalogue Candidates ที่ต้องรอเทียบแผนการศึกษารายภาคเรียนทางการหรือ Student Record จึงจะจัดภาคเรียนได้
+              </p>
+            </div>
+
+            {/* Table of 45 entries */}
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="border border-[#334155] rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0F172A] text-[#7DD3FC] border-b border-[#334155]">
+                    <tr>
+                      <th className="p-3">ลำดับ</th>
+                      <th className="p-3">รหัสวิชา</th>
+                      <th className="p-3">ชื่อรายวิชา (ภาษาไทย)</th>
+                      <th className="p-3">ภาคเรียนที่เสนอ</th>
+                      <th className="p-3">สถานะ Alignment</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#334155]">
+                    {dtmCrosswalk45.map((item, idx) => (
+                      <tr key={item.alignmentId} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
+                        <td className="p-3 font-mono font-semibold text-[#F1F5F9]">{item.sourceCode}</td>
+                        <td className="p-3 text-[#CBD5E1]">
+                          <div>{item.matchedTitleTh}</div>
+                          {item.reviewReason && (
+                            <div className="text-[10px] text-amber-400/90 italic mt-0.5">⚠️ {item.reviewReason}</div>
+                          )}
+                        </td>
+                        <td className="p-3 font-mono text-slate-300">
+                          {item.semesterPlacementStatus === 'confirmed' ? (
+                            <span className="text-emerald-400">{item.suggestedSemester}</span>
+                          ) : (
+                            <span className="text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded text-[10px]">
+                              Unconfirmed
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            item.alignmentStatus === 'aligned'
+                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60'
+                              : 'bg-amber-950/80 text-amber-300 border border-amber-800/60'
+                          }`}>
+                            {item.alignmentStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#334155] flex justify-end bg-[#0F172A]">
+              <button
+                onClick={() => setShowCurriculumModal(false)}
+                className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
           </div>
         </div>
       )}
