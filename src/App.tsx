@@ -600,13 +600,11 @@ export default function App() {
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                                   <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                                     {ref.uri
-                                      ? (ref.verificationStatus === 'verified' && ref.reviewer && ref.reviewDate && ref.evidenceLocator && msg.source !== 'mock_mode_simulator'
-                                          ? `แหล่งอ้างอิงผ่านการทวนสอบ (Verified: ${ref.reviewer})`
-                                          : msg.source === 'academic_fallback'
+                                      ? (msg.source === 'academic_fallback'
                                           ? 'แหล่งอ้างอิงภายนอก (ยังไม่ผ่านการทวนสอบหลักฐาน - Unverified External Link)'
                                           : msg.source === 'gemini_grounding'
                                           ? 'เว็บอ้างอิงจากการค้นหา (Web Search - Unverified)'
-                                          : 'ลิงก์ภายนอก (Unverified External Link)')
+                                          : 'แหล่งอ้างอิงภายนอก (ยังไม่ผ่านการทวนสอบหลักฐาน - Unverified External Link)')
                                       : (msg.source === 'mock_mode_simulator'
                                           ? 'ข้อมูลตัวอย่าง (Mock Data)'
                                           : 'แหล่งข้อมูลจำลอง (Mock Reference - ไม่มีลิงก์เว็บภายนอก)')}
@@ -614,7 +612,7 @@ export default function App() {
                                   {ref.uri && (
                                     <span className="inline-block text-[9px] px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60 font-mono">
                                       {ref.linkAccessStatus === 'reachable'
-                                        ? 'HTTP Link: Verified Reachable'
+                                        ? 'HTTP Link: Reachable'
                                         : 'สถานะลิงก์: ยังไม่ได้ตรวจ HTTP (Unknown)'}
                                     </span>
                                   )}

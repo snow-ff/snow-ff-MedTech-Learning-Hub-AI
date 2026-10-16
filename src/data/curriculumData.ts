@@ -493,9 +493,10 @@ export const curatedEvidenceLinks: EvidenceLink[] = [
   }
 ];
 
-// Phase C1.1: Static Baseline Audit Trail Records (Read-only sample log in memory, not a production ledger)
+// Phase C1.1 Corrective: Static Baseline Audit Trail Records (Read-only sample log in memory, not a production ledger)
+// Note: In-memory Object.freeze protects baseline objects from runtime mutation within process, but does not provide database persistence or append-only tamper-proofing across sessions.
 export const curatedAuditTrail: readonly AuditTrailRecord[] = Object.freeze([
-  {
+  Object.freeze({
     recordId: "AUDIT-001",
     entityType: "reference",
     entityId: "REF-CLSI-H20-3RD",
@@ -504,8 +505,8 @@ export const curatedAuditTrail: readonly AuditTrailRecord[] = Object.freeze([
     actorId: "system_initializer",
     timestamp: "2026-10-16T11:00:00.000Z",
     reason: "Initial baseline ingestion with CLSI H20 3rd Edition (2026)"
-  },
-  {
+  }),
+  Object.freeze({
     recordId: "AUDIT-002",
     entityType: "reference",
     entityId: "REF-PUBMED-25425098",
@@ -514,8 +515,8 @@ export const curatedAuditTrail: readonly AuditTrailRecord[] = Object.freeze([
     actorId: "system_initializer",
     timestamp: "2026-10-16T11:00:00.000Z",
     reason: "Added focused research reference for EDTA pseudothrombocytopenia"
-  },
-  {
+  }),
+  Object.freeze({
     recordId: "AUDIT-003",
     entityType: "evidence_link",
     entityId: "EV-LINK-01",
@@ -524,7 +525,7 @@ export const curatedAuditTrail: readonly AuditTrailRecord[] = Object.freeze([
     actorId: "system_initializer",
     timestamp: "2026-10-16T11:00:00.000Z",
     reason: "Binds CLAIM-CBC-WBC-REF v1.2 with REF-CLSI-H20-3RD v1.2"
-  }
+  })
 ]);
 
 // Phase C1.1: Semantic Evidence Version Alignment and Degradation Evaluator
