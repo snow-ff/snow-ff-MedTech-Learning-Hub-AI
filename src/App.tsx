@@ -498,10 +498,10 @@ export default function App() {
                         <h4 className="font-bold text-[#F1F5F9] flex items-center gap-2 text-xs uppercase tracking-wider text-[#7DD3FC]">
                           <BookOpen className="w-3.5 h-3.5" />
                           {msg.source === 'academic_fallback'
-                            ? 'ตำราและแหล่งอ้างอิงทางวิชาการ (Academic Textbooks)'
+                            ? 'เอกสารและแหล่งอ้างอิงทางวิชาการ (Academic References)'
                             : msg.source === 'mock_mode_simulator'
                             ? 'แหล่งอ้างอิงตัวอย่าง (Mock Reference Examples)'
-                            : 'แหล่งอ้างอิงที่ตรวจสอบได้ (Google Search Grounding)'}
+                            : 'แหล่งอ้างอิงจากการค้นหา (Google Search Grounding)'}
                         </h4>
                         <ul className="space-y-1.5">
                           {msg.references.map((ref: { title?: string; uri: string; type?: string }, rIdx: number) => (
@@ -527,13 +527,21 @@ export default function App() {
                                       </span>
                                     </div>
                                     <span className="text-[10px] text-slate-400 italic">
-                                      * แหล่งอ้างอิงตำราและมาตรฐานทางวิชาการจำลองสำหรับการศึกษา (ไม่ใช่อุปกรณ์เชื่อมโยงเว็บภายนอก)
+                                      * แหล่งอ้างอิงจำลองเพื่อการศึกษา (ไม่มีลิงก์เว็บภายนอก)
                                     </span>
                                   </div>
                                 )}
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                                   <span className="inline-block text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                    {ref.type === 'academic_textbook' ? 'ตำรา/มาตรฐานวิชาการ (จำลองเพื่อการศึกษา)' : msg.source === 'mock_mode_simulator' ? 'ข้อมูลตัวอย่าง (Mock Data)' : 'เว็บอ้างอิง (Web Search)'}
+                                    {ref.uri
+                                      ? (msg.source === 'academic_fallback'
+                                          ? 'แหล่งอ้างอิงวิชาการภายนอก (External Academic Link)'
+                                          : msg.source === 'gemini_grounding'
+                                          ? 'เว็บอ้างอิงจากการค้นหา (Web Search Grounding)'
+                                          : 'ลิงก์อ้างอิงภายนอก (External Link)')
+                                      : (msg.source === 'mock_mode_simulator'
+                                          ? 'ข้อมูลตัวอย่าง (Mock Data)'
+                                          : 'แหล่งข้อมูลจำลอง (Mock Reference - ไม่มีลิงก์เว็บภายนอก)')}
                                   </span>
                                 </div>
                               </div>
