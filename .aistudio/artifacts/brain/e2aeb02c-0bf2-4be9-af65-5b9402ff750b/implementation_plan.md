@@ -1,58 +1,44 @@
-# แผนแก้ไข Default Academic Fallback ใน server.ts
+# รายงานผลการดำเนินงาน Track B1.1: Local-First Learning Document MVP
 
-## 1. วัตถุประสงค์ (Objective)
-แก้ไขข้อบกพร่องของฟังก์ชัน `getAcademicFallback(prompt: string)` ใน `server.ts` ซึ่งปัจจุบันเมื่อได้รับคำถามที่ไม่ตรงกับหัวข้อที่รองรับ จะแสดงเนื้อหา QMS01, EP23 และ EP28-A3c เป็นค่าเริ่มต้น (Default Fallback) เปลี่ยนเป็นคืนข้อความแจ้งเตือนที่ชัดเจนว่าไม่มีข้อมูลสำรองเฉพาะหัวข้อนั้น พร้อมคำแนะนำให้ระบุหัวข้อให้ชัดเจน โดยยังคงรักษาหัวข้อเฉพาะเดิมทั้งหมด (Serum/Plasma, Flow Cytometry, PCR, Gram Stain, Dengue, CBC, Crossmatching) และเพิ่มเงื่อนไขตรวจจับคำถามด้าน Quality Management System (QMS) แยกต่างหาก
-
----
-
-## 2. ขอบเขตการเปลี่ยนแปลง (Scope of Changes)
-- **ไฟล์เป้าหมาย**: เฉพาะ `server.ts` ในฟังก์ชัน `getAcademicFallback()`
-- **สิ่งที่ต้องทำ**:
-  1. เพิ่มเงื่อนไขตรวจสอบคำถามเกี่ยวกับ QMS (`p.includes("qms") || p.includes("quality management") || p.includes("บริหารคุณภาพ") || p.includes("คุณภาพห้องปฏิบัติการ")`) แยกออกเป็น `else if` เฉพาะ แทนที่จะปล่อยให้ตกลงมาเป็น Default Fallback ทั่วไป
-  2. ปรับบล็อก `else` (Default Fallback สำหรับคำถามที่ไม่ตรงกับหัวข้อใดๆ) ให้คืนข้อความแจ้งเตือนภาษาไทยที่ตรงไปตรงมาว่า:
-     * *"ขออภัย ระบบไม่พบข้อมูลสำรองทางวิชาการ (Academic Fallback) เฉพาะสำหรับหัวข้อที่คุณสอบถาม กรุณาระบุชื่อหัวข้อหรือคีย์เวิร์ดที่รองรับให้ชัดเจน (เช่น Serum, Plasma, Flow Cytometry, PCR, Gram Stain, Dengue, CBC, Crossmatching หรือ QMS)"*
-     * พร้อม references ว่างหรือลิงก์คู่มือหลัก
-  3. คงหัวข้อและ mapping เดิมทั้งหมดไว้ ไม่แก้ไข keyword matching ของ Serum/Plasma, PCR, Flow Cytometry, Gram Stain, Dengue, CBC, Crossmatching
+โครงการ: **MedTech Learning Hub AI v1.2**  
+สถานะ: **ส่งมอบแล้วเสร็จ (Completed & Verified)**  
+ค่าใช้จ่ายเพิ่มเติม: **0 บาท (FREE-ONLY / Local-First)**
 
 ---
 
-## 3. ส่วนโค้ดที่จะแก้ไข (Target Code Specification in `server.ts`)
+## 1. ผลลัพธ์การพัฒนาระบบหลัก (Delivered Features)
 
-### ตัวอย่างโครงสร้างใหม่ใน `getAcademicFallback`:
-```ts
-  } else if (p.includes("qms") || p.includes("quality management") || p.includes("บริหารคุณภาพ") || p.includes("คุณภาพห้องปฏิบัติการ")) {
-    return {
-      text: prefixNotice + `**ระบบบริหารคุณภาพห้องปฏิบัติการ (Quality Management System)**\n...`,
-      references: [ ... ]
-    };
-  } else {
-    return {
-      text: prefixNotice + `**ข้อความแจ้งเตือน: ไม่พบข้อมูลสำรองเฉพาะหัวข้อ**\n\nขออภัย ระบบไม่พบข้อมูลสำรองทางวิชาการ (Academic Fallback) เฉพาะสำหรับหัวข้อที่คุณสอบถามในโหมดออฟไลน์/โควตาเต็ม กรุณาระบุชื่อหัวข้อทางเทคนิคการแพทย์ที่รองรับให้ชัดเจน เช่น:\n- Serum / Plasma (ซีรั่ม / พลาสมา)\n- Flow Cytometry\n- PCR / qPCR\n- Gram Stain (ย้อมสีแกรม)\n- Dengue / ไข้เลือดออก (CBC ในเดงกี่)\n- Complete Blood Count (CBC)\n- Crossmatching / หมู่เลือด\n- Quality Management System (QMS)`,
-      references: []
-    };
-  }
-```
+### 1.1 Local-First Document Library (`src/lib/documentStorage.ts`, `src/components/DocumentLibrary.tsx`)
+- จัดเก็บเอกสาร ชิ้นส่วนข้อความ และเมทาดาตาในเครื่องผู้ใช้ด้วย **IndexedDB** (`MedTechLearningHub_DB`) พร้อม fallback รองรับ LocalStorage และ Memory Storage
+- รองรับการนำเข้าเอกสารอย่างน้อย 2 วิธี:
+  1. **อัปโหลดไฟล์จริง**: สกัดข้อความในเบราว์เซอร์ (.pdf, .txt, .md, .json)
+  2. **เขียนโน้ตสรุปการเรียน (Manual Note Input / Paste)**: พิมพ์หรือวางสรุปเลกเชอร์ กำหนดแท็กและประเภท
+- เชื่อมโยงรายวิชากับหลักสูตร DTM 2567 ที่มีอยู่ในระบบ (เช่น DTM101, DTM201, GEN67-xxx)
+- จัดการเอกสาร: ตรวจสอบรายการ ค้นหา กรองตามวิชาและประเภท ดูรายละเอียด Chunks และลบเอกสาร
+
+### 1.2 Document Chunking & Page Indexing (`src/lib/documentChunker.ts`)
+- แบ่งข้อความเป็นชิ้นส่วน (Chunks) ขนาด 600 - 1,000 ตัวอักษร พร้อม Sliding Window Overlap
+- รองรับการระบุหมายเลขหน้าจริง (Page Number) จากเอกสาร PDF และ Page Break Markers
+- ระบบจัดอันดับชิ้นส่วนข้อความที่ตรงกับคำถาม (Keyword Relevance Scoring & Ranking)
+- โมเดลข้อมูล: `DocumentChunk`, `LearningDocument`, `DocumentGroundingContext` ใน `src/models/coreModel.ts`
+
+### 1.3 Strict Document-Grounded Q&A (`server.ts`, `src/App.tsx`)
+- แถบสถานะ **Active Document Grounding Mode** ในหน้าแชท: สลับระหว่างโหมด AI ทั่วไป และโหมดติวอิงเอกสารเจาะลึก
+- ส่งบริบทชิ้นส่วนเอกสารที่ตรงประเด็นที่สุด (Top Relevant Chunks) ไปเป็น Context ให้กับ Gemini API
+- คำสั่งระบบและ fallback โหมดออฟไลน์บังคับ **Strict Anti-Hallucination**:
+  - อ้างอิงระบุหมายเลขหน้าหรือส่วนที่ยกมา
+  - หากเอกสารไม่มีข้อมูล จะตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" โดยไม่แต่งข้อมูลขึ้นเอง
+  - ติดป้าย `อ้างอิงจากเอกสาร: [ชื่อเอกสาร]` และระบุแหล่งที่มาชัดเจน
 
 ---
 
-## 4. ความเสี่ยงและการจัดการ (Risks & Mitigation)
-- **ความเสี่ยง 1**: ผู้ใช้ที่เคยชินกับคำตอบ QMS ทั่วไปเมื่อถามคำถามนอกเหนือจากหัวข้อหลักอาจได้รับข้อความแจ้งเตือนแทน
-  - **การบรรเทา**: เป็นพฤติกรรมที่ถูกต้องตามข้อกำหนดใหม่ (ไม่อ้างอิง QMS กับคำถามที่ไม่เกี่ยวข้อง) และข้อความแนะนำจะช่วยให้ผู้ใช้ระบุหัวข้อได้ถูกต้อง
-- **ความเสี่ยง 2**: การกระทบกระเทือนต่อฟังก์ชันอื่น
-  - **การบรรเทา**: จำกัดการแก้ไขเฉพาะภายในฟังก์ชัน `getAcademicFallback()` ใน `server.ts` โดยไม่แตะต้อง endpoint `/api/gemini/generate` หรือส่วน frontend ใดๆ
+## 2. ผลการทดสอบและการตรวจสอบ (Automated Verification)
 
----
-
-## 5. เกณฑ์การยอมรับ (Acceptance Criteria & Test Cases)
-
-### กรณีทดสอบที่ 1: คำถามที่ไม่รองรับ (Unsupported Question)
-- **Input Prompt**: `"คำถามทั่วไปเกี่ยวกับประวัติศาสตร์ไทย หรือเรื่องรอบตัวที่ไม่เกี่ยวกับห้องปฏิบัติการ"`
-- **Expected Output**: ได้รับข้อความแจ้งเตือนจาก Default Fallback ว่าไม่มีข้อมูลสำรองเฉพาะหัวข้อ พร้อมคำแนะนำหัวข้อที่รองรับ โดยไม่มีเนื้อหา QMS ปะปน
-
-### กรณีทดสอบที่ 2: คำถาม QMS ที่รองรับ (QMS Supported Question)
-- **Input Prompt**: `"ขอข้อมูลระบบบริหารคุณภาพ QMS ในห้องปฏิบัติการ"`
-- **Expected Output**: ได้รับข้อมูลเนื้อหา QMS01, EP23 และ EP28-A3c พร้อม references ที่ถูกต้องจากเงื่อนไข QMS เฉพาะ
-
-### กรณีทดสอบที่ 3: คำถาม Serum/Plasma ที่รองรับ (Serum/Plasma Supported Question)
-- **Input Prompt**: `"ความแตกต่างระหว่าง serum และ plasma คืออะไร"`
-- **Expected Output**: ได้รับเนื้อหาเปรียบเทียบ Serum และ Plasma พร้อม references ของ StatPearls และ CLSI H03 ตามเดิมอย่างครบถ้วน
+- **Unit Tests (`npx vitest run`)**: ผ่านทั้งหมด 100% (21/21 tests ใน 5 test suites)
+  - `src/lib/documentChunker.test.ts` (8 tests)
+  - `src/lib/documentStorage.test.ts` (4 tests)
+  - `src/curriculumData.test.ts` (5 tests)
+  - `src/firebaseClientInit.test.ts` (2 tests)
+  - `src/authContext.test.ts` (2 tests)
+- **TypeScript & Linting (`npm run lint` / `tsc --noEmit`)**: 0 errors
+- **Compilation (`npm run build`)**: สำเร็จสมบูรณ์ ไร้ข้อผิดพลาด

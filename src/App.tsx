@@ -40,7 +40,9 @@ import {
   officialSchoolWebUrl,
   curriculumDrivePdfUrl
 } from './data/curriculumData';
-import { CourseItem } from './models/coreModel';
+import { CourseItem, LearningDocument } from './models/coreModel';
+import { DocumentLibrary } from './components/DocumentLibrary';
+import { rankRelevantChunks } from './lib/documentChunker';
 
 export interface ReferenceItem {
   id: string;
@@ -56,7 +58,8 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback';
+  source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding';
+  groundedDocumentTitle?: string;
   references?: Array<{
     title: string;
     uri: string;
@@ -142,7 +145,8 @@ export function getMockResponse(prompt: string): string {
 export default function App() {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOutUser, clearError } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'vocabulary' | 'references' | 'curriculum'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
+  const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg-1',
@@ -311,10 +315,28 @@ export default function App() {
         }
       }
 
+      // If activeDocument is selected, rank relevant chunks for context grounding
+      let documentContextPayload: any = undefined;
+      if (activeDocument && activeDocument.chunks && activeDocument.chunks.length > 0) {
+        const topChunks = rankRelevantChunks(activeDocument.chunks, queryText, 4);
+        documentContextPayload = {
+          title: activeDocument.title,
+          courseCode: activeDocument.courseCode,
+          chunks: topChunks.map((c) => ({
+            chunkIndex: c.chunkIndex,
+            pageNumber: c.pageNumber,
+            text: c.text
+          }))
+        };
+      }
+
       const response = await fetch('/api/gemini/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: validSlice }),
+        body: JSON.stringify({
+          messages: validSlice,
+          documentContext: documentContextPayload
+        }),
         signal: abortControllerRef.current.signal
       });
 
@@ -338,7 +360,8 @@ export default function App() {
         role: 'assistant',
         content: data.text || 'ไม่พบข้อมูลคำตอบจากระบบ',
         timestamp: new Date(),
-        source: data.source || 'academic_fallback',
+        source: data.source || (documentContextPayload ? 'document_grounding' : 'academic_fallback'),
+        groundedDocumentTitle: activeDocument ? activeDocument.title : undefined,
         references: Array.isArray(data.references) ? data.references : undefined
       };
 
@@ -404,7 +427,7 @@ export default function App() {
         <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
               activeTab === 'chat'
                 ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -412,6 +435,20 @@ export default function App() {
           >
             <MessageSquare className="w-4 h-4" />
             ผู้ช่วย AI วิชาการ
+          </button>
+          <button
+            onClick={() => setActiveTab('documents')}
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              activeTab === 'documents'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>คลังเอกสารการเรียน</span>
+            {activeDocument && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="กำลังศึกษาเอกสารอยู่" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('vocabulary')}
@@ -553,14 +590,25 @@ export default function App() {
       )}
 
       {/* MOBILE NAV */}
-      <div className="flex md:hidden border-b border-slate-800 bg-slate-900 px-4 py-2 gap-2">
+      <div className="flex md:hidden border-b border-slate-800 bg-slate-900 px-4 py-2 gap-1.5 overflow-x-auto">
         <button
           onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
+          className={`py-1.5 px-2.5 rounded-lg text-xs font-medium text-center shrink-0 ${
             activeTab === 'chat' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
           }`}
         >
           AI แชท
+        </button>
+        <button
+          onClick={() => setActiveTab('documents')}
+          className={`py-1.5 px-2.5 rounded-lg text-xs font-medium text-center shrink-0 relative ${
+            activeTab === 'documents' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          }`}
+        >
+          คลังเอกสาร
+          {activeDocument && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1 align-middle animate-pulse" />
+          )}
         </button>
         <button
           onClick={() => setActiveTab('vocabulary')}
@@ -613,6 +661,58 @@ export default function App() {
               </div>
             </div>
 
+            {/* Active Document Grounding Status Bar */}
+            {activeDocument ? (
+              <div className="bg-cyan-950/40 border-b border-cyan-800/40 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="truncate">
+                    <span className="font-semibold text-white">โหมดติวอิงเอกสาร: </span>
+                    <span className="text-cyan-300 font-medium">{activeDocument.title}</span>
+                    {activeDocument.courseCode && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300">
+                        {activeDocument.courseCode}
+                      </span>
+                    )}
+                    <span className="ml-2 text-slate-400 text-[11px] hidden sm:inline">
+                      ({activeDocument.chunks.length} Chunks • Strict Anti-Hallucination)
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setActiveTab('documents')}
+                    className="text-cyan-400 hover:text-cyan-300 underline text-[11px]"
+                  >
+                    เปลี่ยนเอกสาร
+                  </button>
+                  <button
+                    onClick={() => setActiveDocument(null)}
+                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                    title="ปลดเอกสารออก เพื่อกลับสู่โหมด AI ทั่วไป"
+                  >
+                    ปลดออก
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-950/40 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>โหมดถามตอบทั่วไป (General AI)</span>
+                </span>
+                <button
+                  onClick={() => setActiveTab('documents')}
+                  className="text-cyan-400 hover:underline flex items-center gap-1 text-[11px] font-medium"
+                >
+                  <span>เลือกเอกสาร/สไลด์สรุปเพื่อติวเจาะลึก</span>
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             {/* Messages list */}
             <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4">
               {messages.map((msg) => (
@@ -639,16 +739,28 @@ export default function App() {
                     }`}
                   >
                     <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                    {msg.groundedDocumentTitle && (
+                      <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs text-cyan-300 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">อ้างอิงจากเอกสาร: {msg.groundedDocumentTitle}</span>
+                      </div>
+                    )}
+
                     {msg.source && (
                       <div className="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
                         <span className={`px-2 py-0.5 rounded-full font-mono border ${
-                          msg.source === 'gemini_grounding'
+                          msg.source === 'document_grounding'
+                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
+                            : msg.source === 'gemini_grounding'
                             ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
                             : msg.source === 'gemini_standard'
                             ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800'
                             : 'bg-amber-950/80 text-amber-300 border-amber-800'
                         }`}>
-                          {msg.source === 'gemini_grounding'
+                          {msg.source === 'document_grounding'
+                            ? '📚 Document Grounded Mode'
+                            : msg.source === 'gemini_grounding'
                             ? 'Google Search Grounding (Live)'
                             : msg.source === 'gemini_standard'
                             ? 'Gemini AI Standard'
@@ -731,6 +843,16 @@ export default function App() {
               </button>
             </form>
           </div>
+        )}
+
+        {activeTab === 'documents' && (
+          <DocumentLibrary
+            onSelectForChat={(doc) => {
+              setActiveDocument(doc);
+              setActiveTab('chat');
+            }}
+            activeChatDocumentId={activeDocument?.id}
+          />
         )}
 
         {activeTab === 'vocabulary' && (

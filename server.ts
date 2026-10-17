@@ -99,7 +99,53 @@ function determineTopic(p: string, messages?: Array<{ role: string; text: string
 }
 
 // Academic fallback generator for robust offline / quota-exceeded handling
-export function getAcademicFallback(prompt: string, messages?: Array<{ role: string; text: string }>) {
+export function getAcademicFallback(
+  prompt: string,
+  messages?: Array<{ role: string; text: string }>,
+  documentContext?: {
+    title: string;
+    courseCode?: string;
+    chunks: Array<{ chunkIndex?: number; pageNumber?: number | string; text: string }>;
+  }
+) {
+  // If documentContext is present, perform grounded retrieval on document chunks
+  if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
+    const p = prompt.toLowerCase();
+    const keywords = p.split(/[\s,;:.!?()\/+\-]+/).filter(k => k.length >= 2);
+
+    // Find chunks matching query keywords
+    const matchedChunks = documentContext.chunks.filter(c => {
+      const cText = c.text.toLowerCase();
+      return keywords.some(k => cText.includes(k));
+    });
+
+    if (matchedChunks.length > 0) {
+      const citations = matchedChunks
+        .slice(0, 3)
+        .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
+        .join('\n\n');
+      return {
+        text: `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`,
+        references: [
+          {
+            title: `เอกสาร: ${documentContext.title}`,
+            uri: `#doc-${encodeURIComponent(documentContext.title)}`
+          }
+        ]
+      };
+    } else {
+      return {
+        text: `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`,
+        references: [
+          {
+            title: `เอกสาร: ${documentContext.title}`,
+            uri: `#doc-${encodeURIComponent(documentContext.title)}`
+          }
+        ]
+      };
+    }
+  }
+
   const p = prompt.toLowerCase();
   const matchedTopic = determineTopic(p, messages);
 
@@ -133,6 +179,7 @@ export function getAcademicFallback(prompt: string, messages?: Array<{ role: str
   const prefixNotice = isContextualFollowUp 
     ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ใช้ข้อมูลสำรองที่เกี่ยวข้อง)*\n\n`
     : `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*\n\n`;
+
 
   if (matchedTopic === 'serum') {
     return {
@@ -383,7 +430,7 @@ export function getAcademicFallback(prompt: string, messages?: Array<{ role: str
 // API endpoint for Gemini generation with multi-turn messages, retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
-  const { messages, prompt } = req.body;
+  const { messages, prompt, documentContext } = req.body;
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -438,7 +485,7 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
 
-  const systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทยและหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine - DTM) มหาวิทยาลัยวลัยลักษณ์
+  let systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทยและหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine - DTM) มหาวิทยาลัยวลัยลักษณ์
 โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคนิคที่สำคัญไว้ (เช่น Complete Blood Count, Flow Cytometry, PCR, Spectrophotometry เป็นต้น)
 
 ข้อมูลบริบทหลักสูตรอย่างเป็นทางการ (${dtmCurriculum2567.programNameThai} ${dtmCurriculum2567.academicYear} มหาวิทยาลัยวลัยลักษณ์):
@@ -454,6 +501,27 @@ app.post("/api/gemini/generate", async (req, res) => {
 1. สำหรับข้อมูลภาพรวมหน่วยกิตและหมวดหมู่ด้านบน สามารถตอบและอ้างอิงได้ว่าเป็นข้อมูลทางการจากหลักสูตร DTM 2567 ม.วลัยลักษณ์
 2. สำหรับรายละเอียดรายวิชารายปี รายภาคการศึกษา (เช่น ปี 4) หรือรหัสวิชาปลีกย่อย ข้อมูลยังอยู่ในสถานะ "รอตรวจสอบ" (Needs Review) หากผู้ใช้ถามถึงรายวิชาเฉพาะที่ยังไม่มีหลักฐาน ให้ตอบตรง ๆ ว่ายังไม่มีข้อมูลหรือยังตรวจสอบไม่ครบ ห้ามแต่งรหัสวิชา ชื่อวิชา หรือหน่วยกิตขึ้นเอง
 3. แยกแยะข้อมูลหลักสูตรทางการออกจากข้อมูลภายนอกหรือข้อมูลผู้ใช้ให้ชัดเจน และหากหลักฐานไม่เพียงพอให้บอกตรง ๆ ว่ายังยืนยันไม่ได้`;
+
+  // If document grounding context is attached, switch instruction to strict document grounding
+  if (documentContext && typeof documentContext === 'object' && Array.isArray(documentContext.chunks) && documentContext.chunks.length > 0) {
+    const formattedChunks = documentContext.chunks
+      .map((c: any) => `[ส่วนอ้างอิง ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
+      .join('\n\n');
+
+    systemInstruction = `คุณคือผู้ช่วย AI สรุปและตอบคำถามเชิงวิชาการจากเอกสารการเรียนรู้ (Document-Grounded Learning Assistant) สำหรับ MedTech Learning Hub AI
+คุณกำลังช่วยผู้ใช้ศึกษาเนื้อหาจากเอกสาร: "${documentContext.title || 'เอกสารการเรียนรู้'}" ${documentContext.courseCode ? `(เชื่อมโยงรายวิชา: ${documentContext.courseCode})` : ''}
+
+=== เนื้อหาเอกสารอ้างอิงที่แนบมา (Document Grounding Context) ===
+${formattedChunks}
+=============================================================
+
+กฎเหล็กในการตอบคำถามอย่างเคร่งครัด (Strict Anti-Hallucination & Document Grounding):
+1. ให้ตอบคำถามโดยอ้างอิงข้อมูลจาก "เนื้อหาเอกสารอ้างอิง" ด้านบนเป็นหลัก
+2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" หรือ "[ส่วนที่ 1]" ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร
+3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" หรือ "ในเอกสารไม่มีรายละเอียดเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
+4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้`;
+  }
+
 
   // Map validated messages to Gemini SDK contents format
   const contents = validatedMessages.map(m => ({
@@ -558,8 +626,8 @@ app.post("/api/gemini/generate", async (req, res) => {
   const totalBackendDuration = Date.now() - requestStartTime;
   console.warn(`[Perf Backend] Gemini API encountered issue after ${attempt} attempts (${totalBackendDuration}ms total), serving robust academic fallback:`, lastError?.message);
 
-  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt and validatedMessages)
-  const fallback = getAcademicFallback(latestPrompt, validatedMessages);
+  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and documentContext)
+  const fallback = getAcademicFallback(latestPrompt, validatedMessages, documentContext);
   return res.json({
     text: fallback.text,
     source: "academic_fallback",

@@ -55,3 +55,45 @@ export interface OfficialCurriculum {
   evidence: CurriculumEvidence;
   courses: CourseItem[];
 }
+
+// Track B1: Learning Document Foundation Models
+export type DocumentType = 'pdf' | 'slide' | 'note' | 'paper' | 'text';
+
+export interface DocumentChunk {
+  id: string;
+  documentId: string;
+  chunkIndex: number;
+  pageNumber?: number;
+  text: string;
+  charCount: number;
+  heading?: string;
+}
+
+export interface LearningDocument {
+  id: string;
+  title: string;
+  filename?: string;
+  fileSize?: number;
+  type: DocumentType;
+  courseCode?: string;
+  courseTitle?: string;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  totalChars: number;
+  totalPages?: number;
+  chunks: DocumentChunk[];
+  rawSnippet?: string;
+}
+
+export interface DocumentGroundingContext {
+  documentId: string;
+  title: string;
+  courseCode?: string;
+  chunks: Array<{
+    chunkIndex: number;
+    pageNumber?: number | string;
+    text: string;
+  }>;
+}
+
