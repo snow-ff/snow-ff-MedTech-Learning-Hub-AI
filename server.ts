@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { dtmCurriculum2567 } from "./src/data/curriculumData";
 
 dotenv.config();
 
@@ -25,32 +26,115 @@ const ai = new GoogleGenAI({
   }
 });
 
+function getDirectTopic(text: string): string | null {
+  const t = text.toLowerCase();
+  if (t.includes("serum") || t.includes("plasma") || t.includes("ซีรั่ม") || t.includes("พลาสมา")) {
+    return 'serum';
+  }
+  if (t.includes("flow cytometry") || (t.includes("เม็ดเลือดขาว") && !t.includes("cbc"))) {
+    return 'flow';
+  }
+  if (t.includes("pcr") || t.includes("real-time") || t.includes("qpcr") || t.includes("cq") || t.includes("ct") || t.includes("amplification")) {
+    return 'pcr';
+  }
+  if (t.includes("gram") || t.includes("แกรม") || t.includes("stain")) {
+    return 'gram';
+  }
+  if (t.includes("เดงกี่") || t.includes("dengue")) {
+    return 'dengue';
+  }
+  if (t.includes("cbc") || t.includes("เม็ดเลือด")) {
+    return 'cbc';
+  }
+  if (t.includes("crossmatching") || t.includes("blood grouping") || t.includes("หมู่เลือด")) {
+    return 'cross';
+  }
+  if (t.includes("dtm") || t.includes("หลักสูตร") || t.includes("หน่วยกิต") || t.includes("วลัยลักษณ์") || t.includes("เทคโนโลยีดิจิทัล")) {
+    return 'dtm';
+  }
+  return null;
+}
+
+function determineTopic(p: string, messages?: Array<{ role: string; text: string }>): string | null {
+  const directTopic = getDirectTopic(p);
+  if (directTopic) {
+    return directTopic;
+  }
+
+  const hasHistory = messages && messages.length > 1;
+  const isShortOrFollowUp = p.length < 50 || 
+    p.includes("แล้ว") || 
+    p.includes("ค่า") || 
+    p.includes("คืออะไร") || 
+    p.includes("ต่างกัน") || 
+    p.includes("อันนี้") || 
+    p.includes("นั่น") || 
+    p.includes("ข้อนี้") || 
+    p.includes("เพิ่ม") || 
+    p.includes("ทำไม") || 
+    p.includes("อย่างไร") || 
+    p.includes("ยังไง") || 
+    p.includes("เท่าไหร่") || 
+    p.includes("หรือ") || 
+    p.includes("ได้ไหม") ||
+    p.includes("ถามต่อ");
+
+  const hasNewDistinctTopic = p.includes("ประวัติศาสตร์") || 
+    p.includes("history") || 
+    p.includes("ฟิสิกส์") || 
+    p.includes("physics") || 
+    p.includes("คณิตศาสตร์") || 
+    p.includes("math");
+
+  if (hasHistory && isShortOrFollowUp && !hasNewDistinctTopic) {
+    for (let i = messages.length - 2; i >= 0; i--) {
+      const prevTopic = getDirectTopic(messages[i].text.toLowerCase());
+      if (prevTopic) {
+        return prevTopic;
+      }
+    }
+  }
+
+  return null;
+}
+
 // Academic fallback generator for robust offline / quota-exceeded handling
-export function getAcademicFallback(prompt: string) {
+export function getAcademicFallback(prompt: string, messages?: Array<{ role: string; text: string }>) {
   const p = prompt.toLowerCase();
-  const isContextualFollowUp = !p.includes("flow cytometry") && 
-    !p.includes("pcr") && 
-    !p.includes("qpcr") && 
-    !p.includes("cbc") && 
-    !p.includes("เดงกี่") && 
-    !p.includes("dengue") && 
-    !p.includes("crossmatching") && 
-    !p.includes("blood") && 
-    !p.includes("หมู่เลือด") && 
-    !p.includes("เม็ดเลือดขาว") && 
-    !p.includes("gram") && 
-    !p.includes("แกรม") && 
-    !p.includes("stain") &&
-    !p.includes("serum") &&
-    !p.includes("plasma") &&
-    !p.includes("ซีรั่ม") &&
-    !p.includes("พลาสมา");
+  const matchedTopic = determineTopic(p, messages);
+
+  const hasHistory = messages && messages.length > 1;
+  const isShortOrFollowUp = p.length < 50 || 
+    p.includes("แล้ว") || 
+    p.includes("ค่า") || 
+    p.includes("คืออะไร") || 
+    p.includes("ต่างกัน") || 
+    p.includes("อันนี้") || 
+    p.includes("นั่น") || 
+    p.includes("ข้อนี้") || 
+    p.includes("เพิ่ม") || 
+    p.includes("ทำไม") || 
+    p.includes("อย่างไร") || 
+    p.includes("ยังไง") || 
+    p.includes("เท่าไหร่") || 
+    p.includes("หรือ") || 
+    p.includes("ได้ไหม") ||
+    p.includes("ถามต่อ");
+
+  const hasNewDistinctTopic = p.includes("ประวัติศาสตร์") || 
+    p.includes("history") || 
+    p.includes("ฟิสิกส์") || 
+    p.includes("physics") || 
+    p.includes("คณิตศาสตร์") || 
+    p.includes("math");
+
+  const isContextualFollowUp = Boolean(hasHistory && (isShortOrFollowUp || !matchedTopic) && !hasNewDistinctTopic);
   
   const prefixNotice = isContextualFollowUp 
-    ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอาจอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ไม่สามารถประมวลผลต่อเนื่องแบบ Multi-turn ได้อย่างสมบูรณ์ กรุณาระบุชื่อหัวข้อเต็ม เช่น Flow Cytometry หรือ PCR เพื่อรับข้อมูลสำรองที่ถูกต้อง)*\n\n`
+    ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ใช้ข้อมูลสำรองที่เกี่ยวข้อง)*\n\n`
     : `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*\n\n`;
 
-  if (p.includes("serum") || p.includes("plasma") || p.includes("ซีรั่ม") || p.includes("พลาสมา")) {
+  if (matchedTopic === 'serum') {
     return {
       text: prefixNotice + `**ความแตกต่างระหว่างซีรั่ม (Serum) และพลาสมา (Plasma) ในงานห้องปฏิบัติการทางการแพทย์**
 
@@ -75,7 +159,7 @@ export function getAcademicFallback(prompt: string) {
       ]
     };
 
-  } else if (p.includes("flow cytometry") || (p.includes("เม็ดเลือดขาว") && !p.includes("cbc"))) {
+  } else if (matchedTopic === 'flow') {
     return {
       text: prefixNotice + `**หลักการทำงานของ Flow Cytometry ในการจำแนกชนิดเม็ดเลือดขาว (Leukocyte Differentiation)**
 
@@ -105,7 +189,29 @@ export function getAcademicFallback(prompt: string) {
         }
       ]
     };
-  } else if (p.includes("pcr") || p.includes("real-time") || p.includes("qpcr")) {
+  } else if (matchedTopic === 'pcr') {
+    if (p.includes("cq") || p.includes("ct")) {
+      return {
+        text: prefixNotice + `**ค่า Quantification Cycle (Cq) หรือ Threshold Cycle (Ct) ใน Real-Time PCR (qPCR)**
+
+1. **คำนิยามพื้นฐาน (Definition):**
+   - **Cq (Quantification Cycle)** หรือที่นิยมเรียกในชื่อเดิมว่า **Ct (Threshold Cycle)** คือ จำนวนรอบ (Cycle) ของปฏิกิริยา PCR ที่สัญญาณเรืองแสง (Fluorescence) เพิ่มขึ้นสูงจนทะลุผ่านเส้นเกณฑ์กำหนด (Baseline Threshold Line) และเริ่มตรวจจับได้อย่างมีนัยสำคัญทางสถิติเหนือกว่าสัญญาณรบกวนพื้นหลัง (Background noise)
+
+2. **ความสัมพันธ์กับปริมาณสารพันธุกรรมเริ่มต้น (Inverse Quantitative Relationship):**
+   - ค่า Cq มีความสัมพันธ์แบบ **ผกผัน (Inversely proportional)** กับปริมาณกรดนิวคลีอิกตั้งต้น (Initial template concentration) ในตัวอย่าง:
+     - **ค่า Cq ต่ำ:** หมายถึงมีปริมาณ DNA/RNA ตั้งต้นในตัวอย่างมาก ทำให้ใช้รอบการเพิ่มขยายจำนวนน้อยครั้งสัญญาณก็ทะลุ Threshold (เช่น Viral load สูง)
+     - **ค่า Cq สูง:** หมายถึงมีปริมาณ DNA/RNA ตั้งต้นน้อย ทำให้ต้องใช้รอบจำนวนมากสัญญาณถึงจะแตะเกณฑ์ Threshold (เช่น เชื้อปริมาณน้อย หรือปฏิกิริยาใกล้จุดอิ่มตัว)
+
+3. **ข้อควรระวังในการแปลผลตามมาตรฐานสากล MIQE 2.0 (2025):**
+   - การแปลผลค่า Cq/Ct ห้ามใช้เกณฑ์ตัดรอบตายตัวแบบเหมารวม (เช่น กำหนดว่าทุกการทดสอบที่ Ct > 40 เป็นผลลบเสมอ) โดยปราศจากการตรวจสอบความถูกต้องของวิธีตรวจเฉพาะ (Assay validation), ขีดจำกัดการตรวจพบ (Limit of Detection - LoD), การตั้งค่า Baseline/Threshold ที่เหมาะสม และการควบคุมคุณภาพด้วยชุดควบคุม (Positive, Negative, NTC Controls)`,
+        references: [
+          { 
+            title: "MIQE 2.0: Revision of the Minimum Information for Publication of Quantitative Real-Time PCR Experiments Guidelines (Clinical Chemistry, 2025)", 
+            uri: "https://academic.oup.com/clinchem/article/71/6/634/8119148" 
+          }
+        ]
+      };
+    }
     return {
       text: prefixNotice + `**ความแตกต่างระหว่าง Conventional PCR และ Real-Time PCR (qPCR) ในงานตรวจวินิจฉัยโมเลกุล**
 
@@ -136,7 +242,7 @@ export function getAcademicFallback(prompt: string) {
         }
       ]
     };
-  } else if (p.includes("gram") || p.includes("แกรม") || p.includes("stain")) {
+  } else if (matchedTopic === 'gram') {
     return {
       text: prefixNotice + `**หลักการย้อมสีแกรม (Gram Stain Protocols) และการควบคุมคุณภาพทางจุลชีววิทยาคลินิก**
 
@@ -158,7 +264,7 @@ export function getAcademicFallback(prompt: string) {
         { title: "Gram Stain Protocols", uri: "https://asm.org/protocols/gram-stain-protocols" }
       ]
     };
-  } else if (p.includes("เดงกี่") || p.includes("dengue")) {
+  } else if (matchedTopic === 'dengue') {
     return {
       text: prefixNotice + `**การแปลผล Complete Blood Count (CBC) ในผู้ป่วยติดเชื้อไวรัสเดงกี่ (Dengue Infection)**
 
@@ -179,7 +285,7 @@ export function getAcademicFallback(prompt: string) {
         { title: "Clinical Care of Dengue | Dengue | CDC", uri: "https://www.cdc.gov/dengue/hcp/clinical-care/" }
       ]
     };
-  } else if (p.includes("cbc") || p.includes("เม็ดเลือด")) {
+  } else if (matchedTopic === 'cbc') {
     return {
       text: prefixNotice + `**หลักการตรวจวิเคราะห์ Complete Blood Count (CBC), การตรวจแยกชนิดเม็ดเลือดขาว และการควบคุมคุณภาพด้วย Westgard Rules**
 
@@ -212,7 +318,7 @@ export function getAcademicFallback(prompt: string) {
         { title: "Westgard JO, et al. A Multi-Rule Shewhart Chart for Quality Control in Clinical Chemistry (Clin Chem 1981 / PubMed 7201955)", uri: "https://pubmed.ncbi.nlm.nih.gov/7201955/" }
       ]
     };
-  } else if (p.includes("crossmatching") || p.includes("blood grouping") || p.includes("หมู่เลือด")) {
+  } else if (matchedTopic === 'cross') {
     return {
       text: prefixNotice + `**ขั้นตอนการทำ Crossmatching และการตรวจหมู่เลือด (Blood Grouping & Crossmatch)**
 
@@ -238,21 +344,38 @@ export function getAcademicFallback(prompt: string) {
         { title: "Blood Groups and Red Cell Antigens", uri: "https://www.ncbi.nlm.nih.gov/books/NBK2261/" }
       ]
     };
+  } else if (matchedTopic === 'dtm') {
+    return {
+      text: prefixNotice + `**ข้อมูลหลักสูตรวิทยาศาสตรบัณฑิต สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (หลักสูตรปรับปรุง พ.ศ. 2567) มหาวิทยาลัยวลัยลักษณ์**
+
+1. **โครงสร้างหน่วยกิตรวมและหมวดวิชา:**
+   - **หน่วยกิตรวมตลอดหลักสูตร:** ไม่น้อยกว่า 124 หน่วยกิต
+   - **หมวดวิชาศึกษาทั่วไป:** ไม่น้อยกว่า 26 หน่วยกิต (ครอบคลุมภาษาต่างประเทศ สังคมศาสตร์ มนุษยศาสตร์ สุนทรียศาสตร์ วิทยาศาสตร์และเทคโนโลยี การบริหารธุรกิจ และสุขภาพพลานามัย)
+   - **หมวดวิชาเฉพาะ:** ไม่น้อยกว่า 92 หน่วยกิต
+     - *หมายเหตุโครงสร้างหมวดวิชาเฉพาะ:* ประกอบด้วย วิชาเฉพาะด้าน (ไม่น้อยกว่า 64 นก.), วิชาโท (ไม่น้อยกว่า 15 นก.), และรวมสหกิจศึกษา (13 นก.) ไว้ในหมวดวิชาเฉพาะตามโครงสร้างหลักสูตร (ไม่มีการบวกสหกิจศึกษา 13 หน่วยกิตซ้ำซ้อนแยกต่างหากจาก 92 หน่วยกิต)
+   - **หมวดวิชาเลือกเสรี:** ไม่น้อยกว่า 6 หน่วยกิต
+
+2. **กลุ่มวิชาโทที่เปิดสอน (Minors):**
+   - นวัตกรรมการแพทย์ดิจิทัล (Digital Medical Innovation)
+   - ปัญญาประดิษฐ์ทางการแพทย์ (Medical Artificial Intelligence)
+
+3. **สหกิจศึกษา (Cooperative Education):**
+   - 13 หน่วยกิต (ปฏิบัติงานจริงในองค์กร/สถานพยาบาลไม่น้อยกว่า 8 เดือน)
+
+4. **สถานะการตรวจสอบรายวิชา (Verification Status):**
+   - ข้อมูลโครงสร้างภาพรวมและหมวดหมู่หน่วยกิตข้างต้น: **ยืนยันแล้ว (Verified)** อ้างอิงจากเว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์
+   - รายวิชารายภาคการศึกษา รหัสวิชา และแผนปี 1-4: **รอตรวจสอบ (Needs Review)** จากเอกสาร PDF เล่มหลักสูตรฉบับสมบูรณ์ (ระบบไม่มีการแต่งตั้งหรือคาดเดารหัสรายวิชาปลีกย่อย)`,
+      references: [
+        { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" },
+        { title: "เอกสารหลักสูตร พ.ศ. 2567 (PDF - Google Drive)", uri: "https://drive.google.com/file/d/14sRYBe6Ipm0NCrG37Y6vsDO2yvKEm8I4/view?usp=" }
+      ]
+    };
   } else {
     return {
       text: prefixNotice + `**ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้**
 
-ขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม กรุณาระบุคำถามหรือหัวข้อที่ระบบรองรับเพื่อให้ได้ข้อมูลที่ถูกต้อง เช่น:
-- ซีรั่มและพลาสมา (Serum vs Plasma)
-- โฟว์ไซโทเมทรี (Flow Cytometry)
-- พีซีอาร์และเรียลไทม์พีซีอาร์ (PCR / Real-Time PCR)
-- การย้อมสีแกรม (Gram Stain)
-- การตรวจซีบีซีในโรคไข้เลือดออกเดงกี่ (Dengue CBC)
-- หมู่เลือดและการทำครอสแมตช์ (Blood Grouping & Crossmatching)
-- ระบบบริหารคุณภาพห้องปฏิบัติการ (CLSI QMS)`,
-      references: [
-        { title: "CLSI Guidelines and Clinical Laboratory Standards", uri: "https://clsi.org/" }
-      ]
+ขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม`,
+      references: []
     };
   }
 }
@@ -315,9 +438,22 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
 
-  const systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทย (Medical Technology Students)
+  const systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทยและหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine - DTM) มหาวิทยาลัยวลัยลักษณ์
 โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคนิคที่สำคัญไว้ (เช่น Complete Blood Count, Flow Cytometry, PCR, Spectrophotometry เป็นต้น)
-ในการตอบ ให้ให้ข้อมูลวิชาการที่ถูกต้องและเป็นประโยชน์สำหรับนักศึกษาเทคนิคการแพทย์ พร้อมอ้างอิงจากแหล่งข้อมูลที่น่าเชื่อถือ`;
+
+ข้อมูลบริบทหลักสูตรอย่างเป็นทางการ (${dtmCurriculum2567.programNameThai} ${dtmCurriculum2567.academicYear} มหาวิทยาลัยวลัยลักษณ์):
+- หน่วยกิตรวมตลอดหลักสูตร: ${dtmCurriculum2567.totalCredits} หน่วยกิต
+- หมวดวิชาศึกษาทั่วไป: ไม่น้อยกว่า ${dtmCurriculum2567.categories.generalEducation.minCredits} หน่วยกิต (${dtmCurriculum2567.categories.generalEducation.description})
+- หมวดวิชาเฉพาะ: ไม่น้อยกว่า ${dtmCurriculum2567.categories.majorSpecific.minCredits} หน่วยกิต (ประกอบด้วย วิชาเฉพาะด้าน ไม่น้อยกว่า ${dtmCurriculum2567.categories.majorCourses.minCredits} นก., วิชาโท ไม่น้อยกว่า ${dtmCurriculum2567.categories.minorCourses.minCredits} นก., และรวมสหกิจศึกษา ${dtmCurriculum2567.categories.cooperativeEducation.minCredits} นก.)
+- หมวดวิชาสหกิจศึกษา: ${dtmCurriculum2567.categories.cooperativeEducation.minCredits} หน่วยกิต (${dtmCurriculum2567.categories.cooperativeEducation.description})
+- หมวดวิชาเลือกเสรี: ${dtmCurriculum2567.categories.freeElective.minCredits} หน่วยกิต (${dtmCurriculum2567.categories.freeElective.description})
+- กลุ่มวิชาโทที่เปิดสอน: ${dtmCurriculum2567.minorsAvailable.join(', ')}
+- แหล่งอ้างอิงหลักสูตรทางการ: เว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์ (${dtmCurriculum2567.evidence.sourceUrl})
+
+คำแนะนำและข้อจำกัดสำคัญในการตอบเรื่องหลักสูตร:
+1. สำหรับข้อมูลภาพรวมหน่วยกิตและหมวดหมู่ด้านบน สามารถตอบและอ้างอิงได้ว่าเป็นข้อมูลทางการจากหลักสูตร DTM 2567 ม.วลัยลักษณ์
+2. สำหรับรายละเอียดรายวิชารายปี รายภาคการศึกษา (เช่น ปี 4) หรือรหัสวิชาปลีกย่อย ข้อมูลยังอยู่ในสถานะ "รอตรวจสอบ" (Needs Review) หากผู้ใช้ถามถึงรายวิชาเฉพาะที่ยังไม่มีหลักฐาน ให้ตอบตรง ๆ ว่ายังไม่มีข้อมูลหรือยังตรวจสอบไม่ครบ ห้ามแต่งรหัสวิชา ชื่อวิชา หรือหน่วยกิตขึ้นเอง
+3. แยกแยะข้อมูลหลักสูตรทางการออกจากข้อมูลภายนอกหรือข้อมูลผู้ใช้ให้ชัดเจน และหากหลักฐานไม่เพียงพอให้บอกตรง ๆ ว่ายังยืนยันไม่ได้`;
 
   // Map validated messages to Gemini SDK contents format
   const contents = validatedMessages.map(m => ({
@@ -422,8 +558,8 @@ app.post("/api/gemini/generate", async (req, res) => {
   const totalBackendDuration = Date.now() - requestStartTime;
   console.warn(`[Perf Backend] Gemini API encountered issue after ${attempt} attempts (${totalBackendDuration}ms total), serving robust academic fallback:`, lastError?.message);
 
-  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt)
-  const fallback = getAcademicFallback(latestPrompt);
+  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt and validatedMessages)
+  const fallback = getAcademicFallback(latestPrompt, validatedMessages);
   return res.json({
     text: fallback.text,
     source: "academic_fallback",

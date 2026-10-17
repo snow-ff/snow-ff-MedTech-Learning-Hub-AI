@@ -838,16 +838,16 @@ export default function App() {
                     rel="noopener noreferrer"
                     className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
                   >
-                    <span>เว็บไซต์หลักสูตร</span>
+                    <span>เว็บไซต์หลักสูตรทางการ</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <a
-                    href="https://cur-das.wu.ac.th/backEnd/attach/attWu/Digital-Technology-in-Medicine-2567-checo.pdf"
+                    href="https://drive.google.com/file/d/14sRYBe6Ipm0NCrG37Y6vsDO2yvKEm8I4/view?usp=sharing"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
+                    className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-cyan-600/20"
                   >
-                    <span>เอกสารหลักสูตร พ.ศ. 2567 (PDF)</span>
+                    <span>เปิดเอกสารหลักสูตรฉบับเต็ม (PDF)</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
