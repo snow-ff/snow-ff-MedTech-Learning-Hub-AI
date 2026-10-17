@@ -31,12 +31,9 @@ export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : g
 export const firebaseAuth = getAuth(firebaseApp);
 
 // Initialize Firestore with databaseId if specified
-export const firebaseDb = getFirestore(
-  firebaseApp,
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== ''
-    ? firebaseConfig.firestoreDatabaseId
-    : undefined
-);
+export const firebaseDb = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== ''
+  ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(firebaseApp);
 
 // Google Auth Provider
 export const googleAuthProvider = new GoogleAuthProvider();
