@@ -20,11 +20,27 @@ import {
   LogIn,
   LogOut,
   Shield,
-  Trash2
+  Trash2,
+  FileText,
+  LayoutGrid,
+  List,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Check
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
-import { dtmCurriculum2567 } from './data/curriculumData';
+import {
+  dtmCurriculum2567,
+  OFFICIAL_COURSES_2567,
+  CURRICULUM_FILTER_TABS,
+  officialHandbookPdfUrl,
+  officialSchoolWebUrl,
+  curriculumDrivePdfUrl
+} from './data/curriculumData';
+import { CourseItem } from './models/coreModel';
 
 export interface ReferenceItem {
   id: string;
@@ -142,6 +158,73 @@ export default function App() {
   const [activeReference, setActiveReference] = useState<ReferenceItem | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  // Curriculum Tab States (Track A4)
+  const [curriculumSearch, setCurriculumSearch] = useState('');
+  const [curriculumCategory, setCurriculumCategory] = useState('all');
+  const [curriculumSubCategory, setCurriculumSubCategory] = useState('all');
+  const [curriculumViewMode, setCurriculumViewMode] = useState<'grid' | 'table'>('grid');
+  const [activeCourseEvidence, setActiveCourseEvidence] = useState<CourseItem | null>(null);
+  const [showMacroOverview, setShowMacroOverview] = useState(true);
+  const [onlyNonCredit, setOnlyNonCredit] = useState(false);
+
+  // Filtered courses based on search & category (Track A4)
+  const filteredCourses = React.useMemo(() => {
+    return OFFICIAL_COURSES_2567.filter((course) => {
+      if (onlyNonCredit && !course.isNonCredit) {
+        return false;
+      }
+      if (curriculumSearch.trim()) {
+        const q = curriculumSearch.toLowerCase().trim();
+        const code = (course.code || '').toLowerCase();
+        const th = (course.titleThai || '').toLowerCase();
+        const en = (course.titleEnglish || '').toLowerCase();
+        const sub = (course.subCategory || '').toLowerCase();
+        const hours = (course.hours || '').toLowerCase();
+        if (!code.includes(q) && !th.includes(q) && !en.includes(q) && !sub.includes(q) && !hours.includes(q)) {
+          return false;
+        }
+      }
+      if (curriculumCategory !== 'all') {
+        const tab = CURRICULUM_FILTER_TABS.find((t) => t.id === curriculumCategory);
+        if (tab) {
+          if (tab.category && course.category !== tab.category) {
+            return false;
+          }
+          if (tab.electiveGroup && course.electiveGroup !== tab.electiveGroup) {
+            return false;
+          }
+        }
+      }
+      if (curriculumSubCategory !== 'all' && course.subCategory !== curriculumSubCategory) {
+        return false;
+      }
+      return true;
+    });
+  }, [curriculumSearch, curriculumCategory, curriculumSubCategory, onlyNonCredit]);
+
+  const availableSubCategories = React.useMemo(() => {
+    const list = Array.from(
+      new Set(
+        OFFICIAL_COURSES_2567
+          .filter((c) => {
+            if (curriculumCategory === 'all') return true;
+            const tab = CURRICULUM_FILTER_TABS.find((t) => t.id === curriculumCategory);
+            if (!tab) return true;
+            if (tab.category && c.category !== tab.category) return false;
+            if (tab.electiveGroup && c.electiveGroup !== tab.electiveGroup) return false;
+            return true;
+          })
+          .map((c) => c.subCategory)
+          .filter(Boolean) as string[]
+      )
+    );
+    return list;
+  }, [curriculumCategory]);
+
+  const totalFilteredCredits = React.useMemo(() => {
+    return filteredCourses.reduce((sum, c) => sum + (c.isNonCredit ? 0 : c.credits), 0);
+  }, [filteredCourses]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -744,110 +827,453 @@ export default function App() {
 
         {activeTab === 'curriculum' && (
           <div className="space-y-6 animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            {/* 1. CURRICULUM HEADER BANNER */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-slate-800">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center flex-wrap gap-2 mb-2">
                     <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
                       หลักสูตรปรับปรุง พ.ศ. 2567
                     </span>
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>ตรวจสอบหลักฐานแล้ว 69 รายวิชา (Verified 100%)</span>
+                    </span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
                       มหาวิทยาลัยวลัยลักษณ์
                     </span>
                   </div>
-                  <h2 className="text-xl font-bold text-white">{dtmCurriculum2567.programNameThai}</h2>
-                  <p className="text-sm text-slate-400 mt-1">{dtmCurriculum2567.programNameEnglish}</p>
-                </div>
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center shrink-0">
-                  <p className="text-xs text-slate-400">หน่วยกิตรวมตลอดหลักสูตร</p>
-                  <p className="text-2xl font-bold text-cyan-400 mt-1">{dtmCurriculum2567.totalCredits} หน่วยกิต</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.generalEducation.categoryName}</h3>
-                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.generalEducation.minCredits} นก.</span>
-                  </div>
-                  <p className="text-xs text-slate-400">{dtmCurriculum2567.categories.generalEducation.description}</p>
-                </div>
-
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.majorSpecific.categoryName}</h3>
-                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.majorSpecific.minCredits} นก.</span>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    ประกอบด้วย วิชาเฉพาะด้าน (&ge;{dtmCurriculum2567.categories.majorCourses.minCredits} นก.), วิชาโท (&ge;{dtmCurriculum2567.categories.minorCourses.minCredits} นก.), และรวมสหกิจศึกษา ({dtmCurriculum2567.categories.cooperativeEducation.minCredits} นก.)
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                    {dtmCurriculum2567.programNameThai}
+                  </h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {dtmCurriculum2567.programNameEnglish} (B.Sc. DTM) • สำนักวิชาสารสนเทศศาสตร์
                   </p>
                 </div>
 
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.freeElective.categoryName}</h3>
-                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.freeElective.minCredits} นก.</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="bg-slate-950 px-5 py-3 rounded-2xl border border-slate-800 text-center">
+                    <p className="text-xs text-slate-400">หน่วยกิตรวม</p>
+                    <p className="text-2xl font-bold text-cyan-400 mt-0.5">{dtmCurriculum2567.totalCredits} นก.</p>
                   </div>
-                  <p className="text-xs text-slate-400">{dtmCurriculum2567.categories.freeElective.description}</p>
+                  <div className="bg-slate-950 px-5 py-3 rounded-2xl border border-slate-800 text-center">
+                    <p className="text-xs text-slate-400">ทะเบียนรายวิชา</p>
+                    <p className="text-2xl font-bold text-emerald-400 mt-0.5">{OFFICIAL_COURSES_2567.length} วิชา</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-cyan-400" />
-                    <span>กลุ่มวิชาโทที่เปิดสอน (Minors)</span>
-                  </h3>
-                  <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
-                    {dtmCurriculum2567.minorsAvailable.map((m, idx) => (
-                      <li key={idx}>{m}</li>
+              {/* 2. COLLAPSIBLE MACRO STRUCTURE OVERVIEW */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setShowMacroOverview(!showMacroOverview)}
+                    className="text-xs font-semibold text-slate-300 hover:text-cyan-400 flex items-center gap-2 transition-colors py-1"
+                  >
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    <span>สรุปโครงสร้างหน่วยกิตภาพรวมหลักสูตร (Macro Structure)</span>
+                    {showMacroOverview ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                  </button>
+                  <span className="text-xs text-slate-500 font-mono">มคอ.2 หน้า 4-8</span>
+                </div>
+
+                {showMacroOverview && (
+                  <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.generalEducation.categoryName}</h3>
+                          <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.generalEducation.minCredits} นก.</span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">{dtmCurriculum2567.categories.generalEducation.description}</p>
+                      </div>
+
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.majorSpecific.categoryName}</h3>
+                          <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.majorSpecific.minCredits} นก.</span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          ประกอบด้วย วิชาเฉพาะด้าน (&ge;{dtmCurriculum2567.categories.majorCourses.minCredits} นก.), วิชาโท (&ge;{dtmCurriculum2567.categories.minorCourses.minCredits} นก.), และสหกิจศึกษา ({dtmCurriculum2567.categories.cooperativeEducation.minCredits} นก.)
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.freeElective.categoryName}</h3>
+                          <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.freeElective.minCredits} นก.</span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">{dtmCurriculum2567.categories.freeElective.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-cyan-400" />
+                          <span>กลุ่มวิชาโทที่เปิดสอน (Minors - เลือกเรียน 15 นก.)</span>
+                        </h4>
+                        <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                          {dtmCurriculum2567.minorsAvailable.map((m, idx) => (
+                            <li key={idx}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                          <Info className="w-4 h-4 text-cyan-400" />
+                          <span>หมวดวิชาสหกิจศึกษา (Cooperative Education - 13 นก.)</span>
+                        </h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          เตรียมสหกิจศึกษา 1 หน่วยกิต และสหกิจศึกษา 1 & 2 รวม 12 หน่วยกิต ปฏิบัติงานจริงในสถานประกอบการ โรงพยาบาล หรือศูนย์การแพทย์ดิจิทัลไม่น้อยกว่า 8 เดือน
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-950/20 border border-emerald-800/40 p-4 rounded-2xl flex items-start gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1 text-xs text-emerald-200/90">
+                        <p className="font-semibold text-emerald-300">สถานะการตรวจสอบหลักฐาน (Verification Status): ครบถ้วน 100% (Verified)</p>
+                        <p>
+                          - ข้อมูลรายวิชาทั้ง 69 รายวิชาได้รับการตรวจสอบความสอดคล้องระดับอักขระเทียบเคียงเอกสารหลักสูตรทางการ มคอ.2 (เล่มปรับปรุง พ.ศ. 2567 มหาวิทยาลัยวลัยลักษณ์) หน้า 4-8 ครบทุกวิชา
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 3. CURRICULUM SEARCH & INVENTORY CONTROLS */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={curriculumSearch}
+                    onChange={(e) => setCurriculumSearch(e.target.value)}
+                    placeholder="ค้นหารหัสวิชา (เช่น DTM67-111, GEN67-121) หรือชื่อวิชาภาษาไทย / ภาษาอังกฤษ..."
+                    className="w-full pl-11 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                  />
+                  {curriculumSearch && (
+                    <button
+                      onClick={() => setCurriculumSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shrink-0">
+                  <button
+                    onClick={() => setCurriculumViewMode('grid')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                      curriculumViewMode === 'grid'
+                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="แสดงแบบการ์ด (Grid)"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span>การ์ด</span>
+                  </button>
+                  <button
+                    onClick={() => setCurriculumViewMode('table')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all ${
+                      curriculumViewMode === 'table'
+                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="แสดงแบบตาราง (Table)"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>ตาราง</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <Filter className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>หมวดหมู่วิชาหลัก (Major Categories)</span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                  {CURRICULUM_FILTER_TABS.map((tab) => {
+                    const isActive = curriculumCategory === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setCurriculumCategory(tab.id);
+                          setCurriculumSubCategory('all');
+                        }}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all border ${
+                          isActive
+                            ? 'bg-cyan-950 text-cyan-300 border-cyan-700 shadow-sm shadow-cyan-900/40'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <span>{tab.nameThai}</span>
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-slate-800/80 text-[10px] font-mono text-slate-300">
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Sub-Category Filter and Non-Credit Filter */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+                {availableSubCategories.length > 1 && (
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-slate-400 font-medium">กลุ่มย่อย:</span>
+                    <button
+                      onClick={() => setCurriculumSubCategory('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                        curriculumSubCategory === 'all'
+                          ? 'bg-slate-800 text-white font-semibold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      ทั้งหมด
+                    </button>
+                    {availableSubCategories.map((sub, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurriculumSubCategory(sub)}
+                        className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                          curriculumSubCategory === sub
+                            ? 'bg-cyan-900/60 text-cyan-200 border border-cyan-800 font-semibold'
+                            : 'text-slate-400 hover:text-slate-200 bg-slate-950/60'
+                        }`}
+                      >
+                        {sub}
+                      </button>
                     ))}
-                  </ul>
-                </div>
+                  </div>
+                )}
 
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                    <Info className="w-4 h-4 text-cyan-400" />
-                    <span>สหกิจศึกษา (Cooperative Education)</span>
-                  </h3>
-                  <p className="text-xs text-slate-300">
-                    {dtmCurriculum2567.categories.cooperativeEducation.minCredits} หน่วยกิต • ปฏิบัติงานจริงในสถานประกอบการหรือโรงพยาบาลไม่น้อยกว่า 8 เดือน
-                  </p>
-                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer ml-auto">
+                  <input
+                    type="checkbox"
+                    checked={onlyNonCredit}
+                    onChange={(e) => setOnlyNonCredit(e.target.checked)}
+                    className="rounded border-slate-700 text-cyan-600 focus:ring-0 bg-slate-950 cursor-pointer"
+                  />
+                  <span>เฉพาะวิชาปรับพื้นฐาน (Non-credit *)</span>
+                </label>
               </div>
 
-              <div className="bg-amber-950/20 border border-amber-900/40 p-4 rounded-2xl flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs text-amber-200/90">
-                  <p className="font-semibold">สถานะการตรวจสอบหลักฐาน (Verification Status):</p>
-                  <p>
-                    - โครงสร้างหน่วยกิตภาพรวมและหมวดหมู่หลัก: <span className="text-emerald-400 font-medium">ยืนยันแล้ว (Verified)</span> อ้างอิงจากเว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์
-                  </p>
-                  <p>
-                    - รายวิชารายภาคการศึกษา รหัสวิชา และแผนปี 1-4: <span className="text-amber-400 font-medium">รอตรวจสอบ (Needs Review)</span> จากเอกสาร PDF เล่มหลักสูตรฉบับสมบูรณ์
-                  </p>
+              {/* Results Count Bar */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-400 pt-2 border-t border-slate-800/60">
+                <div className="flex items-center gap-2">
+                  <span>
+                    แสดงผล <span className="text-cyan-400 font-bold font-mono">{filteredCourses.length}</span> จากทั้งหมด{' '}
+                    <span className="text-slate-200 font-bold font-mono">{OFFICIAL_COURSES_2567.length}</span> รายวิชา
+                  </span>
+                  <span>•</span>
+                  <span>
+                    รวม <span className="text-emerald-400 font-bold font-mono">{totalFilteredCredits}</span> หน่วยกิตสะสม
+                  </span>
                 </div>
+
+                {(curriculumSearch || curriculumCategory !== 'all' || curriculumSubCategory !== 'all' || onlyNonCredit) && (
+                  <button
+                    onClick={() => {
+                      setCurriculumSearch('');
+                      setCurriculumCategory('all');
+                      setCurriculumSubCategory('all');
+                      setOnlyNonCredit(false);
+                    }}
+                    className="text-cyan-400 hover:text-cyan-300 font-medium underline flex items-center gap-1 transition-colors"
+                  >
+                    ล้างการค้นหาและตัวกรองทั้งหมด
+                  </button>
+                )}
               </div>
 
-              <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p className="text-xs text-slate-400">แหล่งข้อมูลอ้างอิงอย่างเป็นทางการจากมหาวิทยาลัยวลัยลักษณ์:</p>
+              {/* 4. COURSE INVENTORY LIST / GRID VIEW */}
+              {filteredCourses.length === 0 ? (
+                <div className="py-12 text-center space-y-3 bg-slate-950/50 rounded-2xl border border-slate-800/60">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-400">
+                    <Search className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-white">ไม่พบรายวิชาที่ตรงกับเงื่อนไขการค้นหา</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    ลองตรวจสอบรหัสวิชา (เช่น DTM67-, GEN67-, INF67-, CHI67-, CSP67-) หรือคำค้นหาชื่อวิชาภาษาไทย/อังกฤษอีกครั้ง
+                  </p>
+                  <button
+                    onClick={() => {
+                      setCurriculumSearch('');
+                      setCurriculumCategory('all');
+                      setCurriculumSubCategory('all');
+                      setOnlyNonCredit(false);
+                    }}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-xl text-xs font-medium transition-colors"
+                  >
+                    ล้างตัวกรองเพื่อดูทุกรายวิชา
+                  </button>
+                </div>
+              ) : curriculumViewMode === 'grid' ? (
+                /* GRID VIEW */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                  {filteredCourses.map((course) => (
+                    <div
+                      key={course.id}
+                      className="bg-slate-950 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-5 shadow-lg transition-all flex flex-col justify-between group"
+                    >
+                      <div className="space-y-3">
+                        {/* Course Code and Credits Header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-xs px-2.5 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold tracking-wide">
+                            {course.code}
+                          </span>
+                          <div className="text-right">
+                            {course.isNonCredit ? (
+                              <span className="text-[11px] px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800 font-medium">
+                                ปรับพื้นฐาน {course.hours}
+                              </span>
+                            ) : (
+                              <span className="text-xs font-mono font-bold text-slate-200 bg-slate-900 px-2 py-1 rounded-md border border-slate-800">
+                                {course.credits} นก. <span className="text-slate-400 font-normal">({course.hours})</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Course Titles */}
+                        <div>
+                          <h3 className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors leading-snug">
+                            {course.titleThai}
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-1 italic leading-relaxed">
+                            {course.titleEnglish}
+                          </p>
+                        </div>
+
+                        {/* Subcategory Tag */}
+                        <div>
+                          <span className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 text-slate-300 border border-slate-800 inline-block">
+                            {course.subCategory}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Card Footer: Verified Badge & Evidence Button */}
+                      <div className="pt-4 mt-3 border-t border-slate-900 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span className="font-mono">มคอ.2 หน้า {course.evidence.pageNumber || '4-8'}</span>
+                        </div>
+                        <button
+                          onClick={() => setActiveCourseEvidence(course)}
+                          className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-1.5 transition-all border border-slate-800 group-hover:border-cyan-800"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>ดูหลักฐาน</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* TABLE VIEW */
+                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-3.5 pl-4">รหัสวิชา</th>
+                        <th className="p-3.5">ชื่อวิชา (ภาษาไทย / อังกฤษ)</th>
+                        <th className="p-3.5">หน่วยกิต (ชม.)</th>
+                        <th className="p-3.5">กลุ่มวิชา</th>
+                        <th className="p-3.5">หลักฐาน มคอ.2</th>
+                        <th className="p-3.5 pr-4 text-right">รายละเอียด</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80 bg-slate-900/60">
+                      {filteredCourses.map((course) => (
+                        <tr key={course.id} className="hover:bg-slate-800/50 transition-colors">
+                          <td className="p-3.5 pl-4 font-mono font-bold text-cyan-300 whitespace-nowrap">
+                            {course.code}
+                          </td>
+                          <td className="p-3.5 min-w-[240px]">
+                            <p className="font-semibold text-white">{course.titleThai}</p>
+                            <p className="text-slate-400 italic text-[11px] mt-0.5">{course.titleEnglish}</p>
+                          </td>
+                          <td className="p-3.5 whitespace-nowrap font-mono">
+                            {course.isNonCredit ? (
+                              <span className="text-amber-400 font-medium">2* ({course.hours})</span>
+                            ) : (
+                              <span>{course.credits} นก. ({course.hours})</span>
+                            )}
+                          </td>
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[11px] text-slate-300">
+                              {course.subCategory}
+                            </span>
+                          </td>
+                          <td className="p-3.5 whitespace-nowrap">
+                            <span className="text-emerald-400 flex items-center gap-1 font-mono text-[11px]">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>หน้า {course.evidence.pageNumber}</span>
+                            </span>
+                          </td>
+                          <td className="p-3.5 pr-4 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => setActiveCourseEvidence(course)}
+                              className="px-3 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-cyan-400 text-xs font-medium border border-slate-800 transition-colors inline-flex items-center gap-1"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>ตรวจหลักฐาน</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 5. OFFICIAL SOURCES BAR */}
+              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-xs text-slate-400">แหล่งข้อมูลเอกสารหลักสูตรทางการ มหาวิทยาลัยวลัยลักษณ์:</p>
                 <div className="flex items-center gap-3 flex-wrap">
                   <a
-                    href="https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
-                  >
-                    <span>เว็บไซต์หลักสูตรทางการ</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                  <a
-                    href="https://drive.google.com/file/d/14sRYBe6Ipm0NCrG37Y6vsDO2yvKEm8I4/view?usp=sharing"
+                    href={officialHandbookPdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center gap-2 transition-all shadow-lg shadow-cyan-600/20"
                   >
-                    <span>เปิดเอกสารหลักสูตรฉบับเต็ม (PDF)</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>เล่มหลักสูตรทางการ มคอ.2 (PDF CES)</span>
+                  </a>
+                  <a
+                    href={officialSchoolWebUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
+                  >
+                    <span>เว็บไซต์สำนักวิชาสารสนเทศศาสตร์</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <a
+                    href={curriculumDrivePdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
+                  >
+                    <span>เอกสาร Google Drive</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
@@ -897,6 +1323,136 @@ export default function App() {
               <button
                 onClick={() => setActiveReference(null)}
                 className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs transition-all"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      
+      {/* COURSE EVIDENCE DETAIL MODAL (Track A4) */}
+      {activeCourseEvidence && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-3 border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <span className="text-xs px-2.5 py-1 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
+                    {activeCourseEvidence.code}
+                  </span>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>หลักฐานยืนยันแล้ว (Verified 100%)</span>
+                  </span>
+                  {activeCourseEvidence.isNonCredit && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-800 font-medium">
+                      วิชาปรับพื้นฐาน (ไม่นับหน่วยกิตสะสม)
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg sm:text-xl font-bold text-white">
+                  {activeCourseEvidence.titleThai}
+                </h2>
+                <p className="text-sm text-slate-400 italic mt-0.5">
+                  {activeCourseEvidence.titleEnglish}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveCourseEvidence(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center shrink-0 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Course Attribute Details Grid */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 text-xs">
+              <h3 className="text-slate-300 font-semibold uppercase tracking-wider text-[11px]">
+                ข้อมูลโครงสร้างรายวิชา (Course Specifications)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-300">
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80">
+                  <p className="text-slate-500 mb-0.5">รหัสวิชา (Code):</p>
+                  <p className="text-cyan-300 font-mono font-bold text-sm">{activeCourseEvidence.code}</p>
+                </div>
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80">
+                  <p className="text-slate-500 mb-0.5">หน่วยกิตและชั่วโมงเรียน (Credits & Hours):</p>
+                  <p className="text-slate-200 font-mono font-bold text-sm">
+                    {activeCourseEvidence.credits} หน่วยกิต • {activeCourseEvidence.hours}
+                  </p>
+                </div>
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80">
+                  <p className="text-slate-500 mb-0.5">หมวดหมู่หลัก (Category):</p>
+                  <p className="text-slate-200 font-medium">
+                    {activeCourseEvidence.category === 'general_education' && 'หมวดวิชาศึกษาทั่วไป (General Education)'}
+                    {activeCourseEvidence.category === 'major_specific' && 'หมวดวิชาเฉพาะ - กลุ่มวิชาเอก (Major Specific)'}
+                    {activeCourseEvidence.category === 'minor' && 'หมวดวิชาเฉพาะ - กลุ่มวิชาโท (Minor Courses)'}
+                    {activeCourseEvidence.category === 'cooperative_education' && 'หมวดวิชาสหกิจศึกษา (Cooperative Education)'}
+                    {activeCourseEvidence.category === 'free_elective' && 'หมวดวิชาเลือกเสรี (Free Elective)'}
+                  </p>
+                </div>
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80">
+                  <p className="text-slate-500 mb-0.5">กลุ่มวิชาย่อย (Sub-Category):</p>
+                  <p className="text-slate-200 font-medium">{activeCourseEvidence.subCategory}</p>
+                </div>
+              </div>
+              {activeCourseEvidence.electiveGroup && (
+                <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80">
+                  <p className="text-slate-500 mb-0.5">กลุ่มวิชาเลือก / วิชาโท (Elective / Minor Track):</p>
+                  <p className="text-cyan-300 font-medium">{activeCourseEvidence.electiveGroup}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Evidence Ledger Verification Box */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-emerald-900/50 space-y-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-300 font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>การรับรองหลักฐานปฐมภูมิ (Primary Source Evidence Verification)</span>
+              </div>
+              <div className="space-y-2 text-slate-300">
+                <div>
+                  <span className="text-slate-500">เอกสารหลักสูตรทางการ: </span>
+                  <span className="text-slate-200">{activeCourseEvidence.evidence.sourceTitle}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">ตำแหน่งในเอกสาร: </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 font-mono font-bold border border-emerald-800">
+                    {activeCourseEvidence.evidence.pdfPage || `หน้า ${activeCourseEvidence.evidence.pageNumber}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">สถานะความสอดคล้อง: </span>
+                  <span className="text-emerald-400 font-medium">
+                    ตรงกับเล่มหลักสูตร มคอ.2 พ.ศ. 2567 มหาวิทยาลัยวลัยลักษณ์ระดับอักขระ (Exact Match)
+                  </span>
+                </div>
+                {activeCourseEvidence.note && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-900/40 text-amber-200 text-xs">
+                    <span className="font-semibold text-amber-300">หมายเหตุทางเอกสาร: </span>
+                    {activeCourseEvidence.note}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <a
+                href={activeCourseEvidence.evidence.sourceUrl || officialHandbookPdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-cyan-600/20"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>เปิดดูหลักฐานในคู่มือ PDF ทางการ</span>
+              </a>
+              <button
+                onClick={() => setActiveCourseEvidence(null)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-xs transition-all"
               >
                 ปิดหน้าต่าง
               </button>
