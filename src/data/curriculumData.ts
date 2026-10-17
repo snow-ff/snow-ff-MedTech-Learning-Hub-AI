@@ -1,10 +1,10 @@
 import { OfficialCurriculum } from '../models/coreModel';
 
 const officialSourceUrl = 'https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/';
-const pdfSourceUrl = 'https://cur-das.wu.ac.th/backEnd/attach/attWu/Digital-Technology-in-Medicine-2567-checo.pdf';
+const pdfSourceUrl = 'https://drive.google.com/file/d/14sRYBe6Ipm0NCrG37Y6vsDO2yvKEm8I4/view?usp=';
 
 export const dtmCurriculum2567: OfficialCurriculum = {
-  programNameThai: 'หลักสูตรวิทยาศาสตรบัณฑิต สาชาเทคโนโลยีดิจิทัลทางการแพทย์',
+  programNameThai: 'หลักสูตรวิทยาศาสตรบัณฑิต สาขาเทคโนโลยีดิจิทัลทางการแพทย์',
   programNameEnglish: 'Bachelor of Science Program in Digital Technology in Medicine',
   academicYear: 2567,
   totalCredits: 124,

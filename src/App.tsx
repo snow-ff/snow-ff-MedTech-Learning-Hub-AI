@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
+import { dtmCurriculum2567 } from './data/curriculumData';
 
 export interface ReferenceItem {
   id: string;
@@ -125,7 +126,7 @@ export function getMockResponse(prompt: string): string {
 export default function App() {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOutUser, clearError } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'vocabulary' | 'references'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'vocabulary' | 'references' | 'curriculum'>('chat');
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg-1',
@@ -351,6 +352,17 @@ export default function App() {
             <Search className="w-4 h-4" />
             แหล่งอ้างอิงสากล
           </button>
+          <button
+            onClick={() => setActiveTab('curriculum')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              activeTab === 'curriculum'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4" />
+            หลักสูตร DTM 2567
+          </button>
         </nav>
 
         {/* Zone 3: Authentication & Status Modal Trigger */}
@@ -482,6 +494,14 @@ export default function App() {
           }`}
         >
           อ้างอิง
+        </button>
+        <button
+          onClick={() => setActiveTab('curriculum')}
+          className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
+            activeTab === 'curriculum' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          }`}
+        >
+          หลักสูตร
         </button>
       </div>
 
@@ -718,6 +738,120 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'curriculum' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
+                      หลักสูตรปรับปรุง พ.ศ. 2567
+                    </span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+                      มหาวิทยาลัยวลัยลักษณ์
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-bold text-white">{dtmCurriculum2567.programNameThai}</h2>
+                  <p className="text-sm text-slate-400 mt-1">{dtmCurriculum2567.programNameEnglish}</p>
+                </div>
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center shrink-0">
+                  <p className="text-xs text-slate-400">หน่วยกิตรวมตลอดหลักสูตร</p>
+                  <p className="text-2xl font-bold text-cyan-400 mt-1">{dtmCurriculum2567.totalCredits} หน่วยกิต</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.generalEducation.categoryName}</h3>
+                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.generalEducation.minCredits} นก.</span>
+                  </div>
+                  <p className="text-xs text-slate-400">{dtmCurriculum2567.categories.generalEducation.description}</p>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.majorSpecific.categoryName}</h3>
+                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.majorSpecific.minCredits} นก.</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    ประกอบด้วย วิชาเฉพาะด้าน (&ge;{dtmCurriculum2567.categories.majorCourses.minCredits} นก.), วิชาโท (&ge;{dtmCurriculum2567.categories.minorCourses.minCredits} นก.), และรวมสหกิจศึกษา ({dtmCurriculum2567.categories.cooperativeEducation.minCredits} นก.)
+                  </p>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-sm text-slate-200">{dtmCurriculum2567.categories.freeElective.categoryName}</h3>
+                    <span className="text-cyan-400 font-mono font-bold text-sm">{dtmCurriculum2567.categories.freeElective.minCredits} นก.</span>
+                  </div>
+                  <p className="text-xs text-slate-400">{dtmCurriculum2567.categories.freeElective.description}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-cyan-400" />
+                    <span>กลุ่มวิชาโทที่เปิดสอน (Minors)</span>
+                  </h3>
+                  <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                    {dtmCurriculum2567.minorsAvailable.map((m, idx) => (
+                      <li key={idx}>{m}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                    <Info className="w-4 h-4 text-cyan-400" />
+                    <span>สหกิจศึกษา (Cooperative Education)</span>
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    {dtmCurriculum2567.categories.cooperativeEducation.minCredits} หน่วยกิต • ปฏิบัติงานจริงในสถานประกอบการหรือโรงพยาบาลไม่น้อยกว่า 8 เดือน
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-amber-950/20 border border-amber-900/40 p-4 rounded-2xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs text-amber-200/90">
+                  <p className="font-semibold">สถานะการตรวจสอบหลักฐาน (Verification Status):</p>
+                  <p>
+                    - โครงสร้างหน่วยกิตภาพรวมและหมวดหมู่หลัก: <span className="text-emerald-400 font-medium">ยืนยันแล้ว (Verified)</span> อ้างอิงจากเว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์
+                  </p>
+                  <p>
+                    - รายวิชารายภาคการศึกษา รหัสวิชา และแผนปี 1-4: <span className="text-amber-400 font-medium">รอตรวจสอบ (Needs Review)</span> จากเอกสาร PDF เล่มหลักสูตรฉบับสมบูรณ์
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p className="text-xs text-slate-400">แหล่งข้อมูลอ้างอิงอย่างเป็นทางการจากมหาวิทยาลัยวลัยลักษณ์:</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <a
+                    href="https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
+                  >
+                    <span>เว็บไซต์หลักสูตร</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <a
+                    href="https://cur-das.wu.ac.th/backEnd/attach/attWu/Digital-Technology-in-Medicine-2567-checo.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-2 transition-all border border-slate-700"
+                  >
+                    <span>เอกสารหลักสูตร พ.ศ. 2567 (PDF)</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         )}
