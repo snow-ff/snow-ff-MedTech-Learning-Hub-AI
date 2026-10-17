@@ -19,7 +19,8 @@ import {
   Filter,
   LogIn,
   LogOut,
-  Shield
+  Shield,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
@@ -38,6 +39,16 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback';
+  references?: Array<{
+    title: string;
+    uri: string;
+    type?: string;
+    linkAccessStatus?: string;
+    verificationStatus?: string;
+    evidenceLocator?: string;
+    contentVersion?: string;
+  }>;
 }
 
 const mockReferences: ReferenceItem[] = [
@@ -137,32 +148,136 @@ export default function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const chatSessionIdRef = useRef<string>(Date.now().toString());
+
+  const handleClearChat = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    chatSessionIdRef.current = Date.now().toString();
+    setIsGenerating(false);
+    setMessages([
+      {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะของ **MedTech Learning Hub AI v1.2** พร้อมให้บริการข้อมูลวิชาการเทคนิคการแพทย์ คลังคำศัพท์เฉพาะทาง และแหล่งอ้างอิงมาตรฐานสากล คุณสามารถพิมพ์คำถามหรือเลือกหัวข้อด้านล่างได้เลยครับ',
+        timestamp: new Date()
+      }
+    ]);
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputQuery.trim() || isGenerating) return;
+    const queryText = inputQuery.trim();
+    if (!queryText || isGenerating) return;
+
+    abortControllerRef.current = new AbortController();
+    const currentSessionId = chatSessionIdRef.current;
 
     const userMsg: Message = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: inputQuery.trim(),
+      content: queryText,
       timestamp: new Date()
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    const queryText = inputQuery.trim();
     setInputQuery('');
     setIsGenerating(true);
 
-    setTimeout(() => {
+    try {
+      const historyCandidates = messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m) => ({
+          role: (m.role === 'assistant' ? 'model' : 'user') as 'user' | 'model',
+          text: m.content.trim()
+        }))
+        .filter((m) => m.text.length > 0 && m.text.length <= 4000);
+
+      const candidatePayload = [...historyCandidates, { role: 'user' as const, text: queryText }];
+      if (candidatePayload.length === 0 || candidatePayload[candidatePayload.length - 1].role !== 'user') {
+        candidatePayload.push({ role: 'user', text: queryText });
+      }
+
+      let validSlice = [...candidatePayload];
+      while (validSlice.length > 0) {
+        const totalChars = validSlice.reduce((acc, m) => acc + m.text.length, 0);
+        const countValid = validSlice.length >= 1 && validSlice.length <= 8;
+        const startsUser = validSlice[0].role === 'user';
+        const endsUser = validSlice[validSlice.length - 1].role === 'user';
+
+        let alternating = true;
+        for (let i = 0; i < validSlice.length - 1; i++) {
+          if (validSlice[i].role === validSlice[i + 1].role) {
+            alternating = false;
+            break;
+          }
+        }
+
+        if (countValid && totalChars <= 15000 && startsUser && endsUser && alternating) {
+          break;
+        }
+
+        if (validSlice.length > 2) {
+          validSlice.splice(0, 2);
+        } else {
+          validSlice = [{ role: 'user', text: queryText }];
+          break;
+        }
+      }
+
+      const response = await fetch('/api/gemini/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: validSlice }),
+        signal: abortControllerRef.current.signal
+      });
+
+      if (currentSessionId !== chatSessionIdRef.current) {
+        return;
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (ไม่ใช่ JSON)');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
       const aiReply: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: getMockResponse(queryText),
+        content: data.text || 'ไม่พบข้อมูลคำตอบจากระบบ',
+        timestamp: new Date(),
+        source: data.source || 'academic_fallback',
+        references: Array.isArray(data.references) ? data.references : undefined
+      };
+
+      setMessages((prev) => [...prev, aiReply]);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return;
+      }
+      if (currentSessionId !== chatSessionIdRef.current) {
+        return;
+      }
+      const errorReply: Message = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: `*(ขออภัย เกิดข้อผิดพลาดในการเชื่อมต่อ: ${err.message || 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้'} กรุณาลองใหม่อีกครั้ง)*`,
         timestamp: new Date()
       };
-      setMessages((prev) => [...prev, aiReply]);
-      setIsGenerating(false);
-    }, 800);
+      setMessages((prev) => [...prev, errorReply]);
+    } finally {
+      if (currentSessionId === chatSessionIdRef.current) {
+        setIsGenerating(false);
+      }
+    }
   };
 
   const filteredVocab = vocabularyList.filter((item) => {
@@ -380,8 +495,18 @@ export default function App() {
                 <Bot className="w-5 h-5 text-cyan-400" />
                 <span className="font-semibold text-sm">MedTech Academic Assistant</span>
               </div>
-              <div className="text-xs text-slate-400">
-                มาตรฐาน CLSI / CAP / WHO / ICSH
+              <div className="flex items-center gap-3">
+                <div className="text-xs text-slate-400 hidden sm:block">
+                  มาตรฐาน CLSI / CAP / WHO / ICSH
+                </div>
+                <button
+                  onClick={handleClearChat}
+                  title="ล้างประวัติแชท"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all border border-slate-700 shadow-sm"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>ล้างแชท</span>
+                </button>
               </div>
             </div>
 
@@ -411,6 +536,55 @@ export default function App() {
                     }`}
                   >
                     <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {msg.source && (
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
+                        <span className={`px-2 py-0.5 rounded-full font-mono border ${
+                          msg.source === 'gemini_grounding'
+                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
+                            : msg.source === 'gemini_standard'
+                            ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800'
+                            : 'bg-amber-950/80 text-amber-300 border-amber-800'
+                        }`}>
+                          {msg.source === 'gemini_grounding'
+                            ? 'Google Search Grounding (Live)'
+                            : msg.source === 'gemini_standard'
+                            ? 'Gemini AI Standard'
+                            : 'Academic Fallback Mode'}
+                        </span>
+                      </div>
+                    )}
+                    {msg.references && msg.references.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          แหล่งอ้างอิง / References (Unverified External Sources)
+                        </p>
+                        <div className="space-y-1.5">
+                          {msg.references.map((ref, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-xs">
+                              <ExternalLink className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (
+                                  <a
+                                    href={ref.uri}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-cyan-400 hover:underline font-medium break-words block"
+                                  >
+                                    {ref.title || ref.uri}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-300 font-medium">{ref.title}</span>
+                                )}
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
+                                  <span>Type: {ref.type || 'reference'}</span>
+                                  <span>• Status: Unverified</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div
                       className={`text-[10px] mt-2 ${
                         msg.role === 'user' ? 'text-blue-200 text-right' : 'text-slate-500'

@@ -40,13 +40,42 @@ export function getAcademicFallback(prompt: string) {
     !p.includes("เม็ดเลือดขาว") && 
     !p.includes("gram") && 
     !p.includes("แกรม") && 
-    !p.includes("stain");
+    !p.includes("stain") &&
+    !p.includes("serum") &&
+    !p.includes("plasma") &&
+    !p.includes("ซีรั่ม") &&
+    !p.includes("พลาสมา");
   
   const prefixNotice = isContextualFollowUp 
     ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอาจอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ไม่สามารถประมวลผลต่อเนื่องแบบ Multi-turn ได้อย่างสมบูรณ์ กรุณาระบุชื่อหัวข้อเต็ม เช่น Flow Cytometry หรือ PCR เพื่อรับข้อมูลสำรองที่ถูกต้อง)*\n\n`
     : `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*\n\n`;
 
-  if (p.includes("flow cytometry") || (p.includes("เม็ดเลือดขาว") && !p.includes("cbc"))) {
+  if (p.includes("serum") || p.includes("plasma") || p.includes("ซีรั่ม") || p.includes("พลาสมา")) {
+    return {
+      text: prefixNotice + `**ความแตกต่างระหว่างซีรั่ม (Serum) และพลาสมา (Plasma) ในงานห้องปฏิบัติการทางการแพทย์**
+
+1. **คำจำกัดความและความแตกต่างพื้นฐาน (Core Definitions & Differences):**
+   - **Plasma (พลาสมา):** ส่วนที่เป็นของเหลวของเลือดที่ไม่ผ่านการแข็งตัว (Unclotted blood) ได้จากการเก็บตัวอย่างเลือดใส่หลอดที่มีสารกันเลือดแข็ง (Anticoagulant เช่น EDTA, Heparin, Sodium Citrate) แล้วนำไปปั่นแยก พลาสมาจะยังมี **ปัจจัยการแข็งตัวของเลือด (Coagulation factors)** ครบถ้วน รวมถึง Fibrinogen
+   - **Serum (ซีรั่ม):** ส่วนที่เป็นของเหลวของเลือดที่ได้ **หลังจากเลือดเกิดการแข็งตัวสมบูรณ์แล้ว (Clotted blood)** นำไปปั่นแยกซีรั่มใส่ออกมา เนื่องจากกระบวนการแข็งตัวได้ใช้ปัจจัยการแข็งตัวไปหมดแล้ว ซีรั่มจึง **ไม่มี Fibrinogen และปัจจัยการแข็งตัว**
+
+2. **หลอดเก็บตัวอย่างโลหิตและสารเติมแต่ง (Specimen Collection Tubes & Additives):**
+   - **หลอดสำหรับเก็บ Plasma:**
+     - *Lavender/Purple Top (EDTA):* สำหรับตรวจทางโลหิตวิทยา (CBC) ป้องกันการแข็งตัวโดยจับกับแคลเซียมไอออน
+     - *Light Blue Top (Sodium Citrate):* สำหรับทดสอบการแข็งตัวของเลือด (Coagulation tests เช่น PT, APTT)
+     - *Green Top (Heparin):* สำหรับตรวจทางเคมีคลินิกบางประเภทที่ต้องการพลาสมา
+   - **หลอดสำหรับเก็บ Serum:**
+     - *Red Top or Tiger/Gold Top (SST - Serum Separator Tube):* มีสารเร่งการแข็งตัวของเลือด (Clot activator) และเจลคั่นเลือด ปล่อยให้เลือดแข็งตัวประมาณ 30-60 นาที ก่อนนำไปปั่นแยกเพื่อเก็บซีรั่ม
+
+3. **ความสำคัญและการประยุกต์ทางคลินิก (Clinical Implications):**
+   - การทดสอบการแข็งตัวของเลือด (Coagulation assays เช่น Prothrombin Time - PT และ Activated Partial Thromboplastin Time - APTT) **ต้องใช้พลาสมา (Sodium Citrate plasma)** เท่านั้น เนื่องจากซีรั่มไม่มีแฟคเตอร์การแข็งตัว
+   - การทดสอบเคมีคลินิกส่วนใหญ่ (Routine chemistry เช่น Electrolytes, Renal function, Liver function, Lipid profile) สามารถใช้ได้ทั้งซีรั่มหรือพลาสมา ขึ้นอยู่กับมาตรฐานและระเบียบปฏิบัติประจำ (SOP) ของห้องปฏิบัติการนั้นๆ`,
+      references: [
+        { title: "StatPearls: Specimen Collection (Serum vs Plasma)", uri: "https://www.ncbi.nlm.nih.gov/books/NBK555956/" },
+        { title: "CLSI H03: Procedures for the Collection of Diagnostic Blood Specimens by Venipuncture", uri: "https://clsi.org/shop/standards/h03/" }
+      ]
+    };
+
+  } else if (p.includes("flow cytometry") || (p.includes("เม็ดเลือดขาว") && !p.includes("cbc"))) {
     return {
       text: prefixNotice + `**หลักการทำงานของ Flow Cytometry ในการจำแนกชนิดเม็ดเลือดขาว (Leukocyte Differentiation)**
 
@@ -211,23 +240,18 @@ export function getAcademicFallback(prompt: string) {
     };
   } else {
     return {
-      text: prefixNotice + `**คำตอบทางวิชาการสำหรับการสอบถามของคุณ**
+      text: prefixNotice + `**ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้**
 
-1. **ระบบบริหารคุณภาพห้องปฏิบัติการ (Quality Management System):**
-   *(อ้างอิงมาตรฐานระบบคุณภาพ: CLSI QMS01 Ed5)*
-   - การตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ต้องดำเนินงานภายใต้ระบบบริหารคุณภาพ (QMS) ที่ครอบคลุม 12 องค์ประกอบคุณภาพสำคัญ (Quality System Essentials) ตั้งแต่ระยะก่อนการวิเคราะห์ (Pre-examination), ระหว่างการวิเคราะห์ (Examination), จนถึงหลังการวิเคราะห์ (Post-examination)
-
-2. **การควบคุมคุณภาพตามการประเมินความเสี่ยง (Risk-Based Quality Control):**
-   *(อ้างอิงมาตรฐานการควบคุมคุณภาพ: CLSI EP23)*
-   - การวางแผนควบคุมคุณภาพ (Quality Control Plan - QCP) ต้องอาศัยหลักการประเมินและบริหารความเสี่ยงที่เหมาะสมกับระบบตรวจวิเคราะห์แต่ละชนิด เพื่อป้องกันและตรวจจับข้อผิดพลาดทั้งเชิงสุ่ม (Random Error) และเชิงระบบ (Systematic Error)
-
-3. **การกำหนดและทวนสอบค่าอ้างอิง (Reference Intervals):**
-   *(อ้างอิงมาตรฐานค่าอ้างอิง: CLSI EP28-A3c)*
-   - ผลการตรวจวิเคราะห์ต้องได้รับการแปลผลร่วมกับช่วงค่าอ้างอิง (Reference Intervals) ที่ผ่านการศึกษาและทวนสอบความเหมาะสมกับกลุ่มประชากรและวิธีตรวจของห้องปฏิบัติการ`,
+ขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม กรุณาระบุคำถามหรือหัวข้อที่ระบบรองรับเพื่อให้ได้ข้อมูลที่ถูกต้อง เช่น:
+- ซีรั่มและพลาสมา (Serum vs Plasma)
+- โฟว์ไซโทเมทรี (Flow Cytometry)
+- พีซีอาร์และเรียลไทม์พีซีอาร์ (PCR / Real-Time PCR)
+- การย้อมสีแกรม (Gram Stain)
+- การตรวจซีบีซีในโรคไข้เลือดออกเดงกี่ (Dengue CBC)
+- หมู่เลือดและการทำครอสแมตช์ (Blood Grouping & Crossmatching)
+- ระบบบริหารคุณภาพห้องปฏิบัติการ (CLSI QMS)`,
       references: [
-        { title: "CLSI QMS01: A Quality Management System Model for Laboratory Services (5th Edition)", uri: "https://clsi.org/shop/standards/qms01/" },
-        { title: "CLSI EP23: Laboratory Quality Control Based on Risk Management (2nd Edition)", uri: "https://clsi.org/shop/standards/ep23/" },
-        { title: "CLSI EP28-A3c: Defining, Establishing, and Verifying Reference Intervals in the Clinical Laboratory (3rd Edition)", uri: "https://clsi.org/shop/standards/ep28/" }
+        { title: "CLSI Guidelines and Clinical Laboratory Standards", uri: "https://clsi.org/" }
       ]
     };
   }

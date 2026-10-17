@@ -1,0 +1,6 @@
+{
+  "summary": "แผนแก้ไข Default Academic Fallback ใน server.ts ให้แยกคำถามที่ไม่รองรับออกเป็นข้อความแจ้งเตือนที่ชัดเจน แทนการแสดงเนื้อหา QMS โดยยังคงรักษา mapping หัวข้อเดิมทั้งหมด (Serum/Plasma, Flow Cytometry, PCR, Gram Stain, Dengue, CBC, Crossmatching, และเพิ่มเงื่อนไขตรวจจับ QMS เฉพาะกิจ)",
+  "updatedAt": "2026-10-17T04:15:51.227816307Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
