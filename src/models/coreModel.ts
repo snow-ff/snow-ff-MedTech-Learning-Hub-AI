@@ -103,4 +103,43 @@ export interface DocumentGroundingContext {
   }>;
 }
 
+// Track B1.4: Academic Answer Verification Models
+export type VerificationVerdict = 'PASS' | 'FAIL' | 'INSUFFICIENT_EVIDENCE' | 'WARNING';
+export type AnswerFidelityStatus = 'aligned' | 'overgeneralized' | 'contradictory' | 'hallucinated' | 'insufficient_evidence';
+
+export interface StageVerificationResult {
+  retrieval: {
+    passed: boolean;
+    relevantChunksCount: number;
+    matchedKeywords: string[];
+    details: string;
+  };
+  evidenceFidelity: {
+    passed: boolean;
+    citedPages: number[];
+    unsupportedCitations: string[];
+    details: string;
+  };
+  answerFidelity: {
+    passed: boolean;
+    status: AnswerFidelityStatus;
+    contradictions: string[];
+    unsupportedClaims: string[];
+    details: string;
+  };
+  reasoningFidelity: {
+    passed: boolean;
+    logicalFlaws: string[];
+    priorTurnPoisoningDetected: boolean;
+    details: string;
+  };
+}
+
+export interface AcademicVerificationReport {
+  isVerified: boolean;
+  verdict: VerificationVerdict;
+  stages: StageVerificationResult;
+  critique: string;
+}
+
 

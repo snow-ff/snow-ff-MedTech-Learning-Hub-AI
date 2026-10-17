@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
 import { retrieveGroundedChunks } from "./src/lib/documentChunker";
+import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
+import { AcademicVerificationReport } from "./src/models/coreModel";
 
 dotenv.config();
 
@@ -106,9 +108,16 @@ export function getAcademicFallback(
   documentContext?: {
     title: string;
     courseCode?: string;
+    hasNativePages?: boolean;
+    totalPages?: number;
     chunks: Array<{ chunkIndex?: number; pageNumber?: number | string; text: string }>;
   }
-) {
+): {
+  text: string;
+  evidenceStatus?: "sufficient" | "insufficient";
+  verification?: AcademicVerificationReport;
+  references: Array<{ title: string; uri: string }>;
+} {
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
     const chunksForRetrieval = documentContext.chunks.map((c, idx) => ({
@@ -127,9 +136,24 @@ export function getAcademicFallback(
       const citations = retrieval.relevantChunks
         .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
         .join('\n\n');
+      const fallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
+
+      const verification = verifyAcademicAnswer({
+        query: prompt,
+        candidateAnswer: fallbackText,
+        document: {
+          title: documentContext.title,
+          hasNativePages: documentContext.hasNativePages,
+          totalPages: documentContext.totalPages,
+          chunks: chunksForRetrieval
+        },
+        conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
+      });
+
       return {
-        text: `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`,
+        text: fallbackText,
         evidenceStatus: "sufficient" as const,
+        verification,
         references: [
           {
             title: `เอกสาร: ${documentContext.title}`,
@@ -138,9 +162,24 @@ export function getAcademicFallback(
         ]
       };
     } else {
+      const fallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`;
+
+      const verification = verifyAcademicAnswer({
+        query: prompt,
+        candidateAnswer: fallbackText,
+        document: {
+          title: documentContext.title,
+          hasNativePages: documentContext.hasNativePages,
+          totalPages: documentContext.totalPages,
+          chunks: chunksForRetrieval
+        },
+        conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
+      });
+
       return {
-        text: `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`,
+        text: fallbackText,
         evidenceStatus: "insufficient" as const,
+        verification,
         references: [
           {
             title: `เอกสาร: ${documentContext.title}`,
@@ -573,26 +612,49 @@ ${evidenceNotice}
         throw new Error("ไม่ได้รับคำตอบจากโมเดล Gemini");
       }
 
-      // If document grounding, build genuine document citations from actual chunks
+      // If document grounding, build genuine document citations from actual chunks and verify academic answer
       if (isDocumentGrounding) {
+        const chunksForVerification = (documentContext.chunks || []).map((c: any, idx: number) => ({
+          id: `ctx-chunk-${idx + 1}`,
+          documentId: 'doc-ctx',
+          chunkIndex: c.chunkIndex || idx + 1,
+          pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
+          hasNativePage: typeof c.pageNumber === 'number',
+          text: c.text || '',
+          charCount: (c.text || '').length
+        }));
+
+        const verification = verifyAcademicAnswer({
+          query: latestPrompt,
+          candidateAnswer: text,
+          document: {
+            title: documentContext.title,
+            hasNativePages: documentContext.hasNativePages,
+            totalPages: documentContext.totalPages,
+            chunks: chunksForVerification
+          },
+          conversationHistory: validatedMessages
+        });
+
         const docReferences = (documentContext.chunks || []).map((c: any) => ({
           title: `เอกสาร: ${documentContext.title}${c.pageNumber ? ` (หน้า ${c.pageNumber})` : ` (ชิ้นส่วนที่ ${c.chunkIndex})`}`,
           uri: `#chunk-${c.chunkIndex}`,
           type: "document_chunk",
           linkAccessStatus: "verified_local",
-          verificationStatus: "source_grounded",
-          reviewer: "System Verified",
+          verificationStatus: verification.stages.evidenceFidelity.passed ? "source_grounded" : "unsupported_citation",
+          reviewer: "Academic Verifier v1.2",
           reviewDate: new Date().toISOString(),
           evidenceLocator: c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`,
           contentVersion: "1.2"
         }));
 
-        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient';
+        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE';
 
         return res.json({
           text,
           source: "document_grounding",
           evidenceStatus: isInsufficient ? "insufficient" : "sufficient",
+          verification,
           references: docReferences.length > 0 ? docReferences : undefined,
         });
       }
@@ -671,12 +733,15 @@ ${evidenceNotice}
     text: fallback.text,
     source: isDocumentGrounding ? "document_grounding" : "academic_fallback",
     evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "insufficient" : undefined),
+    verification: (fallback as any).verification,
     references: fallback.references.map(r => ({
       ...r,
       type: r.uri ? (isDocumentGrounding ? "document_chunk" : "external_academic_link") : "simulated_reference",
       linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
-      verificationStatus: isDocumentGrounding ? "source_grounded" : "unverified",
-      reviewer: isDocumentGrounding ? "System Verified" : null,
+      verificationStatus: isDocumentGrounding
+        ? ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation")
+        : "unverified",
+      reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
       evidenceLocator: r.uri ? (isDocumentGrounding ? "Local Document Chunk" : "Direct Academic Source") : null,
       contentVersion: "1.2"

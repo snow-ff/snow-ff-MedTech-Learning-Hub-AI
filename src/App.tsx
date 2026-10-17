@@ -40,9 +40,10 @@ import {
   officialSchoolWebUrl,
   curriculumDrivePdfUrl
 } from './data/curriculumData';
-import { CourseItem, LearningDocument, EvidenceStatus } from './models/coreModel';
+import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport } from './models/coreModel';
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { rankRelevantChunks, retrieveGroundedChunks } from './lib/documentChunker';
+import { verifyAcademicAnswer } from './lib/academicVerifier';
 
 export interface ReferenceItem {
   id: string;
@@ -61,6 +62,7 @@ export interface Message {
   source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding';
   groundedDocumentTitle?: string;
   evidenceStatus?: EvidenceStatus;
+  verification?: AcademicVerificationReport;
   references?: Array<{
     title: string;
     uri: string;
@@ -163,6 +165,11 @@ export default function App() {
   const [activeReference, setActiveReference] = useState<ReferenceItem | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [expandedVerifications, setExpandedVerifications] = useState<Record<string, boolean>>({});
+
+  const toggleVerification = (id: string) => {
+    setExpandedVerifications(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Curriculum Tab States (Track A4)
   const [curriculumSearch, setCurriculumSearch] = useState('');
@@ -325,11 +332,16 @@ export default function App() {
         documentContextPayload = {
           title: activeDocument.title,
           courseCode: activeDocument.courseCode,
+          hasNativePages: activeDocument.hasNativePages,
+          totalPages: activeDocument.totalPages,
           evidenceStatus: calculatedEvidenceStatus,
           matchedKeywords: retrieval.matchedKeywords,
           chunks: retrieval.relevantChunks.map((c) => ({
+            id: c.id,
+            documentId: c.documentId,
             chunkIndex: c.chunkIndex,
             pageNumber: c.pageNumber,
+            hasNativePage: c.hasNativePage,
             text: c.text
           }))
         };
@@ -362,6 +374,23 @@ export default function App() {
 
       const finalEvidenceStatus = data.evidenceStatus || (documentContextPayload ? calculatedEvidenceStatus : undefined);
 
+      // Verify academic answer using backend report or client-side evaluation guardrail
+      const verificationReport: AcademicVerificationReport | undefined =
+        data.verification ||
+        (activeDocument
+          ? verifyAcademicAnswer({
+              query: queryText,
+              candidateAnswer: data.text || '',
+              document: {
+                title: activeDocument.title,
+                hasNativePages: activeDocument.hasNativePages,
+                totalPages: activeDocument.totalPages,
+                chunks: activeDocument.chunks
+              },
+              conversationHistory: validSlice as any
+            })
+          : undefined);
+
       const aiReply: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
@@ -370,6 +399,7 @@ export default function App() {
         source: data.source || (documentContextPayload ? 'document_grounding' : 'academic_fallback'),
         groundedDocumentTitle: activeDocument ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
+        verification: verificationReport,
         references: Array.isArray(data.references) ? data.references : undefined
       };
 
@@ -750,18 +780,186 @@ export default function App() {
 
                     {msg.groundedDocumentTitle && (
                       <div className={`mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs font-medium ${
-                        msg.evidenceStatus === 'insufficient' ? 'text-amber-300' : 'text-cyan-300'
+                        msg.verification?.verdict === 'FAIL'
+                          ? 'text-rose-300'
+                          : msg.verification?.verdict === 'WARNING'
+                          ? 'text-amber-300'
+                          : msg.evidenceStatus === 'insufficient'
+                          ? 'text-slate-300'
+                          : 'text-cyan-300'
                       }`}>
-                        {msg.evidenceStatus === 'insufficient' ? (
+                        {msg.verification?.verdict === 'FAIL' ? (
+                          <ShieldAlert className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        ) : msg.verification?.verdict === 'WARNING' ? (
                           <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        ) : msg.evidenceStatus === 'insufficient' ? (
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         ) : (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         )}
                         <span className="truncate">
-                          {msg.evidenceStatus === 'insufficient'
+                          {msg.verification?.verdict === 'FAIL'
+                            ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (พบข้อบกพร่อง ไม่ผ่านการรับรองวิชาการ)`
+                            : msg.verification?.verdict === 'WARNING'
+                            ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (มีข้อควรระวังทางวิชาการ — สรุปเกินหลักฐาน)`
+                            : msg.evidenceStatus === 'insufficient'
                             ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ไม่พบหลักฐานตรงในเอกสาร — ไม่คาดเดาข้อมูล)`
                             : `อ้างอิงตรงจากเอกสาร: ${msg.groundedDocumentTitle} (มีหลักฐานรองรับ)`}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Academic Verification Card & Stage Breakdown (Track B1.4 & B1.5) */}
+                    {msg.verification && (
+                      <div className={`mt-3 pt-3 border-t rounded-xl p-3 text-xs ${
+                        msg.verification.verdict === 'PASS'
+                          ? 'border-emerald-800/80 bg-emerald-950/40 text-emerald-200'
+                          : msg.verification.verdict === 'WARNING'
+                          ? 'border-amber-700/80 bg-amber-950/40 text-amber-200'
+                          : msg.verification.verdict === 'INSUFFICIENT_EVIDENCE'
+                          ? 'border-slate-700 bg-slate-950/60 text-slate-300'
+                          : 'border-rose-700/80 bg-rose-950/50 text-rose-200'
+                      }`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 font-semibold">
+                            {msg.verification.verdict === 'PASS' && (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            )}
+                            {msg.verification.verdict === 'WARNING' && (
+                              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                            )}
+                            {msg.verification.verdict === 'INSUFFICIENT_EVIDENCE' && (
+                              <Shield className="w-4 h-4 text-cyan-400 shrink-0" />
+                            )}
+                            {msg.verification.verdict === 'FAIL' && (
+                              <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+                            )}
+                            <span>
+                              {msg.verification.verdict === 'PASS' && 'ผ่านการตรวจสอบวิชาการ (Academic Verification: PASS)'}
+                              {msg.verification.verdict === 'WARNING' && 'คำเตือนวิชาการ: มีข้อความสรุปเกินหลักฐาน (Academic Warning)'}
+                              {msg.verification.verdict === 'INSUFFICIENT_EVIDENCE' && 'ปฏิเสธการตอบตามหลักวิชาการ (Strict Anti-Hallucination)'}
+                              {msg.verification.verdict === 'FAIL' && 'ไม่ผ่านการตรวจสอบวิชาการ (Academic Verification: FAIL)'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleVerification(msg.id)}
+                            className="text-[11px] underline opacity-90 hover:opacity-100 flex items-center gap-1 shrink-0 font-medium cursor-pointer"
+                          >
+                            <span>{expandedVerifications[msg.id] ? 'ย่อผลตรวจ' : 'ผลตรวจ 4 ขั้นตอน'}</span>
+                            {expandedVerifications[msg.id] ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Summary / Warnings depending on verdict */}
+                        {msg.verification.verdict === 'FAIL' && (
+                          <div className="mt-2 text-[11px] bg-rose-950/80 p-2 rounded border border-rose-800 text-rose-200">
+                            <p className="font-semibold text-rose-300">⚠️ ข้อบกพร่องที่ตรวจพบ (ห้ามใช้อ้างอิงโดยตรง):</p>
+                            <ul className="list-disc list-inside mt-1 space-y-0.5 text-rose-200">
+                              {msg.verification.stages.evidenceFidelity.unsupportedCitations.map((e, idx) => (
+                                <li key={idx}>{e}</li>
+                              ))}
+                              {msg.verification.stages.answerFidelity.contradictions.map((e, idx) => (
+                                <li key={idx}>{e}</li>
+                              ))}
+                              {msg.verification.stages.answerFidelity.unsupportedClaims.map((e, idx) => (
+                                <li key={idx}>{e}</li>
+                              ))}
+                              {msg.verification.stages.reasoningFidelity.logicalFlaws.map((e, idx) => (
+                                <li key={idx}>{e}</li>
+                              ))}
+                              {!msg.verification.stages.retrieval.passed && (
+                                <li>{msg.verification.stages.retrieval.details}</li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+
+                        {msg.verification.verdict === 'WARNING' && (
+                          <div className="mt-2 text-[11px] bg-amber-950/80 p-2 rounded border border-amber-800 text-amber-200">
+                            <p className="font-semibold text-amber-300">ข้อความที่ควรตรวจทานเพิ่มเติม:</p>
+                            <ul className="list-disc list-inside mt-1 space-y-0.5 text-amber-200">
+                              {msg.verification.stages.answerFidelity.unsupportedClaims.map((e, idx) => (
+                                <li key={idx}>{e}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {msg.verification.verdict === 'PASS' && (
+                          <p className="mt-1 text-[11px] text-emerald-300/90">
+                            สืบค้นพบหลักฐาน {msg.verification.stages.retrieval.relevantChunksCount} ชิ้นส่วน และอ้างอิงตรงตามเอกสารต้นฉบับ
+                          </p>
+                        )}
+
+                        {msg.verification.verdict === 'INSUFFICIENT_EVIDENCE' && (
+                          <p className="mt-1 text-[11px] text-slate-300">
+                            เอกสารไม่มีหลักฐานตรงกับคำถาม ระบบปฏิเสธการแต่งข้อมูลตามมาตรฐานความสัตย์ซื่อทางวิชาการ
+                          </p>
+                        )}
+
+                        {/* Expanded 4-Stage Audit Details */}
+                        {expandedVerifications[msg.id] && (
+                          <div className="mt-3 pt-2.5 border-t border-slate-700/60 space-y-2 text-[11px]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {/* Stage A */}
+                              <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                <div className="flex items-center justify-between font-semibold">
+                                  <span>Stage A: Retrieval</span>
+                                  <span className={msg.verification.stages.retrieval.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                                    {msg.verification.stages.retrieval.passed ? '✓ ผ่าน' : '✗ ไม่ผ่าน'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-slate-300">{msg.verification.stages.retrieval.details}</p>
+                              </div>
+
+                              {/* Stage B */}
+                              <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                <div className="flex items-center justify-between font-semibold">
+                                  <span>Stage B: Evidence Fidelity</span>
+                                  <span className={msg.verification.stages.evidenceFidelity.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                                    {msg.verification.stages.evidenceFidelity.passed ? '✓ ถูกต้อง' : '✗ พบข้อผิดพลาด'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-slate-300">{msg.verification.stages.evidenceFidelity.details}</p>
+                              </div>
+
+                              {/* Stage C */}
+                              <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                <div className="flex items-center justify-between font-semibold">
+                                  <span>Stage C: Answer Fidelity</span>
+                                  <span className={msg.verification.stages.answerFidelity.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                                    {msg.verification.stages.answerFidelity.passed ? '✓ สอดคล้อง' : '✗ ไม่สอดคล้อง'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-slate-300">{msg.verification.stages.answerFidelity.details}</p>
+                              </div>
+
+                              {/* Stage D */}
+                              <div className="p-2 rounded bg-slate-900/80 border border-slate-800">
+                                <div className="flex items-center justify-between font-semibold">
+                                  <span>Stage D: Reasoning Fidelity</span>
+                                  <span className={msg.verification.stages.reasoningFidelity.passed ? 'text-emerald-400' : 'text-rose-400'}>
+                                    {msg.verification.stages.reasoningFidelity.passed ? '✓ สมบูรณ์' : '✗ บกพร่อง'}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-slate-300">{msg.verification.stages.reasoningFidelity.details}</p>
+                              </div>
+                            </div>
+
+                            {/* Guardrail Disclaimer (Requirement 6) */}
+                            <div className="p-2 rounded bg-slate-950 border border-slate-800/80 text-[10px] text-slate-400 flex items-start gap-1.5">
+                              <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                              <span>
+                                <strong>ขอบเขตของตัวตรวจ (Deterministic Guardrail):</strong> ระบบตรวจสอบคำสำคัญ, การมีอยู่ของหลักฐาน, เลขหน้า และโครงสร้างเชิงตรรกะ เพื่อป้องกัน Hallucination และ Citation ผิดพลาด มิได้แทนที่การประเมินความถูกต้องทางความหมายระดับผู้เชี่ยวชาญวิชาชีพ
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -789,7 +987,7 @@ export default function App() {
                     {msg.references && msg.references.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
                         <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                          แหล่งอ้างอิง / References (Unverified External Sources)
+                          แหล่งอ้างอิง / References
                         </p>
                         <div className="space-y-1.5">
                           {msg.references.map((ref, idx) => (
@@ -810,7 +1008,21 @@ export default function App() {
                                 )}
                                 <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
                                   <span>Type: {ref.type || 'reference'}</span>
-                                  <span>• Status: Unverified</span>
+                                  <span className={
+                                    ref.verificationStatus === 'source_grounded'
+                                      ? 'text-emerald-400 font-medium'
+                                      : ref.verificationStatus === 'unsupported_citation'
+                                      ? 'text-rose-400 font-medium'
+                                      : 'text-slate-500'
+                                  }>
+                                    • Status: {
+                                      ref.verificationStatus === 'source_grounded'
+                                        ? 'Verified Local Chunk'
+                                        : ref.verificationStatus === 'unsupported_citation'
+                                        ? '⚠️ Unsupported Citation'
+                                        : 'Unverified External'
+                                    }
+                                  </span>
                                 </div>
                               </div>
                             </div>
