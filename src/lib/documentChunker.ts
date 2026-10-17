@@ -204,6 +204,36 @@ export const ACADEMIC_STOPWORDS = new Set([
   'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'this', 'that', 'it'
 ]);
 
+// Bilingual MedTech synonyms mapping for cross-lingual Thai-English query matching
+export const MEDTECH_BILINGUAL_SYNONYMS: Record<string, string[]> = {
+  'ความสมบูรณ์ของเม็ดเลือด': ['complete blood count', 'cbc'],
+  'ตรวจนับเม็ดเลือด': ['complete blood count', 'cbc'],
+  'เม็ดเลือดแดง': ['red blood cell', 'rbc', 'erythrocyte'],
+  'เม็ดเลือดขาว': ['white blood cell', 'wbc', 'leukocyte'],
+  'เกล็ดเลือด': ['platelet', 'thrombocyte'],
+  'ฮีโมโกลบิน': ['hemoglobin'],
+  'ฮีมาโตคริต': ['hematocrit'],
+  'น้ำตาลในเลือด': ['glucose', 'plasma glucose', 'fasting plasma glucose', 'fpg'],
+  'น้ำตาลสะสม': ['hba1c', 'glycated hemoglobin'],
+  'การควบคุมคุณภาพ': ['quality control', 'qc', 'westgard'],
+  'ควบคุมคุณภาพ': ['quality control', 'qc', 'westgard'],
+  'ความผิดพลาดแบบสุ่ม': ['random error'],
+  'ความผิดพลาดเชิงระบบ': ['systematic error', 'systematic bias', 'systematic shift'],
+  'ความไว': ['sensitivity', 'recall'],
+  'ความจำเพาะ': ['specificity'],
+  'หลอดเก็บเลือด': ['collection tube', 'specimen tube', 'blood tube'],
+  'หลอดสีม่วง': ['lavender top', 'purple top', 'edta'],
+  'หลอดสีฟ้า': ['light blue top', 'sodium citrate'],
+  'หลอดสีแดง': ['red top', 'clot activator', 'sst'],
+  'การย้อมสี': ['stain', 'gram stain', 'wright-giemsa'],
+  'ซีรั่ม': ['serum'],
+  'พลาสมา': ['plasma'],
+  'สารกันเลือดแข็ง': ['anticoagulant', 'edta', 'heparin', 'citrate'],
+  'การทำงานของไต': ['kidney function', 'renal function', 'bun', 'creatinine', 'egfr'],
+  'การทำงานของตับ': ['liver function', 'lft', 'ast', 'alt', 'alp'],
+  'ระดับไขมัน': ['lipid profile', 'cholesterol', 'triglyceride', 'hdl', 'ldl']
+};
+
 export interface GroundedRetrievalResult {
   relevantChunks: DocumentChunk[];
   hasEvidence: boolean;
@@ -215,6 +245,7 @@ export interface GroundedRetrievalResult {
  * Retrieve and rank chunks with strict academic evidence validation.
  * Distinguishes whether genuine relevant evidence was found vs insufficient evidence.
  * Prevents false positives caused by common Thai stopwords (เช่น และ, ของ, ใน, การ).
+ * Supports cross-lingual matching (Thai medical queries matching English terms and vice versa).
  */
 export function retrieveGroundedChunks(
   chunks: DocumentChunk[],
@@ -265,6 +296,23 @@ export function retrieveGroundedChunks(
       }
     } catch {
       // Fallback if Segmenter is not available
+    }
+  }
+
+  // 1c. Bilingual MedTech synonyms expansion (Thai <-> English)
+  for (const [thaiTerm, enTerms] of Object.entries(MEDTECH_BILINGUAL_SYNONYMS)) {
+    if (cleanQuery.includes(thaiTerm)) {
+      enTerms.forEach(t => candidateTerms.push(t));
+    }
+    for (const enTerm of enTerms) {
+      if (enTerm.length <= 3) {
+        const regex = new RegExp(`(^|[^a-zA-Z0-9])${enTerm}([^a-zA-Z0-9]|$)`, 'i');
+        if (regex.test(cleanQuery)) {
+          candidateTerms.push(thaiTerm);
+        }
+      } else if (cleanQuery.includes(enTerm)) {
+        candidateTerms.push(thaiTerm);
+      }
     }
   }
 
