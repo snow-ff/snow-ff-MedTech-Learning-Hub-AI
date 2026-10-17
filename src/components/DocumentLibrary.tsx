@@ -23,7 +23,8 @@ import {
   getAllDocuments,
   saveDocument,
   deleteDocument,
-  seedSampleDocumentsIfEmpty
+  seedSampleDocumentsIfEmpty,
+  getStorageStatus
 } from '../lib/documentStorage';
 import { chunkText } from '../lib/documentChunker';
 import { extractTextFromFile } from '../lib/pdfExtractor';
@@ -43,6 +44,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
+  const [storageInfo] = useState(() => getStorageStatus());
 
   // Modal States
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -61,6 +63,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
   const [noteType, setNoteType] = useState<DocumentType>('note');
   const [noteTags, setNoteTags] = useState('');
   const [noteContent, setNoteContent] = useState('');
+  const [noteError, setNoteError] = useState<string | null>(null);
+
+  // Deletion Confirmation state
+  const [docToDelete, setDocToDelete] = useState<LearningDocument | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,8 +126,8 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
     try {
       const extracted = await extractTextFromFile(file);
 
-      if (!extracted.text || extracted.text.trim().length === 0) {
-        throw new Error('ไม่พบเนื้อหาข้อความในไฟล์ หรือไฟล์ได้รับการเข้ารหัส');
+      if (!extracted.isReadable || !extracted.text || extracted.text.trim().length === 0) {
+        throw new Error(extracted.unreadableReason || 'ไม่สามารถสกัดข้อความจากเอกสารนี้ได้ (อาจเป็นไฟล์สแกนภาพที่ไม่มี OCR หรือเอกสารถูกเข้ารหัส) ระบบปฏิเสธการนำเข้าเพื่อป้องกันข้อมูลผิดพลาดทางวิชาการ');
       }
 
       setUploadProgress('กำลังจัดทำดัชนีและแบ่งชิ้นส่วนข้อความ (Chunking)...');
@@ -149,7 +155,9 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         totalChars: extracted.text.length,
-        totalPages: extracted.pages ? extracted.pages.length : Math.max(1, Math.ceil(extracted.text.length / 1000)),
+        totalPages: extracted.pages ? extracted.pages.length : undefined,
+        hasNativePages: extracted.hasNativePages,
+        readabilityStatus: 'readable',
         chunks,
         rawSnippet: extracted.text.slice(0, 240) + '...'
       };
@@ -174,9 +182,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
   const handleCreateNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!noteTitle.trim() || !noteContent.trim()) {
-      alert('กรุณากรอกหัวข้อและเนื้อหาโน้ตสรุป');
+      setNoteError('กรุณากรอกหัวข้อและเนื้อหาโน้ตสรุป');
       return;
     }
+    setNoteError(null);
 
     const docId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const chunks = chunkText(noteContent, {
@@ -203,30 +212,41 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       totalChars: noteContent.length,
-      totalPages: Math.max(1, Math.ceil(noteContent.length / 800)),
+      totalPages: undefined,
+      hasNativePages: false,
+      readabilityStatus: 'readable',
       chunks,
       rawSnippet: noteContent.slice(0, 220) + '...'
     };
 
-    await saveDocument(newNoteDoc);
-    await loadDocs();
+    try {
+      await saveDocument(newNoteDoc);
+      await loadDocs();
 
-    // Reset Form
-    setNoteTitle('');
-    setNoteContent('');
-    setNoteCourseCode('');
-    setNoteTags('');
-    setShowNoteModal(false);
+      // Reset Form
+      setNoteTitle('');
+      setNoteContent('');
+      setNoteCourseCode('');
+      setNoteTags('');
+      setNoteError(null);
+      setShowNoteModal(false);
+    } catch (err: any) {
+      setNoteError(err.message || 'เกิดข้อผิดพลาดในการบันทึกเอกสาร');
+    }
   };
 
-  const handleDelete = async (doc: LearningDocument) => {
-    if (confirm(`คุณต้องการลบเอกสาร "${doc.title}" ออกจากคลังเครื่องนี้หรือไม่?`)) {
-      await deleteDocument(doc.id);
-      if (viewingDoc?.id === doc.id) {
-        setViewingDoc(null);
-      }
-      await loadDocs();
+  const handleDelete = (doc: LearningDocument) => {
+    setDocToDelete(doc);
+  };
+
+  const confirmDelete = async () => {
+    if (!docToDelete) return;
+    await deleteDocument(docToDelete.id);
+    if (viewingDoc?.id === docToDelete.id) {
+      setViewingDoc(null);
     }
+    setDocToDelete(null);
+    await loadDocs();
   };
 
   return (
@@ -632,6 +652,13 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
                 />
               </div>
 
+              {noteError && (
+                <div className="p-3 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{noteError}</span>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -696,7 +723,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
                   <div className="flex items-center justify-between text-[11px] text-cyan-400 font-mono">
                     <span>
                       Chunk #{chunk.chunkIndex}
-                      {chunk.pageNumber ? ` • หน้า ${chunk.pageNumber}` : ''}
+                      {chunk.pageNumber ? ` • หน้า ${chunk.pageNumber}` : ' • ชิ้นส่วนสรุป (ไม่มีเลขหน้า)'}
                     </span>
                     <span className="text-slate-500">{chunk.charCount} chars</span>
                   </div>
@@ -732,6 +759,37 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
                   <span>เริ่มถามตอบกับ AI จากเอกสารนี้</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Confirmation Dialog */}
+      {docToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-white text-center mb-1">
+              ยืนยันการลบเอกสาร
+            </h3>
+            <p className="text-xs text-slate-400 text-center mb-5 leading-relaxed">
+              คุณต้องการลบเอกสาร <span className="text-slate-200 font-semibold">"{docToDelete.title}"</span> ออกจากคลังเครื่องนี้หรือไม่? ข้อมูลชิ้นส่วนทั้งหมดจะถูกลบออกถาวร
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => setDocToDelete(null)}
+                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-medium"
+              >
+                ลบเอกสาร
+              </button>
             </div>
           </div>
         </div>

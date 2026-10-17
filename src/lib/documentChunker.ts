@@ -12,6 +12,7 @@ const DEFAULT_OVERLAP_CHARS = 150;
 
 /**
  * Split text into manageable, structured chunks for grounding and reading.
+ * Accurately tracks whether genuine page numbers exist from the source document.
  */
 export function chunkText(rawText: string, options: ChunkOptions = {}): DocumentChunk[] {
   const maxChars = options.maxChunkChars || DEFAULT_MAX_CHARS;
@@ -21,7 +22,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
   const chunks: DocumentChunk[] = [];
   let chunkIndex = 0;
 
-  // Case 1: Pre-extracted pages (e.g. from PDF extractor)
+  // Case 1: Pre-extracted pages (e.g. from PDF extractor with genuine page numbers)
   if (options.pages && options.pages.length > 0) {
     options.pages.forEach((pageText, pIdx) => {
       const pageNumber = pIdx + 1;
@@ -35,6 +36,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
           documentId: docId,
           chunkIndex,
           pageNumber,
+          hasNativePage: true,
           text: cleanPageText,
           charCount: cleanPageText.length
         });
@@ -48,6 +50,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
             documentId: docId,
             chunkIndex,
             pageNumber,
+            hasNativePage: true,
             text: subText,
             charCount: subText.length
           });
@@ -82,6 +85,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
           documentId: docId,
           chunkIndex,
           pageNumber: currentPage,
+          hasNativePage: true,
           text: subText,
           charCount: subText.length
         });
@@ -94,7 +98,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
     }
   }
 
-  // Case 3: Standard single text / markdown / note chunking
+  // Case 3: Standard single text / markdown / note chunking (NO native page numbers)
   const cleanText = rawText.trim();
   if (!cleanText) {
     return [];
@@ -102,13 +106,14 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
 
   const textBlocks = splitStringWithOverlap(cleanText, maxChars, overlap);
   textBlocks.forEach((blockText, idx) => {
-    // Estimate page number assuming ~1500 chars per standard academic page
-    const estimatedPage = Math.floor((idx * (maxChars - overlap)) / 1500) + 1;
+    // Note: Do NOT invent a synthetic page number when none exists in the source!
+    // pageNumber is left undefined to guarantee strict anti-hallucination.
     chunks.push({
       id: `${docId}-chunk-${idx + 1}`,
       documentId: docId,
       chunkIndex: idx + 1,
-      pageNumber: estimatedPage,
+      pageNumber: undefined,
+      hasNativePage: false,
       text: blockText,
       charCount: blockText.length
     });
@@ -119,6 +124,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
 
 /**
  * Helper to split a long string into chunks with overlap at paragraph or sentence boundaries.
+ * Integrates Thai word boundary preservation to avoid splitting medical terms.
  */
 function splitStringWithOverlap(text: string, maxChars: number, overlapChars: number): string[] {
   if (text.length <= maxChars) {
@@ -137,12 +143,12 @@ function splitStringWithOverlap(text: string, maxChars: number, overlapChars: nu
       break;
     }
 
-    // Try finding paragraph break (\n\n) near the end
+    // 1. Try finding paragraph break (\n\n) near the end
     let breakIndex = text.lastIndexOf('\n\n', endIndex);
     if (breakIndex > startIndex + maxChars * 0.6) {
       endIndex = breakIndex + 2;
     } else {
-      // Try finding single newline (\n) or sentence period
+      // 2. Try finding single newline (\n) or sentence period
       breakIndex = text.lastIndexOf('\n', endIndex);
       if (breakIndex > startIndex + maxChars * 0.6) {
         endIndex = breakIndex + 1;
@@ -154,6 +160,21 @@ function splitStringWithOverlap(text: string, maxChars: number, overlapChars: nu
           const spaceIndex = text.lastIndexOf(' ', endIndex);
           if (spaceIndex > startIndex + maxChars * 0.6) {
             endIndex = spaceIndex + 1;
+          } else if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+            // 3. Thai boundary fallback: find word boundary using native Intl.Segmenter
+            try {
+              const segmenter = new (Intl as any).Segmenter('th', { granularity: 'word' });
+              const windowSubstring = text.substring(startIndex, endIndex);
+              const segments = [...segmenter.segment(windowSubstring)];
+              if (segments.length > 1) {
+                const lastSegment = segments[segments.length - 1];
+                if (lastSegment.index > maxChars * 0.6) {
+                  endIndex = startIndex + lastSegment.index;
+                }
+              }
+            } catch {
+              // Ignore if segmenter fails
+            }
           }
         }
       }
@@ -164,47 +185,125 @@ function splitStringWithOverlap(text: string, maxChars: number, overlapChars: nu
       result.push(chunk);
     }
 
-    // Slide window with overlap
+    // Slide window with overlap, ensuring strictly moving forward
     startIndex = Math.max(startIndex + 1, endIndex - overlapChars);
   }
 
   return result;
 }
 
+// Standard Thai and English stopwords to prevent false positives in academic grounding
+export const ACADEMIC_STOPWORDS = new Set([
+  'และ', 'หรือ', 'ของ', 'ใน', 'การ', 'ความ', 'ที่', 'เป็น', 'คือ', 'มี', 'ได้',
+  'ให้', 'กับ', 'จาก', 'โดย', 'ตาม', 'เพื่อ', 'ไป', 'มา', 'จะ', 'ว่า', 'นี้',
+  'นั้น', 'โน้น', 'อัน', 'พวก', 'เช่น', 'กัน', 'แล้ว', 'จึง', 'ทำ', 'ถ้า',
+  'หาก', 'แต่', 'ต้อง', 'กว่า', 'มาก', 'น้อย', 'เท่า', 'ใด', 'อะไร', 'ไหน',
+  'ทำไม', 'อย่างไร', 'ยังไง', 'เท่าไหร่', 'กี่', 'ครับ', 'ค่ะ', 'นะคะ', 'ขอ',
+  'บอก', 'ช่วย', 'หน่อย', 'อยาก', 'ทราบ', 'รู้', 'และ/หรือ',
+  'a', 'an', 'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
+  'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'this', 'that', 'it'
+]);
+
+export interface GroundedRetrievalResult {
+  relevantChunks: DocumentChunk[];
+  hasEvidence: boolean;
+  matchedKeywords: string[];
+  maxScore: number;
+}
+
 /**
- * Rank and select top K most relevant chunks for a given search query using term matching.
+ * Retrieve and rank chunks with strict academic evidence validation.
+ * Distinguishes whether genuine relevant evidence was found vs insufficient evidence.
+ * Prevents false positives caused by common Thai stopwords (เช่น และ, ของ, ใน, การ).
  */
-export function rankRelevantChunks(chunks: DocumentChunk[], query: string, topK: number = 4): DocumentChunk[] {
-  if (!chunks || chunks.length === 0) return [];
-  if (!query || !query.trim()) return chunks.slice(0, topK);
+export function retrieveGroundedChunks(
+  chunks: DocumentChunk[],
+  query: string,
+  topK: number = 4
+): GroundedRetrievalResult {
+  if (!chunks || chunks.length === 0) {
+    return { relevantChunks: [], hasEvidence: false, matchedKeywords: [], maxScore: 0 };
+  }
 
   const cleanQuery = query.toLowerCase().trim();
-  // Extract keywords (words of length >= 2, alphanumeric and Thai characters)
-  const keywords = cleanQuery
-    .split(/[\s,;:.!?()\/+\-]+/)
-    .map(k => k.trim())
-    .filter(k => k.length >= 2);
-
-  if (keywords.length === 0) {
-    return chunks.slice(0, topK);
+  if (!cleanQuery) {
+    return { relevantChunks: chunks.slice(0, Math.min(topK, 2)), hasEvidence: false, matchedKeywords: [], maxScore: 0 };
   }
+
+  // 1. Extract candidate keywords & compound phrases from query
+  const candidateTerms: string[] = [];
+
+  // 1a. Space/punctuation-separated tokens (English terms, acronyms, medical numbers)
+  const tokens = cleanQuery
+    .split(/[\s,;:.!?()\/+\-]+/)
+    .map(t => t.trim())
+    .filter(t => t.length >= 2 && !ACADEMIC_STOPWORDS.has(t) && !/^[0-9\s.,\/#!$%\^&\*;:{}=\-_`~()]+$/.test(t));
+  tokens.forEach(t => candidateTerms.push(t));
+
+  // 1b. Segmenter-based n-grams for continuous Thai script
+  if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+    try {
+      const segmenter = new (Intl as any).Segmenter('th', { granularity: 'word' });
+      const segs = [...segmenter.segment(cleanQuery)].map((s: any) => s.segment.trim().toLowerCase());
+
+      // Combine adjacent segments (1 to 6) while trimming leading/trailing stopwords
+      for (let len = 6; len >= 1; len--) {
+        for (let i = 0; i <= segs.length - len; i++) {
+          const slice = segs.slice(i, i + len);
+          let start = 0;
+          while (start < slice.length && ACADEMIC_STOPWORDS.has(slice[start])) start++;
+          let end = slice.length;
+          while (end > start && ACADEMIC_STOPWORDS.has(slice[end - 1])) end--;
+
+          const cleanSlice = slice.slice(start, end);
+          if (cleanSlice.length === 0) continue;
+          const combined = cleanSlice.join('').trim();
+          if (combined.length >= 2 && !ACADEMIC_STOPWORDS.has(combined)) {
+            candidateTerms.push(combined);
+          }
+        }
+      }
+    } catch {
+      // Fallback if Segmenter is not available
+    }
+  }
+
+  // Remove duplicates and sort longer terms first
+  const uniqueCandidateTerms = Array.from(new Set(candidateTerms)).sort((a, b) => b.length - a.length);
+
+  // If no non-stopword terms were found (e.g. query consists purely of stopwords), reject evidence
+  if (uniqueCandidateTerms.length === 0) {
+    return {
+      relevantChunks: chunks.slice(0, Math.min(topK, 2)),
+      hasEvidence: false,
+      matchedKeywords: [],
+      maxScore: 0
+    };
+  }
+
+  const matchedKeywordsSet = new Set<string>();
 
   const scored = chunks.map(chunk => {
     const chunkLower = chunk.text.toLowerCase();
     let score = 0;
 
-    // Exact phrase match bonus
-    if (chunkLower.includes(cleanQuery)) {
-      score += 15;
+    // Exact full query match (minimum 4 chars to prevent trivial matches)
+    if (cleanQuery.length >= 4 && !ACADEMIC_STOPWORDS.has(cleanQuery) && chunkLower.includes(cleanQuery)) {
+      score += 25;
+      matchedKeywordsSet.add(cleanQuery);
     }
 
-    // Individual keyword hits
-    for (const kw of keywords) {
-      if (chunkLower.includes(kw)) {
-        score += 3;
-        // Count occurrences
-        const matches = chunkLower.split(kw).length - 1;
-        score += Math.min(matches, 5);
+    // Match candidate keywords
+    for (const term of uniqueCandidateTerms) {
+      if (chunkLower.includes(term)) {
+        // Longer academic terms carry significantly more weight than short fragments
+        const termWeight = term.length >= 6 ? 10 : term.length >= 4 ? 6 : 3;
+        score += termWeight;
+        matchedKeywordsSet.add(term);
+
+        // Frequency count (capped at 4)
+        const matchCount = chunkLower.split(term).length - 1;
+        score += Math.min(matchCount, 4);
       }
     }
 
@@ -214,17 +313,33 @@ export function rankRelevantChunks(chunks: DocumentChunk[], query: string, topK:
   // Sort descending by score
   scored.sort((a, b) => b.score - a.score);
 
-  // Return topK chunks that have positive score, or fallback to first topK if none scored > 0
-  const relevant = scored.filter(s => s.score > 0).map(s => s.chunk);
-  if (relevant.length === 0) {
-    return chunks.slice(0, topK);
-  }
+  const positiveScored = scored.filter(s => s.score > 0);
+  const hasEvidence = positiveScored.length > 0;
+  const relevantChunks = hasEvidence
+    ? positiveScored.slice(0, topK).map(s => s.chunk)
+    : chunks.slice(0, Math.min(topK, 2));
 
-  return relevant.slice(0, topK);
+  // Prune matchedKeywords to keep key terms
+  const finalMatchedKeywords = Array.from(matchedKeywordsSet);
+
+  return {
+    relevantChunks,
+    hasEvidence,
+    matchedKeywords: finalMatchedKeywords,
+    maxScore: scored[0]?.score || 0
+  };
+}
+
+/**
+ * Backward-compatible helper to rank and select top K most relevant chunks for a given search query.
+ */
+export function rankRelevantChunks(chunks: DocumentChunk[], query: string, topK: number = 4): DocumentChunk[] {
+  return retrieveGroundedChunks(chunks, query, topK).relevantChunks;
 }
 
 /**
  * Format grounding context for LLM prompt.
+ * Only includes "หน้า X" if the chunk genuinely has a native page number.
  */
 export function buildGroundingContext(
   documentTitle: string,
@@ -233,7 +348,7 @@ export function buildGroundingContext(
 ): string {
   const header = `=== เอกสารอ้างอิง: ${documentTitle}${courseCode ? ` (รหัสวิชา: ${courseCode})` : ''} ===`;
   const body = chunks
-    .map(c => `[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
+    .map(c => `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
     .join('\n\n---\n\n');
 
   return `${header}\n\n${body}`;

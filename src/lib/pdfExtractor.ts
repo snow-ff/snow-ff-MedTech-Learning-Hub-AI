@@ -80,7 +80,7 @@ export async function extractTextFromPdf(file: File): Promise<{ pages: string[];
 /**
  * Fallback binary text scanner for simple unencrypted PDFs if CDN is offline
  */
-function extractTextFromPdfBinaryFallback(buffer: ArrayBuffer): { pages: string[]; totalText: string } {
+export function extractTextFromPdfBinaryFallback(buffer: ArrayBuffer): { pages: string[]; totalText: string } {
   const bytes = new Uint8Array(buffer);
   let asciiText = '';
   // Convert buffer to string in chunks
@@ -101,23 +101,28 @@ function extractTextFromPdfBinaryFallback(buffer: ArrayBuffer): { pages: string[
   }
 
   const rawText = matches.join(' ').replace(/\\[nrt]/g, ' ').trim();
-  const pages = [rawText.length > 0 ? rawText : 'เอกสาร PDF (ไม่พบข้อความธรรมดาที่แยกได้โดยตรง)'];
+  const pages = rawText.length > 0 ? [rawText] : [];
 
   return {
     pages,
-    totalText: pages[0]
+    totalText: rawText
   };
+}
+
+export interface ExtractedFileResult {
+  title: string;
+  text: string;
+  pages?: string[];
+  fileType: 'pdf' | 'slide' | 'note' | 'paper' | 'text';
+  hasNativePages: boolean;
+  isReadable: boolean;
+  unreadableReason?: string;
 }
 
 /**
  * High-level parser for any supported learning file (.txt, .md, .pdf)
  */
-export async function extractTextFromFile(file: File): Promise<{
-  title: string;
-  text: string;
-  pages?: string[];
-  fileType: 'pdf' | 'slide' | 'note' | 'paper' | 'text';
-}> {
+export async function extractTextFromFile(file: File): Promise<ExtractedFileResult> {
   const filename = file.name;
   const lowerName = filename.toLowerCase();
 
@@ -126,21 +131,33 @@ export async function extractTextFromFile(file: File): Promise<{
 
   if (lowerName.endsWith('.pdf')) {
     const { pages, totalText } = await extractTextFromPdf(file);
+    const cleanText = totalText.trim();
+    const isReadable = cleanText.length > 0 && pages.length > 0;
+
     return {
       title,
-      text: totalText,
-      pages,
-      fileType: 'pdf'
+      text: cleanText,
+      pages: isReadable ? pages : [],
+      fileType: 'pdf',
+      hasNativePages: true,
+      isReadable,
+      unreadableReason: isReadable
+        ? undefined
+        : 'ไม่พบเนื้อหาข้อความในไฟล์ PDF (อาจเป็นไฟล์สแกนภาพที่ไม่มีข้อความ OCR หรือไฟล์ได้รับการเข้ารหัส)'
     };
   }
 
   // For text/markdown files (.txt, .md, .json, .csv)
-  const text = await file.text();
+  const text = (await file.text()).trim();
   const fileType = lowerName.endsWith('.md') ? 'note' : 'text';
+  const isReadable = text.length > 0;
 
   return {
     title,
     text,
-    fileType
+    fileType,
+    hasNativePages: false,
+    isReadable,
+    unreadableReason: isReadable ? undefined : 'ไฟล์ข้อความว่างเปล่า ไม่มีเนื้อหาสำหรับการเรียนรู้'
   };
 }

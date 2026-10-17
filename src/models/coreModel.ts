@@ -58,12 +58,14 @@ export interface OfficialCurriculum {
 
 // Track B1: Learning Document Foundation Models
 export type DocumentType = 'pdf' | 'slide' | 'note' | 'paper' | 'text';
+export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable';
 
 export interface DocumentChunk {
   id: string;
   documentId: string;
   chunkIndex: number;
-  pageNumber?: number;
+  pageNumber?: number; // Only present if document has genuine native pages (e.g. PDF)
+  hasNativePage?: boolean;
   text: string;
   charCount: number;
   heading?: string;
@@ -82,6 +84,8 @@ export interface LearningDocument {
   updatedAt: string;
   totalChars: number;
   totalPages?: number;
+  hasNativePages?: boolean; // true if document has physical/native pages, false for unpaged notes
+  readabilityStatus?: 'readable' | 'unreadable' | 'warning';
   chunks: DocumentChunk[];
   rawSnippet?: string;
 }
@@ -90,10 +94,13 @@ export interface DocumentGroundingContext {
   documentId: string;
   title: string;
   courseCode?: string;
+  evidenceStatus?: EvidenceStatus;
+  matchedKeywords?: string[];
   chunks: Array<{
     chunkIndex: number;
     pageNumber?: number | string;
     text: string;
   }>;
 }
+
 

@@ -5,11 +5,42 @@ const DB_NAME = 'MedTechLearningHub_DB';
 const DB_VERSION = 1;
 const STORE_NAME = 'learning_documents';
 
+export class StorageQuotaExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StorageQuotaExceededError';
+  }
+}
+
+export interface StorageStatus {
+  mode: 'indexedDB' | 'localStorage' | 'memory';
+  isPersistent: boolean;
+  warning?: string;
+}
+
 // In-memory fallback cache for SSR/Vitest environments or when IndexedDB is not available
 const memoryStorage: Map<string, LearningDocument> = new Map();
 
-function isIndexedDBAvailable(): boolean {
+export function isIndexedDBAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
+}
+
+export function getStorageStatus(): StorageStatus {
+  if (isIndexedDBAvailable()) {
+    return { mode: 'indexedDB', isPersistent: true };
+  }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return {
+      mode: 'localStorage',
+      isPersistent: true,
+      warning: 'เบราว์เซอร์ไม่รองรับ IndexedDB กำลังใช้ localStorage ซึ่งมีขีดจำกัดขนาดข้อมูล (~5MB)'
+    };
+  }
+  return {
+    mode: 'memory',
+    isPersistent: false,
+    warning: 'กำลังใช้หน่วยความจำชั่วคราว ข้อมูลจะสูญหายเมื่อรีเฟรชหน้าเว็บ'
+  };
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -41,17 +72,21 @@ function openDB(): Promise<IDBDatabase> {
 
 /**
  * Save or update a learning document in IndexedDB (or memory fallback).
+ * Throws StorageQuotaExceededError if quota is exceeded in fallback mode.
  */
 export async function saveDocument(doc: LearningDocument): Promise<void> {
   if (!isIndexedDBAvailable()) {
     memoryStorage.set(doc.id, { ...doc });
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
         const all = Array.from(memoryStorage.values());
         window.localStorage.setItem('medtech_docs_fallback', JSON.stringify(all));
+      } catch (err: any) {
+        console.error('[DocumentStorage] localStorage quota exceeded:', err);
+        throw new StorageQuotaExceededError(
+          `ขนาดเอกสารเกินขีดจำกัดของ localStorage (${Math.round(doc.fileSize ? doc.fileSize / 1024 : 0)} KB) ไม่สามารถบันทึกข้ามเซสชันได้ กรุณาใช้เบราว์เซอร์ที่รองรับ IndexedDB หรือลบเอกสารเก่าออกก่อน`
+        );
       }
-    } catch {
-      // Ignore localStorage quote limits
     }
     return;
   }
@@ -64,6 +99,7 @@ export async function saveDocument(doc: LearningDocument): Promise<void> {
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error || new Error('Error saving document'));
+    transaction.onerror = () => reject(transaction.error || new Error('Transaction error saving document'));
   });
 }
 
@@ -253,7 +289,9 @@ export async function seedSampleDocumentsIfEmpty(): Promise<LearningDocument[]> 
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     totalChars: sample1Text.length,
-    totalPages: Math.max(1, Math.ceil(sample1Text.length / 800)),
+    totalPages: undefined,
+    hasNativePages: false,
+    readabilityStatus: 'readable',
     chunks: chunks1,
     rawSnippet: sample1Text.slice(0, 200) + '...'
   };
@@ -272,7 +310,9 @@ export async function seedSampleDocumentsIfEmpty(): Promise<LearningDocument[]> 
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     updatedAt: new Date(Date.now() - 86400000).toISOString(),
     totalChars: sample2Text.length,
-    totalPages: Math.max(1, Math.ceil(sample2Text.length / 800)),
+    totalPages: undefined,
+    hasNativePages: false,
+    readabilityStatus: 'readable',
     chunks: chunks2,
     rawSnippet: sample2Text.slice(0, 200) + '...'
   };

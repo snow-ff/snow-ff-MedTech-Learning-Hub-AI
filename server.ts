@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
+import { retrieveGroundedChunks } from "./src/lib/documentChunker";
 
 dotenv.config();
 
@@ -110,22 +111,25 @@ export function getAcademicFallback(
 ) {
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
-    const p = prompt.toLowerCase();
-    const keywords = p.split(/[\s,;:.!?()\/+\-]+/).filter(k => k.length >= 2);
+    const chunksForRetrieval = documentContext.chunks.map((c, idx) => ({
+      id: `ctx-chunk-${idx + 1}`,
+      documentId: 'doc-ctx',
+      chunkIndex: c.chunkIndex || idx + 1,
+      pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
+      hasNativePage: typeof c.pageNumber === 'number',
+      text: c.text,
+      charCount: c.text.length
+    }));
 
-    // Find chunks matching query keywords
-    const matchedChunks = documentContext.chunks.filter(c => {
-      const cText = c.text.toLowerCase();
-      return keywords.some(k => cText.includes(k));
-    });
+    const retrieval = retrieveGroundedChunks(chunksForRetrieval, prompt, 3);
 
-    if (matchedChunks.length > 0) {
-      const citations = matchedChunks
-        .slice(0, 3)
-        .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
+    if (retrieval.hasEvidence && retrieval.relevantChunks.length > 0) {
+      const citations = retrieval.relevantChunks
+        .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
         .join('\n\n');
       return {
         text: `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`,
+        evidenceStatus: "sufficient" as const,
         references: [
           {
             title: `เอกสาร: ${documentContext.title}`,
@@ -136,6 +140,7 @@ export function getAcademicFallback(
     } else {
       return {
         text: `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`,
+        evidenceStatus: "insufficient" as const,
         references: [
           {
             title: `เอกสาร: ${documentContext.title}`,
@@ -502,11 +507,22 @@ app.post("/api/gemini/generate", async (req, res) => {
 2. สำหรับรายละเอียดรายวิชารายปี รายภาคการศึกษา (เช่น ปี 4) หรือรหัสวิชาปลีกย่อย ข้อมูลยังอยู่ในสถานะ "รอตรวจสอบ" (Needs Review) หากผู้ใช้ถามถึงรายวิชาเฉพาะที่ยังไม่มีหลักฐาน ให้ตอบตรง ๆ ว่ายังไม่มีข้อมูลหรือยังตรวจสอบไม่ครบ ห้ามแต่งรหัสวิชา ชื่อวิชา หรือหน่วยกิตขึ้นเอง
 3. แยกแยะข้อมูลหลักสูตรทางการออกจากข้อมูลภายนอกหรือข้อมูลผู้ใช้ให้ชัดเจน และหากหลักฐานไม่เพียงพอให้บอกตรง ๆ ว่ายังยืนยันไม่ได้`;
 
+  const isDocumentGrounding = Boolean(
+    documentContext &&
+    typeof documentContext === 'object' &&
+    Array.isArray(documentContext.chunks) &&
+    documentContext.chunks.length > 0
+  );
+
   // If document grounding context is attached, switch instruction to strict document grounding
-  if (documentContext && typeof documentContext === 'object' && Array.isArray(documentContext.chunks) && documentContext.chunks.length > 0) {
+  if (isDocumentGrounding) {
     const formattedChunks = documentContext.chunks
-      .map((c: any) => `[ส่วนอ้างอิง ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
+      .map((c: any) => `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
       .join('\n\n');
+
+    const evidenceNotice = documentContext.evidenceStatus === 'insufficient'
+      ? `\n*** ข้อควรระวัง: ระบบตรวจสอบแล้วว่าคำถามของผู้ใช้ไม่มีคำสำคัญใดตรงกับเนื้อหาในเอกสารที่แนบมาอย่างมีนัยสำคัญ ***\nให้ตอบว่า "จากการตรวจสอบเนื้อหาในเอกสาร '${documentContext.title}' ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" โดยห้ามแต่งข้อมูลขึ้นมาเองเด็ดขาด\n`
+      : '';
 
     systemInstruction = `คุณคือผู้ช่วย AI สรุปและตอบคำถามเชิงวิชาการจากเอกสารการเรียนรู้ (Document-Grounded Learning Assistant) สำหรับ MedTech Learning Hub AI
 คุณกำลังช่วยผู้ใช้ศึกษาเนื้อหาจากเอกสาร: "${documentContext.title || 'เอกสารการเรียนรู้'}" ${documentContext.courseCode ? `(เชื่อมโยงรายวิชา: ${documentContext.courseCode})` : ''}
@@ -514,14 +530,13 @@ app.post("/api/gemini/generate", async (req, res) => {
 === เนื้อหาเอกสารอ้างอิงที่แนบมา (Document Grounding Context) ===
 ${formattedChunks}
 =============================================================
-
+${evidenceNotice}
 กฎเหล็กในการตอบคำถามอย่างเคร่งครัด (Strict Anti-Hallucination & Document Grounding):
 1. ให้ตอบคำถามโดยอ้างอิงข้อมูลจาก "เนื้อหาเอกสารอ้างอิง" ด้านบนเป็นหลัก
-2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" หรือ "[ส่วนที่ 1]" ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร
+2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" (เฉพาะกรณีที่เอกสารมีเลขหน้าจริง) หรือ "[ส่วนที่ 1]" (กรณีเป็นบันทึกสรุป/ข้อความที่ไม่มีเลขหน้า) ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร ห้ามแต่งเลขหน้าขึ้นมาเองเด็ดขาด
 3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" หรือ "ในเอกสารไม่มีรายละเอียดเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
 4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้`;
   }
-
 
   // Map validated messages to Gemini SDK contents format
   const contents = validatedMessages.map(m => ({
@@ -537,15 +552,15 @@ ${formattedChunks}
     attempt++;
     const attemptStartTime = Date.now();
     try {
-      // Use ThinkingLevel.LOW and googleSearch grounding tool with multi-turn contents
+      // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",
         contents,
         config: {
           systemInstruction,
-          temperature: 0.3,
+          temperature: isDocumentGrounding ? 0.1 : 0.3,
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          tools: [{ googleSearch: {} }],
+          tools: isDocumentGrounding ? undefined : [{ googleSearch: {} }],
         },
       });
 
@@ -558,7 +573,31 @@ ${formattedChunks}
         throw new Error("ไม่ได้รับคำตอบจากโมเดล Gemini");
       }
 
-      // Safely extract grounding metadata references
+      // If document grounding, build genuine document citations from actual chunks
+      if (isDocumentGrounding) {
+        const docReferences = (documentContext.chunks || []).map((c: any) => ({
+          title: `เอกสาร: ${documentContext.title}${c.pageNumber ? ` (หน้า ${c.pageNumber})` : ` (ชิ้นส่วนที่ ${c.chunkIndex})`}`,
+          uri: `#chunk-${c.chunkIndex}`,
+          type: "document_chunk",
+          linkAccessStatus: "verified_local",
+          verificationStatus: "source_grounded",
+          reviewer: "System Verified",
+          reviewDate: new Date().toISOString(),
+          evidenceLocator: c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`,
+          contentVersion: "1.2"
+        }));
+
+        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient';
+
+        return res.json({
+          text,
+          source: "document_grounding",
+          evidenceStatus: isInsufficient ? "insufficient" : "sufficient",
+          references: docReferences.length > 0 ? docReferences : undefined,
+        });
+      }
+
+      // Safely extract grounding metadata references for general search mode
       const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
       const references: Array<{ title: string; uri: string }> = [];
       if (groundingMetadata && groundingMetadata.groundingChunks) {
@@ -630,15 +669,16 @@ ${formattedChunks}
   const fallback = getAcademicFallback(latestPrompt, validatedMessages, documentContext);
   return res.json({
     text: fallback.text,
-    source: "academic_fallback",
+    source: isDocumentGrounding ? "document_grounding" : "academic_fallback",
+    evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "insufficient" : undefined),
     references: fallback.references.map(r => ({
       ...r,
-      type: r.uri ? "external_academic_link" : "simulated_reference",
-      linkAccessStatus: "unknown",
-      verificationStatus: "unverified",
-      reviewer: null,
-      reviewDate: null,
-      evidenceLocator: r.uri ? "Direct Academic Source" : null,
+      type: r.uri ? (isDocumentGrounding ? "document_chunk" : "external_academic_link") : "simulated_reference",
+      linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
+      verificationStatus: isDocumentGrounding ? "source_grounded" : "unverified",
+      reviewer: isDocumentGrounding ? "System Verified" : null,
+      reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
+      evidenceLocator: r.uri ? (isDocumentGrounding ? "Local Document Chunk" : "Direct Academic Source") : null,
       contentVersion: "1.2"
     })),
   });

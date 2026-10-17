@@ -40,9 +40,9 @@ import {
   officialSchoolWebUrl,
   curriculumDrivePdfUrl
 } from './data/curriculumData';
-import { CourseItem, LearningDocument } from './models/coreModel';
+import { CourseItem, LearningDocument, EvidenceStatus } from './models/coreModel';
 import { DocumentLibrary } from './components/DocumentLibrary';
-import { rankRelevantChunks } from './lib/documentChunker';
+import { rankRelevantChunks, retrieveGroundedChunks } from './lib/documentChunker';
 
 export interface ReferenceItem {
   id: string;
@@ -60,6 +60,7 @@ export interface Message {
   timestamp: Date;
   source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding';
   groundedDocumentTitle?: string;
+  evidenceStatus?: EvidenceStatus;
   references?: Array<{
     title: string;
     uri: string;
@@ -315,14 +316,18 @@ export default function App() {
         }
       }
 
-      // If activeDocument is selected, rank relevant chunks for context grounding
+      // If activeDocument is selected, retrieve relevant chunks with grounding validation
       let documentContextPayload: any = undefined;
+      let calculatedEvidenceStatus: 'sufficient' | 'insufficient' = 'sufficient';
       if (activeDocument && activeDocument.chunks && activeDocument.chunks.length > 0) {
-        const topChunks = rankRelevantChunks(activeDocument.chunks, queryText, 4);
+        const retrieval = retrieveGroundedChunks(activeDocument.chunks, queryText, 4);
+        calculatedEvidenceStatus = retrieval.hasEvidence ? 'sufficient' : 'insufficient';
         documentContextPayload = {
           title: activeDocument.title,
           courseCode: activeDocument.courseCode,
-          chunks: topChunks.map((c) => ({
+          evidenceStatus: calculatedEvidenceStatus,
+          matchedKeywords: retrieval.matchedKeywords,
+          chunks: retrieval.relevantChunks.map((c) => ({
             chunkIndex: c.chunkIndex,
             pageNumber: c.pageNumber,
             text: c.text
@@ -355,6 +360,8 @@ export default function App() {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
 
+      const finalEvidenceStatus = data.evidenceStatus || (documentContextPayload ? calculatedEvidenceStatus : undefined);
+
       const aiReply: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
@@ -362,6 +369,7 @@ export default function App() {
         timestamp: new Date(),
         source: data.source || (documentContextPayload ? 'document_grounding' : 'academic_fallback'),
         groundedDocumentTitle: activeDocument ? activeDocument.title : undefined,
+        evidenceStatus: finalEvidenceStatus,
         references: Array.isArray(data.references) ? data.references : undefined
       };
 
@@ -741,9 +749,19 @@ export default function App() {
                     <div className="whitespace-pre-wrap">{msg.content}</div>
 
                     {msg.groundedDocumentTitle && (
-                      <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs text-cyan-300 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span className="truncate">อ้างอิงจากเอกสาร: {msg.groundedDocumentTitle}</span>
+                      <div className={`mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs font-medium ${
+                        msg.evidenceStatus === 'insufficient' ? 'text-amber-300' : 'text-cyan-300'
+                      }`}>
+                        {msg.evidenceStatus === 'insufficient' ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {msg.evidenceStatus === 'insufficient'
+                            ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ไม่พบหลักฐานตรงในเอกสาร — ไม่คาดเดาข้อมูล)`
+                            : `อ้างอิงตรงจากเอกสาร: ${msg.groundedDocumentTitle} (มีหลักฐานรองรับ)`}
+                        </span>
                       </div>
                     )}
 

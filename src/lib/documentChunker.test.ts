@@ -16,7 +16,8 @@ describe('documentChunker', () => {
       expect(chunks[0].documentId).toBe('doc-test-1');
       expect(chunks[0].chunkIndex).toBe(1);
       expect(chunks[0].charCount).toBe(chunks[0].text.length);
-      expect(chunks[0].pageNumber).toBe(1);
+      expect(chunks[0].pageNumber).toBeUndefined();
+      expect(chunks[0].hasNativePage).toBe(false);
     });
 
     it('should maintain explicit page numbers when pre-extracted pages are supplied', () => {
@@ -119,7 +120,7 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
 
       const formatted = buildGroundingContext('Clinical Chemistry Guide', chunks, 'DTM101');
       expect(formatted).toContain('=== เอกสารอ้างอิง: Clinical Chemistry Guide (รหัสวิชา: DTM101) ===');
-      expect(formatted).toContain('[ส่วนอ้างอิง 1 | หน้า 2]');
+      expect(formatted).toContain('[ส่วนอ้างอิง: ชิ้นส่วนที่ 1 | หน้า 2]');
       expect(formatted).toContain('HbA1c >= 6.5%');
     });
   });
