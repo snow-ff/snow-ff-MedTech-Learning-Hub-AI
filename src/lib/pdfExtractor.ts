@@ -149,6 +149,27 @@ export async function extractTextFromFile(file: File): Promise<ExtractedFileResu
 
   // For text/markdown files (.txt, .md, .json, .csv)
   const text = (await file.text()).trim();
+  const lowerText = text.toLowerCase();
+
+  // Guard against erroneous HTML error pages or cookie check responses downloaded instead of markdown content
+  const isHtmlErrorOrCookieCheck = 
+    lowerText.includes('<!doctype html') ||
+    lowerText.includes('<html') ||
+    lowerText.includes('cookie check') ||
+    lowerText.includes('cloudflare') ||
+    lowerText.includes('access denied');
+
+  if (isHtmlErrorOrCookieCheck) {
+    return {
+      title,
+      text: '',
+      fileType: 'note',
+      hasNativePages: false,
+      isReadable: false,
+      unreadableReason: 'ไฟล์ที่เลือกเป็นหน้าเว็บ HTML (ข้อผิดพลาดหรือการตรวจสอบ Cookie/Cloudflare) มิใช่เนื้อหาเอกสารการเรียนรู้ที่ถูกต้อง กรุณาดาวน์โหลดไฟล์ต้นฉบับ .md อีกครั้ง'
+    };
+  }
+
   const fileType = lowerName.endsWith('.md') ? 'note' : 'text';
   const isReadable = text.length > 0;
 

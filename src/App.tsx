@@ -42,6 +42,8 @@ import {
 } from './data/curriculumData';
 import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport } from './models/coreModel';
 import { DocumentLibrary } from './components/DocumentLibrary';
+import { LearningGuideModal } from './components/LearningGuideModal';
+import { hasDtmLearningGuide } from './data/dtmLearningGuides';
 import { rankRelevantChunks, retrieveGroundedChunks } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
 
@@ -118,31 +120,55 @@ const mockReferences: ReferenceItem[] = [
 ];
 
 export const vocabularyList = [
-  { term: 'Aphaeresis', thai: 'กระบวนการแยกส่วนประกอบของเลือด', category: 'Blood Bank' },
-  { term: 'Anisocytosis', thai: 'ภาวะที่เม็ดเลือดแดงมีขนาดแตกต่างกันมาก', category: 'Hematology' },
-  { term: 'Bacteremia', thai: 'ภาวะที่มีเชื้อแบคทีเรียอยู่ในกระแสเลือด', category: 'Microbiology' },
-  { term: 'Chromatography', thai: 'กระบวนการแยกสารผสมตามคุณสมบัติทางเคมี', category: 'Clinical Chemistry' },
-  { term: 'Flow Cytometry', thai: 'เทคนิคการวัดคุณสมบัติทางแสงและกายภาพของเซลล์', category: 'Hematology/Immunology' },
-  { term: 'Hemolysis', thai: 'ภาวะการแตกตัวของเม็ดเลือดแดง', category: 'General Laboratory' },
-  { term: 'Polymerase Chain Reaction (PCR)', thai: 'ปฏิกิริยาลูกโซ่โพลิเมอเรสสำหรับตรวจสารพันธุกรรม', category: 'Molecular Pathology' },
-  { term: 'Spectrophotometry', thai: 'การวัดความเข้มแสงเพื่อวิเคราะห์ความเข้มข้นสารละลาย', category: 'Clinical Chemistry' }
+  // Health Informatics & Systems
+  { term: 'Electronic Health Record (EHR)', thai: 'ระบบบันทึกข้อมูลสุขภาพผู้ป่วยในรูปแบบดิจิทัลที่เข้าถึงและแลกเปลี่ยนได้ข้ามสถานพยาบาล', category: 'Health Informatics' },
+  { term: 'Electronic Medical Record (EMR)', thai: 'เวชระเบียนอิเล็กทรอนิกส์ที่บันทึกประวัติและการรักษาภายในสถานพยาบาลหนึ่งแห่ง', category: 'Health Informatics' },
+  { term: 'Hospital Information System (HIS)', thai: 'ระบบสารสนเทศโรงพยาบาลสำหรับจัดการงานเวชระเบียน การตรวจรักษา และการบริหาร', category: 'Health Informatics' },
+  { term: 'Clinical Decision Support System (CDSS)', thai: 'ระบบช่วยเตือนและสนับสนุนการตัดสินใจทางคลินิก (เช่น เตือนแพ้ยา ปฏิกิริยาระหว่างยา)', category: 'Health Informatics' },
+  { term: 'Telemedicine', thai: 'การให้บริการทางการแพทย์และการปรึกษาโรคทางไกลผ่านระบบโทรคมนาคมดิจิทัล', category: 'Health Informatics' },
+
+  // Standards & Data Classification
+  { term: 'HL7 FHIR (Fast Healthcare Interoperability Resources)', thai: 'มาตรฐานสากลสำหรับการแลกเปลี่ยนข้อมูลสุขภาพผ่าน RESTful API ในรูปแบบ JSON/XML', category: 'Medical Standards' },
+  { term: 'DICOM (Digital Imaging and Communications in Medicine)', thai: 'มาตรฐานสากลสำหรับโครงสร้างข้อมูลและการรับส่งภาพถ่ายทางการแพทย์ (CT, MRI, X-ray)', category: 'Medical Standards' },
+  { term: 'PACS (Picture Archiving and Communication System)', thai: 'ระบบแม่ข่ายและเครือข่ายสำหรับจัดเก็บ สำรอง และกระจายภาพถ่ายทางการแพทย์ในโรงพยาบาล', category: 'Medical Standards' },
+  { term: 'ICD-10 / ICD-11', thai: 'ระบบการจัดประเภทและให้รหัสโรคสากลสำหรับการวินิจฉัยและสถิติสุขภาพ', category: 'Medical Standards' },
+  { term: 'LOINC (Logical Observation Identifiers Names and Codes)', thai: 'รหัสมาตรฐานสากลสำหรับระบุผลตรวจทางห้องปฏิบัติการและการวัดทางคลินิก', category: 'Medical Standards' },
+  { term: 'SNOMED CT', thai: 'ระบบคำศัพท์ทางการแพทย์มาตรฐานสากลที่ครอบคลุมแนวคิดทางคลินิกและกายวิภาคอย่างละเอียด', category: 'Medical Standards' },
+
+  // Medical AI & Data Engineering
+  { term: 'Convolutional Neural Network (CNN)', thai: 'โครงข่ายประสาทเทียมแบบคอนโวลูชันที่ใช้ประมวลผล จำแนก และตรวจจับพยาธิสภาพในภาพการแพทย์', category: 'Medical AI & Data' },
+  { term: 'Medical Image Segmentation (U-Net)', thai: 'เทคนิคการแบ่งส่วนภาพทางการแพทย์เพื่อระบุขอบเขตของเนื้องอก อวัยวะ หรือเซลล์เม็ดเลือด', category: 'Medical AI & Data' },
+  { term: 'Biomedical Signal Processing (ECG/EEG)', thai: 'การประมวลผลสัญญาณชีวการแพทย์ เช่น คลื่นไฟฟ้าหัวใจ หรือคลื่นไฟฟ้าสมอง', category: 'Medical AI & Data' },
+  { term: 'Medical Telemetry', thai: 'การวัดและส่งสัญญาณชีพของผู้ป่วยแบบไร้สายไปยังศูนย์ติดตามเฝ้าระวัง', category: 'Medical AI & Data' },
+
+  // Core Biomedical & Lab Terminology (Retained)
+  { term: 'Complete Blood Count (CBC)', thai: 'การตรวจวิเคราะห์ความสมบูรณ์ของเม็ดเลือด (Hb, Hct, WBC, Platelet)', category: 'Biomedical & Lab' },
+  { term: 'Flow Cytometry', thai: 'เทคนิคการวัดคุณสมบัติทางแสงและกายภาพของเซลล์ในกระแสของเหลว', category: 'Biomedical & Lab' },
+  { term: 'Polymerase Chain Reaction (PCR)', thai: 'ปฏิกิริยาลูกโซ่โพลิเมอเรสสำหรับตรวจและเพิ่มปริมาณสารพันธุกรรม', category: 'Biomedical & Lab' },
+  { term: 'Spectrophotometry', thai: 'การวัดความเข้มแสงเพื่อวิเคราะห์ความเข้มข้นสารละลายในเคมีคลินิก', category: 'Biomedical & Lab' }
 ];
 
 export function getMockResponse(prompt: string): string {
   const lower = prompt.toLowerCase();
+  if (lower.includes('ehr') || lower.includes('emr') || lower.includes('เวชระเบียน')) {
+    return 'ระบบเวชระเบียนอิเล็กทรอนิกส์ (EHR / EMR) เป็นแกนหลักของสารสนเทศสุขภาพ โดย EMR บันทึกประวัติการรักษาภายในสถานพยาบาล ส่วน EHR เน้นการเชื่อมโยงข้อมูลสุขภาพข้ามหน่วยบริการตามมาตรฐานความปลอดภัยและความเป็นส่วนตัวของข้อมูลผู้ป่วย (PDPA / HIPAA)';
+  }
+  if (lower.includes('dicom') || lower.includes('pacs') || lower.includes('ภาพถ่าย')) {
+    return 'มาตรฐาน DICOM (Digital Imaging and Communications in Medicine) ใช้จัดเก็บและส่งผ่านข้อมูลภาพถ่ายทางการแพทย์ (CT, MRI, X-ray) พร้อมข้อมูลกำกับภาพ (Metadata) โดยทำงานร่วมกับระบบ PACS (Picture Archiving and Communication System) สำหรับการจัดเก็บและเรียกดูภาพในโรงพยาบาล';
+  }
+  if (lower.includes('fhir') || lower.includes('hl7') || lower.includes('มาตรฐานข้อมูล')) {
+    return 'HL7 FHIR (Fast Healthcare Interoperability Resources) เป็นมาตรฐานการแลกเปลี่ยนข้อมูลสุขภาพยุคใหม่ที่ใช้สถาปัตยกรรม RESTful API และรูปแบบ JSON/XML ช่วยให้แอปพลิเคชันทางการแพทย์และระบบโรงพยาบาลเชื่อมต่อกันได้อย่างสะดวกรวดเร็วและปลอดภัย';
+  }
+  if (lower.includes('ai') || lower.includes('ปัญญาประดิษฐ์') || lower.includes('cnn') || lower.includes('deep learning')) {
+    return 'การประยุกต์ใช้ปัญญาประดิษฐ์ทางการแพทย์ (Medical AI) ครอบคลุมการใช้ Machine Learning และ Deep Learning (เช่น สถาปัตยกรรม CNN หรือ U-Net) ในการจำแนกและแบ่งส่วนภาพถ่ายทางการแพทย์ การตรวจจับความผิดปกติ และระบบช่วยสนับสนุนการตัดสินใจทางคลินิก (CDSS)';
+  }
+  if (lower.includes('dtm67') || lower.includes('dtm') || lower.includes('หลักสูตร') || lower.includes('วลัยลักษณ์')) {
+    return 'หลักสูตร วท.บ. สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (DTM ปรับปรุง 2567) มหาวิทยาลัยวลัยลักษณ์ มีจำนวนหน่วยกิตรวม 124 หน่วยกิต มุ่งเน้นการบูรณาการเทคโนโลยีสารสนเทศ การเขียนโปรแกรม ปัญญาประดิษฐ์ และระบบข้อมูลสุขภาพ เพื่อพัฒนาบริการทางการแพทย์ยุคดิจิทัล';
+  }
   if (lower.includes('cbc') || lower.includes('เม็ดเลือด')) {
-    return 'การตรวจความสมบูรณ์ของเม็ดเลือด (Complete Blood Count - CBC) ประกอบด้วย Hemoglobin (Hb), Hematocrit (Hct), WBC count, Platelet count และ Differential WBC การแปลผลต้องพิจารณาค่าอ้างอิง (Reference Range) ตามเพศและอายุ รวมถึงความผิดปกติทางสัณฐานวิทยาของเม็ดเลือดภายใต้กล้องจุลทรรศน์';
+    return 'การตรวจความสมบูรณ์ของเม็ดเลือด (Complete Blood Count - CBC) ประกอบด้วย Hemoglobin (Hb), Hematocrit (Hct), WBC count, Platelet count และ Differential WBC การแปลผลต้องพิจารณาค่าอ้างอิงตามเพศและอายุ';
   }
-  if (lower.includes('clsi') || lower.includes('มาตรฐาน')) {
-    return 'CLSI (Clinical and Laboratory Standards Institute) เป็นองค์กรสากลที่กำหนดแนวปฏิบัติและมาตรฐานสำหรับการตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ เพื่อให้ผลการตรวจมีความถูกต้อง แม่นยำ และเปรียบเทียบกันได้ทั่วโลก';
-  }
-  if (lower.includes('blood bank') || lower.includes('หมู่เลือด') || lower.includes('abo')) {
-    return 'การตรวจหมู่เลือดระบบ ABO และ Rh Typing เป็นหัวใจสำคัญของงานธนาคารเลือด ประกอบด้วย Forward Typing (ใช้ Anti-A, Anti-B ตรวจเม็ดเลือดแดงผู้ป่วย) และ Reverse Typing (ใช้ A-cell, B-cell ตรวจซีรั่ม/พลาสมา) เพื่อป้องกันปฏิกิริยา Transfusion Reaction';
-  }
-  if (lower.includes('microbiology') || lower.includes('เชื้อรา') || lower.includes('แบคทีเรีย')) {
-    return 'งานจุลชีววิทยาคลินิกครอบคลุมการย้อมสี Gram stain, การเพาะเชื้อบน Media ต่างๆ (เช่น Blood agar, MacConkey agar), การทดสอบความไวต่อยาต้านจุลชีพ (AST) ตามมาตรฐาน CLSI และการจำแนกชนิดเชื้อด้วยวิธี Biochemical test หรือ MALDI-TOF';
-  }
-  return `ขอบคุณสำหรับคำถามเกี่ยวกับ "${prompt}" ศูนย์การเรียนรู้เทคนิคการแพทย์ AI พร้อมให้คำปรึกษาเชิงวิชาการตามมาตรฐานสากล (CLSI, CAP, WHO) กรุณาเลือกหัวข้อในคลังความรู้ หรือสอบถามรายละเอียดเพิ่มเติมเกี่ยวกับเคมีคลินิก โลหิตวิทยา จุลชีววิทยา และภูมิคุ้มกันวิทยาได้เลยครับ`;
+  return `ขอบคุณสำหรับคำถามเกี่ยวกับ "${prompt}" MedTech Learning Hub AI ประจำหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (DTM 2567) ม.วลัยลักษณ์ ยินดีให้คำอธิบายแนวคิดด้านสารสนเทศสุขภาพ มาตรฐานข้อมูลการแพทย์ และ AI ทางการแพทย์ หากต้องการเริ่มเรียนรู้รายวิชาเฉพาะ สามารถเลือกวิชาจากแท็บ "หลักสูตร DTM 2567" ได้เลยครับ`;
 }
 
 export default function App() {
@@ -150,11 +176,12 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
+  const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg-1',
       role: 'assistant',
-      content: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะของ **MedTech Learning Hub AI v1.2** พร้อมให้บริการข้อมูลวิชาการเทคนิคการแพทย์ คลังคำศัพท์เฉพาะทาง และแหล่งอ้างอิงมาตรฐานสากล คุณสามารถพิมพ์คำถามหรือเลือกหัวข้อด้านล่างได้เลยครับ',
+      content: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะของ **MedTech Learning Hub AI v1.2** ประจำหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine: DTM 2567) ม.วลัยลักษณ์ พร้อมให้คำอธิบายแนวคิดด้านสารสนเทศสุขภาพ, มาตรฐานข้อมูลการแพทย์ (HL7 FHIR, DICOM), ระบบปัญญาประดิษฐ์ทางการแพทย์, คลังคำศัพท์เฉพาะทาง และแหล่งอ้างอิงวิชาการ คุณสามารถเลือกวิชาจากแท็บ "หลักสูตร DTM 2567" เพื่อเริ่มเรียน หรือพิมพ์คำถามด้านล่างได้เลยครับ',
       timestamp: new Date()
     }
   ]);
@@ -177,6 +204,7 @@ export default function App() {
   const [curriculumSubCategory, setCurriculumSubCategory] = useState('all');
   const [curriculumViewMode, setCurriculumViewMode] = useState<'grid' | 'table'>('grid');
   const [activeCourseEvidence, setActiveCourseEvidence] = useState<CourseItem | null>(null);
+  const [activeLearningGuideCourse, setActiveLearningGuideCourse] = useState<CourseItem | null>(null);
   const [showMacroOverview, setShowMacroOverview] = useState(true);
   const [onlyNonCredit, setOnlyNonCredit] = useState(false);
 
@@ -257,10 +285,26 @@ export default function App() {
       {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        content: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะของ **MedTech Learning Hub AI v1.2** พร้อมให้บริการข้อมูลวิชาการเทคนิคการแพทย์ คลังคำศัพท์เฉพาะทาง และแหล่งอ้างอิงมาตรฐานสากล คุณสามารถพิมพ์คำถามหรือเลือกหัวข้อด้านล่างได้เลยครับ',
+        content: 'สวัสดีครับ! ผมคือผู้ช่วยอัจฉริยะของ **MedTech Learning Hub AI v1.2** ประจำหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine: DTM 2567) ม.วลัยลักษณ์ พร้อมให้คำอธิบายแนวคิดด้านสารสนเทศสุขภาพ, มาตรฐานข้อมูลการแพทย์ (HL7 FHIR, DICOM), ระบบปัญญาประดิษฐ์ทางการแพทย์, คลังคำศัพท์เฉพาะทาง และแหล่งอ้างอิงวิชาการ คุณสามารถเลือกวิชาจากแท็บ "หลักสูตร DTM 2567" เพื่อเริ่มเรียน หรือพิมพ์คำถามด้านล่างได้เลยครับ',
         timestamp: new Date()
       }
     ]);
+  };
+
+  const handleStartCourseLearning = (course: CourseItem) => {
+    setSelectedLearningCourse(course);
+    setActiveTab('chat');
+    const courseCodeStr = course.code ? `${course.code} ` : '';
+    const courseTitleTh = course.titleThai || '';
+    const courseTitleEn = course.titleEnglish ? ` (${course.titleEnglish})` : '';
+    const courseFullLabel = `${courseCodeStr}${courseTitleTh}${courseTitleEn}`.trim();
+    setInputQuery(
+      `ฉันกำลังเริ่มเรียนรายวิชา ${courseFullLabel} ในหลักสูตร DTM 2567 ช่วยปูพื้นฐานหัวข้อที่เกี่ยวข้องเป็นภาษาไทยสำหรับผู้เริ่มต้น โดยคงศัพท์เทคนิคภาษาอังกฤษที่สำคัญ อธิบายแนวคิดเป็นลำดับ พร้อมยกตัวอย่างด้านเทคโนโลยีดิจิทัลทางการแพทย์ หากไม่มีเอกสารประกอบหรือคำอธิบายรายวิชาฉบับเต็ม ให้ระบุชัดเจนว่าส่วนใดเป็นความรู้ทั่วไป และอย่าอ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`
+    );
+  };
+
+  const handleClearCourseContext = () => {
+    setSelectedLearningCourse(null);
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
@@ -352,7 +396,13 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: validSlice,
-          documentContext: documentContextPayload
+          documentContext: documentContextPayload,
+          courseContext: selectedLearningCourse ? {
+            code: selectedLearningCourse.code,
+            titleThai: selectedLearningCourse.titleThai,
+            titleEnglish: selectedLearningCourse.titleEnglish,
+            category: selectedLearningCourse.category
+          } : undefined
         }),
         signal: abortControllerRef.current.signal
       });
@@ -686,7 +736,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-xs text-slate-400 hidden sm:block">
-                  มาตรฐาน CLSI / CAP / WHO / ICSH
+                  หลักสูตร DTM 2567 มหาวิทยาลัยวลัยลักษณ์
                 </div>
                 <button
                   onClick={handleClearChat}
@@ -698,6 +748,51 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Selected Learning Course Status Bar */}
+            {selectedLearningCourse && (
+              <div className="bg-indigo-950/50 border-b border-indigo-800/50 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                    <GraduationCap className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="truncate">
+                    <span className="font-semibold text-white">บริบทการเรียนรู้วิชา: </span>
+                    <span className="text-indigo-300 font-mono font-bold">{selectedLearningCourse.code}</span>{' '}
+                    <span className="text-slate-200 font-medium">{selectedLearningCourse.titleThai}</span>
+                    {selectedLearningCourse.titleEnglish && (
+                      <span className="ml-1 text-slate-400 italic hidden md:inline">({selectedLearningCourse.titleEnglish})</span>
+                    )}
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-900/60 text-[10px] text-indigo-200 font-mono">
+                      DTM 2567
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setActiveLearningGuideCourse(selectedLearningCourse)}
+                    className="px-2.5 py-1 rounded-md bg-indigo-900 hover:bg-indigo-800 text-indigo-200 text-[11px] font-medium flex items-center gap-1 transition-colors border border-indigo-700/60"
+                    title="เปิดดูคู่มือปูพื้นฐานและคำถามทบทวนสำหรับวิชานี้"
+                  >
+                    <BookOpen className="w-3 h-3 text-indigo-300" />
+                    <span>คู่มือปูพื้นฐาน</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('curriculum')}
+                    className="text-indigo-400 hover:text-indigo-300 underline text-[11px]"
+                  >
+                    เปลี่ยนวิชา
+                  </button>
+                  <button
+                    onClick={handleClearCourseContext}
+                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors"
+                    title="ยกเลิกบริบทวิชา (กลับสู่แชททั่วไป)"
+                  >
+                    ✕ ล้างบริบทวิชา
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Active Document Grounding Status Bar */}
             {activeDocument ? (
@@ -1047,7 +1142,7 @@ export default function App() {
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-sm rounded-tl-none flex items-center gap-2">
                     <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
-                    <span>กำลังวิเคราะห์และเรียบเรียงคำตอบตามมาตรฐานเทคนิคการแพทย์...</span>
+                    <span>กำลังวิเคราะห์และเรียบเรียงคำตอบตามหลักวิชาการเทคโนโลยีดิจิทัลทางการแพทย์...</span>
                   </div>
                 </div>
               )}
@@ -1060,7 +1155,7 @@ export default function App() {
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
-                placeholder="สอบถามเรื่อง CBC, เกณฑ์ CLSI, การตรวจธนาคารเลือด หรือผลตรวจทางห้องปฏิบัติการ..."
+                placeholder="สอบถามเกี่ยวกับระบบสารสนเทศสุขภาพ (EHR/EMR), มาตรฐาน HL7/FHIR, DICOM, AI ทางการแพทย์ หรือเลือกวิชาจากแท็บหลักสูตรเพื่อเริ่มเรียน..."
                 className="flex-1 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-all"
               />
               <button
@@ -1099,7 +1194,7 @@ export default function App() {
                 />
               </div>
               <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-                {['All', 'Blood Bank', 'Hematology', 'Clinical Chemistry', 'Molecular Pathology'].map((cat) => (
+                {['All', 'Health Informatics', 'Medical Standards', 'Medical AI & Data', 'Biomedical & Lab'].map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
@@ -1522,19 +1617,42 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Card Footer: Verified Badge & Evidence Button */}
-                      <div className="pt-4 mt-3 border-t border-slate-900 flex items-center justify-between gap-2 text-xs">
+                      {/* Card Footer: Verified Badge, Evidence Button & Start Learning Button */}
+                      <div className="pt-4 mt-3 border-t border-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
                           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                           <span className="font-mono">มคอ.2 หน้า {course.evidence.pageNumber || '4-8'}</span>
                         </div>
-                        <button
-                          onClick={() => setActiveCourseEvidence(course)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 text-xs font-medium flex items-center gap-1.5 transition-all border border-slate-800 group-hover:border-cyan-800"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>ดูหลักฐาน</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                          <button
+                            onClick={() => setActiveCourseEvidence(course)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium flex items-center justify-center gap-1 transition-all border border-slate-800"
+                            title="ดูหลักฐาน มคอ.2"
+                          >
+                            <FileText className="w-3 h-3 text-slate-400" />
+                            <span>หลักฐาน</span>
+                          </button>
+                          <button
+                            onClick={() => setActiveLearningGuideCourse(course)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition-all border ${
+                              hasDtmLearningGuide(course.code)
+                                ? 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border-indigo-800'
+                                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                            }`}
+                            title={hasDtmLearningGuide(course.code) ? 'เปิดคู่มือปูพื้นฐานการเรียนรู้วิชานี้' : 'ดูสถานะคู่มือรายวิชา'}
+                          >
+                            <BookOpen className="w-3 h-3 text-indigo-300" />
+                            <span>คู่มือ</span>
+                          </button>
+                          <button
+                            onClick={() => handleStartCourseLearning(course)}
+                            className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-all shadow-md shadow-cyan-600/30"
+                            title="เริ่มเรียนรู้วิชานี้กับผู้ช่วย AI"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>เริ่มเรียน</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1550,7 +1668,7 @@ export default function App() {
                         <th className="p-3.5">หน่วยกิต (ชม.)</th>
                         <th className="p-3.5">กลุ่มวิชา</th>
                         <th className="p-3.5">หลักฐาน มคอ.2</th>
-                        <th className="p-3.5 pr-4 text-right">รายละเอียด</th>
+                        <th className="p-3.5 pr-4 text-right">การจัดการ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/80 bg-slate-900/60">
@@ -1582,13 +1700,36 @@ export default function App() {
                             </span>
                           </td>
                           <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => setActiveCourseEvidence(course)}
-                              className="px-3 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-cyan-400 text-xs font-medium border border-slate-800 transition-colors inline-flex items-center gap-1"
-                            >
-                              <FileText className="w-3 h-3" />
-                              <span>ตรวจหลักฐาน</span>
-                            </button>
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                onClick={() => setActiveCourseEvidence(course)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium border border-slate-800 transition-colors inline-flex items-center gap-1"
+                                title="ตรวจหลักฐาน มคอ.2"
+                              >
+                                <FileText className="w-3 h-3" />
+                                <span>หลักฐาน</span>
+                              </button>
+                              <button
+                                onClick={() => setActiveLearningGuideCourse(course)}
+                                className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1 border ${
+                                  hasDtmLearningGuide(course.code)
+                                    ? 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border-indigo-800'
+                                    : 'bg-slate-950 hover:bg-slate-800 text-slate-400 border-slate-800'
+                                }`}
+                                title={hasDtmLearningGuide(course.code) ? 'เปิดคู่มือปูพื้นฐานการเรียนรู้วิชานี้' : 'ดูสถานะคู่มือรายวิชา'}
+                              >
+                                <BookOpen className="w-3 h-3 text-indigo-300" />
+                                <span>คู่มือ</span>
+                              </button>
+                              <button
+                                onClick={() => handleStartCourseLearning(course)}
+                                className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium transition-colors inline-flex items-center gap-1 shadow-sm shadow-cyan-600/30"
+                                title="เริ่มเรียนรู้วิชานี้กับผู้ช่วย AI"
+                              >
+                                <GraduationCap className="w-3 h-3" />
+                                <span>เริ่มเรียน</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1793,15 +1934,29 @@ export default function App() {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <a
-                href={activeCourseEvidence.evidence.sourceUrl || officialHandbookPdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-cyan-600/20"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>เปิดดูหลักฐานในคู่มือ PDF ทางการ</span>
-              </a>
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+                <a
+                  href={activeCourseEvidence.evidence.sourceUrl || officialHandbookPdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium flex items-center justify-center gap-2 transition-all shadow-md shadow-cyan-600/20"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>เปิดดูหลักฐานในคู่มือ PDF ทางการ</span>
+                </a>
+                <button
+                  onClick={() => {
+                    const c = activeCourseEvidence;
+                    setActiveCourseEvidence(null);
+                    setActiveLearningGuideCourse(c);
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-xs font-medium flex items-center justify-center gap-2 transition-all"
+                  title="เปิดดูคู่มือปูพื้นฐานสำหรับวิชานี้"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-300" />
+                  <span>เปิดคู่มือปูพื้นฐาน</span>
+                </button>
+              </div>
               <button
                 onClick={() => setActiveCourseEvidence(null)}
                 className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-xs transition-all"
@@ -1869,6 +2024,27 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* DTM LEARNING GUIDE MODAL (MVP) */}
+      {activeLearningGuideCourse && (
+        <LearningGuideModal
+          key={activeLearningGuideCourse.code}
+          course={activeLearningGuideCourse}
+          isOpen={Boolean(activeLearningGuideCourse)}
+          onClose={() => setActiveLearningGuideCourse(null)}
+          onAskInChat={(prompt) => {
+            setSelectedLearningCourse(activeLearningGuideCourse);
+            setInputQuery(prompt);
+            setActiveTab('chat');
+          }}
+          onSelectOtherCourse={(courseCode) => {
+            const found = OFFICIAL_COURSES_2567.find((c) => c.code === courseCode);
+            if (found) {
+              setActiveLearningGuideCourse(found);
+            }
+          }}
+        />
       )}
     </div>
   );

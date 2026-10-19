@@ -49,8 +49,17 @@ function getDirectTopic(text: string): string | null {
   if (t.includes("cbc") || t.includes("เม็ดเลือด")) {
     return 'cbc';
   }
-  if (t.includes("crossmatching") || t.includes("blood grouping") || t.includes("หมู่เลือด")) {
-    return 'cross';
+  if (t.includes("เริ่มเรียนรายวิชา") || t.includes("dtm67-") || t.includes("ปูพื้นฐานหัวข้อ")) {
+    return 'dtm_course_starter';
+  }
+  if (t.includes("ehr") || t.includes("emr") || t.includes("เวชระเบียน") || t.includes("สารสนเทศสุขภาพ") || t.includes("his") || t.includes("cdss")) {
+    return 'dtm_informatics';
+  }
+  if (t.includes("dicom") || t.includes("pacs") || t.includes("fhir") || t.includes("hl7") || t.includes("icd-10") || t.includes("loinc") || t.includes("มาตรฐานข้อมูล")) {
+    return 'dtm_standards';
+  }
+  if (t.includes("deep learning") || t.includes("cnn") || t.includes("ภาพถ่ายทางการแพทย์") || t.includes("u-net") || t.includes("ai ทางการแพทย์") || t.includes("ปัญญาประดิษฐ์ทางการแพทย์")) {
+    return 'dtm_ai';
   }
   if (t.includes("dtm") || t.includes("หลักสูตร") || t.includes("หน่วยกิต") || t.includes("วลัยลักษณ์") || t.includes("เทคโนโลยีดิจิทัล")) {
     return 'dtm';
@@ -435,6 +444,90 @@ export function getAcademicFallback(
         { title: "Blood Groups and Red Cell Antigens", uri: "https://www.ncbi.nlm.nih.gov/books/NBK2261/" }
       ]
     };
+  } else if (matchedTopic === 'dtm_course_starter') {
+    return {
+      text: prefixNotice + `**แนวคิดพื้นฐานเพื่อการเรียนรู้รายวิชาในหลักสูตร DTM 2567 (Foundational Learning Guide)**
+
+*(หมายเหตุความโปร่งใสทางวิชาการ: ส่วนนี้เป็นคำอธิบายแนวคิดพื้นฐานทั่วไปตามหัวข้อและชื่อรายวิชาเพื่อช่วยผู้เรียนเริ่มต้นศึกษา ไม่ใช่คำอธิบายรายวิชาอย่างเป็นทางการจากเล่มหลักสูตร มคอ.2 เนื่องจากวิชานี้ยังไม่มีเอกสารประกอบการสอนในระบบ)*
+
+1. **ภาพรวมและเป้าหมายของหัวข้อวิชา:**
+   - มุ่งเน้นการทำความเข้าใจบริบทของเทคโนโลยีดิจิทัลที่นำมาประยุกต์ใช้ในการแพทย์และการดูแลสุขภาพ (Digital Healthcare)
+   - เชื่อมโยงความรู้ด้านวิทยาศาสตร์การแพทย์ (Medical Science) เข้ากับวิทยาการคอมพิวเตอร์และระบบสารสนเทศ (Computer & Information Science)
+
+2. **คำศัพท์เทคนิคภาษาอังกฤษสำคัญ (Key English Technical Terms):**
+   - **Electronic Health Record (EHR) / EMR:** ระบบเวชระเบียนและประวัติสุขภาพอิเล็กทรอนิกส์
+   - **Health Data Interoperability (HL7 FHIR):** การทำงานร่วมกันและการแลกเปลี่ยนข้อมูลสุขภาพตามมาตรฐานสากล
+   - **Medical Imaging Standards (DICOM / PACS):** มาตรฐานการจัดการภาพถ่ายทางการแพทย์และการสื่อสารดิจิทัล
+   - **Clinical Decision Support System (CDSS):** ระบบสารสนเทศสนับสนุนการตัดสินใจทางคลินิก
+   - **Data Privacy & Security (HIPAA / PDPA):** ธรรมาภิบาลและความมั่นคงปลอดภัยของข้อมูลสุขภาพผู้ป่วย
+
+3. **แนวทางการศึกษาสำหรับผู้เริ่มต้น:**
+   - ศึกษาโครงสร้างข้อมูลและศัพท์เทคนิคภาษาอังกฤษเป็นลำดับ
+   - ทำความเข้าใจกระบวนการทำงานในสถานพยาบาลและจุดเชื่อมต่อระหว่างระบบซอฟต์แวร์กับบุคลากรทางการแพทย์
+   - เมื่อมีเอกสารประกอบการสอนจากผู้สอน สามารถนำเข้าสู่ระบบผ่าน "คลังเอกสารการเรียนรู้" (Document Library) เพื่อเปิดโหมดการติวอิงเอกสารและตรวจสอบความถูกต้องเชิงลึกได้ทันที`,
+      references: [
+        { title: "เล่มหลักสูตร มคอ.2 วท.บ. สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (ปรับปรุง พ.ศ. 2567) ม.วลัยลักษณ์", uri: "https://ces.wu.ac.th/registrar/StudentHandbook/2567/22_IMI_01.pdf" },
+        { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" }
+      ]
+    };
+  } else if (matchedTopic === 'dtm_informatics') {
+    return {
+      text: prefixNotice + `**ระบบสารสนเทศสุขภาพและเวชระเบียนอิเล็กทรอนิกส์ (Health Informatics & EHR/EMR)**
+
+1. **ความแตกต่างระหว่าง EMR และ EHR:**
+   - **EMR (Electronic Medical Record):** บันทึกข้อมูลการรักษาและเวชระเบียนของผู้ป่วยที่เกิดขึ้นภายในสถานพยาบาลหรือคลินิกแห่งเดียว มุ่งเน้นการใช้งานทางคลินิกภายในองค์กร
+   - **EHR (Electronic Health Record):** บันทึกข้อมูลสุขภาพองค์รวมของผู้ป่วยที่ออกแบบมาให้สามารถแลกเปลี่ยนและเชื่อมโยงข้ามสถานพยาบาลได้ (Interoperable) เพื่อการดูแลรักษาต่อเนื่อง
+
+2. **ระบบสารสนเทศโรงพยาบาล (Hospital Information System - HIS):**
+   - ประกอบด้วยโมดูลสำคัญ: ฝ่ายเวชระเบียน (Patient Registration), ห้องตรวจแพทย์ (OPD/IPD Doctor Order Entry), ห้องปฏิบัติการ (LIS), รังสีวิทยา (RIS), และห้องยา (Pharmacy Information System)
+   - มีระบบ **Clinical Decision Support System (CDSS)** คอยแจ้งเตือนความเสี่ยง เช่น การแพ้ยา (Drug Allergy) หรือปฏิกิริยาระหว่างยา (Drug-Drug Interaction)
+
+3. **มาตรฐานและความปลอดภัยข้อมูล:**
+   - ต้องปฏิบัติตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล (PDPA ในไทย หรือ HIPAA ในระดับสากล) โดยกำหนดสิทธิ์การเข้าถึงข้อมูลตามบทบาท (Role-Based Access Control: RBAC)`,
+      references: [
+        { title: "WHO Guideline on Digital Health Interventions", uri: "https://www.who.int/publications/i/item/9789241550505" },
+        { title: "Health Information Systems - HIMSS", uri: "https://www.himss.org/resources" }
+      ]
+    };
+  } else if (matchedTopic === 'dtm_standards') {
+    return {
+      text: prefixNotice + `**มาตรฐานข้อมูลสุขภาพและภาพถ่ายทางการแพทย์ (Medical Data & Imaging Standards)**
+
+1. **DICOM และ PACS:**
+   - **DICOM (Digital Imaging and Communications in Medicine):** มาตรฐานระดับสากลสำหรับการจัดเก็บ ส่งต่อ และพิมพ์ภาพถ่ายทางการแพทย์ (เช่น X-ray, CT, MRI, Ultrasound) ซึ่งรวมข้อมูลภาพ (Pixel Data) และข้อมูลผู้ป่วย/การตรวจ (Metadata Header) ไว้ในไฟล์เดียวกัน
+   - **PACS (Picture Archiving and Communication System):** ระบบเซิร์ฟเวอร์และเครือข่ายสำหรับจัดเก็บ สำรอง และกระจายภาพ DICOM ให้แพทย์เรียกดูได้จากทุกจุดในโรงพยาบาล
+
+2. **HL7 และ FHIR (Fast Healthcare Interoperability Resources):**
+   - **HL7 v2 / v3:** มาตรฐานการส่งข้อความสุขภาพยุคดั้งเดิม
+   - **HL7 FHIR:** มาตรฐานยุคใหม่ที่ใช้แนวคิดแบบ "Resources" (เช่น Patient, Observation, Condition) ผ่าน RESTful API และรูปแบบ JSON/XML ทำให้การพัฒนา Mobile Health และ Web Applications เชื่อมต่อกับระบบโรงพยาบาลได้สะดวกรวดเร็ว
+
+3. **ระบบรหัสมาตรฐานทางการแพทย์:**
+   - **ICD-10 / ICD-11:** รหัสจำแนกโรคสากลสำหรับสถิติและการเบิกจ่าย
+   - **LOINC:** รหัสมาตรฐานสากลสำหรับผลตรวจทางห้องปฏิบัติการและสัญญาณชีพ`,
+      references: [
+        { title: "DICOM Standard Overview - NEMA", uri: "https://www.dicomstandard.org/" },
+        { title: "HL7 FHIR Specification", uri: "https://hl7.org/fhir/" }
+      ]
+    };
+  } else if (matchedTopic === 'dtm_ai') {
+    return {
+      text: prefixNotice + `**ปัญญาประดิษฐ์และการประมวลผลข้อมูลทางการแพทย์ (Medical AI & Deep Learning)**
+
+1. **การประมวลผลภาพถ่ายทางการแพทย์ (Medical Image Analysis):**
+   - นิยมใช้สถาปัตยกรรม **Convolutional Neural Networks (CNN)** เช่น ResNet, DenseNet ในการจำแนกโรค (Classification)
+   - สถาปัตยกรรม **U-Net** ในการแบ่งส่วนภาพ (Semantic Segmentation) เช่น การแบ่งขอบเขตของเนื้องอก (Tumor), หลอดเลือด, หรือเซลล์เม็ดเลือด
+
+2. **ตัวชี้วัดประสิทธิภาพในงานทางการแพทย์:**
+   - **ความไว (Sensitivity / Recall):** สัดส่วนผู้ป่วยที่เป็นโรคและโมเดลตรวจพบ (TP / [TP + FN]) ซึ่งสำคัญสูงสุดในงานคัดกรอง (Screening) เพื่อไม่ให้ผู้ป่วยหลุดรอด
+   - **ความจำเพาะ (Specificity):** สัดส่วนผู้ที่ไม่เป็นโรคและโมเดลทำนายว่าปกติ (TN / [TN + FP]) เพื่อป้องกัน False Alarm
+
+3. **จริยธรรมและความปลอดภัยของ Medical AI:**
+   - ต้องตรวจสอบความเอนเอียงของข้อมูล (Algorithmic Bias), ความสามารถในการอธิบายผลการทำนาย (Explainability / XAI เช่น Grad-CAM), และผ่านการทดสอบทางคลินิกก่อนนำไปใช้จริง`,
+      references: [
+        { title: "WHO Ethics and Governance of AI for Health", uri: "https://www.who.int/publications/i/item/9789240029200" },
+        { title: "Deep Learning for Medical Image Analysis (Nature Medicine)", uri: "https://www.nature.com/articles/s41591-018-0316-4" }
+      ]
+    };
   } else if (matchedTopic === 'dtm') {
     return {
       text: prefixNotice + `**ข้อมูลหลักสูตรวิทยาศาสตรบัณฑิต สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (หลักสูตรปรับปรุง พ.ศ. 2567) มหาวิทยาลัยวลัยลักษณ์**
@@ -455,10 +548,10 @@ export function getAcademicFallback(
 
 4. **สถานะการตรวจสอบรายวิชา (Verification Status):**
    - ข้อมูลโครงสร้างภาพรวมและหมวดหมู่หน่วยกิตข้างต้น: **ยืนยันแล้ว (Verified)** อ้างอิงจากเว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์
-   - รายวิชารายภาคการศึกษา รหัสวิชา และแผนปี 1-4: **รอตรวจสอบ (Needs Review)** จากเอกสาร PDF เล่มหลักสูตรฉบับสมบูรณ์ (ระบบไม่มีการแต่งตั้งหรือคาดเดารหัสรายวิชาปลีกย่อย)`,
+   - รายวิชา 69 รายวิชาในทะเบียน: **ยืนยันแล้ว (Verified)** จากเล่มหลักสูตร มคอ.2 ม.วลัยลักษณ์ หน้า 4-8 ครบทุกวิชา`,
       references: [
         { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" },
-        { title: "เอกสารหลักสูตร พ.ศ. 2567 (PDF - Google Drive)", uri: "https://drive.google.com/file/d/14sRYBe6Ipm0NCrG37Y6vsDO2yvKEm8I4/view?usp=" }
+        { title: "เอกสารคู่มือนักศึกษาหลักสูตร พ.ศ. 2567 (PDF - CES)", uri: "https://ces.wu.ac.th/registrar/StudentHandbook/2567/22_IMI_01.pdf" }
       ]
     };
   } else {
@@ -474,7 +567,7 @@ export function getAcademicFallback(
 // API endpoint for Gemini generation with multi-turn messages, retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
-  const { messages, prompt, documentContext } = req.body;
+  const { messages, prompt, documentContext, courseContext } = req.body;
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -529,8 +622,8 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
 
-  let systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้สำหรับนักศึกษาเทคนิคการแพทย์ไทยและหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine - DTM) มหาวิทยาลัยวลัยลักษณ์
-โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคนิคที่สำคัญไว้ (เช่น Complete Blood Count, Flow Cytometry, PCR, Spectrophotometry เป็นต้น)
+  let systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้หลักสูตรวิทยาศาสตรบัณฑิต สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine: DTM) หลักสูตรปรับปรุง พ.ศ. 2567 มหาวิทยาลัยวลัยลักษณ์
+โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาและเน้นคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคโนโลยีดิจิทัลที่สำคัญไว้ (เช่น Electronic Health Record, EHR, DICOM, PACS, HL7, FHIR, ICD-10, Medical AI, Deep Learning, Biomedical Signals, Clinical Decision Support System)
 
 ข้อมูลบริบทหลักสูตรอย่างเป็นทางการ (${dtmCurriculum2567.programNameThai} ${dtmCurriculum2567.academicYear} มหาวิทยาลัยวลัยลักษณ์):
 - หน่วยกิตรวมตลอดหลักสูตร: ${dtmCurriculum2567.totalCredits} หน่วยกิต
@@ -541,10 +634,18 @@ app.post("/api/gemini/generate", async (req, res) => {
 - กลุ่มวิชาโทที่เปิดสอน: ${dtmCurriculum2567.minorsAvailable.join(', ')}
 - แหล่งอ้างอิงหลักสูตรทางการ: เว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์ (${dtmCurriculum2567.evidence.sourceUrl})
 
-คำแนะนำและข้อจำกัดสำคัญในการตอบเรื่องหลักสูตร:
+คำแนะนำสำคัญสำหรับการช่วยเรียนรู้รายวิชา DTM:
 1. สำหรับข้อมูลภาพรวมหน่วยกิตและหมวดหมู่ด้านบน สามารถตอบและอ้างอิงได้ว่าเป็นข้อมูลทางการจากหลักสูตร DTM 2567 ม.วลัยลักษณ์
-2. สำหรับรายละเอียดรายวิชารายปี รายภาคการศึกษา (เช่น ปี 4) หรือรหัสวิชาปลีกย่อย ข้อมูลยังอยู่ในสถานะ "รอตรวจสอบ" (Needs Review) หากผู้ใช้ถามถึงรายวิชาเฉพาะที่ยังไม่มีหลักฐาน ให้ตอบตรง ๆ ว่ายังไม่มีข้อมูลหรือยังตรวจสอบไม่ครบ ห้ามแต่งรหัสวิชา ชื่อวิชา หรือหน่วยกิตขึ้นเอง
-3. แยกแยะข้อมูลหลักสูตรทางการออกจากข้อมูลภายนอกหรือข้อมูลผู้ใช้ให้ชัดเจน และหากหลักฐานไม่เพียงพอให้บอกตรง ๆ ว่ายังยืนยันไม่ได้`;
+2. เมื่อผู้เรียนเริ่มเรียนรู้รายวิชาในหลักสูตร (เช่น ศัพท์เทคนิคทางการแพทย์, เวชระเบียนศาสตร์, สารสนเทศสุขภาพ, ระบบฐานข้อมูลการแพทย์, AI ทางการแพทย์, สัญญาณชีวการแพทย์):
+   - หากมีเอกสารที่อัปโหลดไว้ ให้ตอบตามเอกสารต้นฉบับอย่างเคร่งครัด
+   - หากไม่มีเอกสารประกอบการสอนของวิชานั้น ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็น "คำอธิบายแนวคิดพื้นฐานทั่วไปตามหัวข้อวิชา มิใช่คำอธิบายรายวิชาอย่างเป็นทางการจากเล่มหลักสูตร มคอ.2"
+3. ห้ามกุคำอธิบายรายวิชาทางการ วัตถุประสงค์รายวิชา (CLO/PLO) หรือเกณฑ์การให้คะแนนที่ไม่มีในเอกสารอ้างอิง
+4. แยกแยะความรู้ทั่วไปเพื่อการเรียนรู้ออกจากข้อเท็จจริงที่มีเอกสารหรือหลักสูตรทางการรับรองอย่างชัดเจน`;
+
+  if (courseContext && typeof courseContext === 'object' && typeof courseContext.code === 'string') {
+    systemInstruction += `\n\nบริบทรายวิชาที่ผู้เรียนกำลังศึกษา: รหัส ${courseContext.code} ชื่อ ${courseContext.titleThai || ''} (${courseContext.titleEnglish || ''})
+หมายเหตุสำคัญ: บริบทรายวิชานี้เป็นเป้าหมายการเรียนรู้ของผู้เรียน ไม่ใช่เอกสารอ้างอิงหรือหลักฐานทางวิชาการ หากไม่มีเอกสารอัปโหลดใน documentContext ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็นความรู้ทั่วไป และห้ามสร้างเลขหน้าหรืออ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`;
+  }
 
   const isDocumentGrounding = Boolean(
     documentContext &&

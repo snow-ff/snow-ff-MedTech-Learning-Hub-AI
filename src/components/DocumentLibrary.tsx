@@ -29,6 +29,7 @@ import {
 import { chunkText } from '../lib/documentChunker';
 import { extractTextFromFile } from '../lib/pdfExtractor';
 import { OFFICIAL_COURSES_2567 } from '../data/curriculumData';
+import { downloadDtm67111SourceSecurely, downloadDtm67111ManifestSecurely } from '../lib/learningSourceDownload';
 
 interface DocumentLibraryProps {
   onSelectForChat: (doc: LearningDocument) => void;
@@ -556,6 +557,38 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
                   <span>{uploadError}</span>
                 </div>
               )}
+
+              {/* DTM67-111 Official Study Guide Download & Handoff Banner */}
+              <div className="p-3.5 bg-slate-900 border border-cyan-800/50 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="text-xs font-bold text-white">เอกสารสรุป DTM67-111 ศัพท์เทคนิคทางการแพทย์</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    CC BY 4.0
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  เอกสารนี้เป็นเอกสารสรุปเพื่อการเรียนรู้ที่ดัดแปลงจากแหล่งอ้างอิงแบบเปิด ไม่ใช่เอกสารการสอนอย่างเป็นทางการของมหาวิทยาลัยวลัยลักษณ์ และไม่ได้รับรองโดยเจ้าของต้นฉบับหรือมหาวิทยาลัยวลัยลักษณ์
+                </p>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => downloadDtm67111SourceSecurely()}
+                    className="flex-1 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium text-center flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>ดาวน์โหลดเอกสารสรุป DTM67-111 (ภาษาไทย)</span>
+                  </button>
+                  <button
+                    onClick={() => downloadDtm67111ManifestSecurely()}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium text-center transition-all border border-slate-700 cursor-pointer"
+                    title="ดาวน์โหลดไฟล์ Manifest ตรวจสอบความถูกต้อง"
+                  >
+                    Manifest
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
