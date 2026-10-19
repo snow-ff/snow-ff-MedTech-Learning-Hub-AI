@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
-import { retrieveGroundedChunks } from "./src/lib/documentChunker";
+import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
 import { AcademicVerificationReport } from "./src/models/coreModel";
 
@@ -159,16 +159,32 @@ export function getAcademicFallback(
         conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
       });
 
+      const chunkReferences = retrieval.relevantChunks.map(c => {
+        const decodedText = decodeHtmlEntities(c.text || '');
+        const firstLine = decodedText.split('\n')[0].replace(/^[#*-\s]+/, '').trim();
+        const cleanFirstLine = decodeHtmlEntities(firstLine.replace(/[*_#]+/g, '')).trim();
+        const sectionTitle = cleanFirstLine.length > 3 && cleanFirstLine.length < 60 ? cleanFirstLine : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+        const excerpt = extractRelevantExcerpt(decodedText, prompt, 140);
+        const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+        const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
+
+        return {
+          title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
+          uri: `#chunk-${c.chunkIndex}`,
+          type: "document_chunk",
+          linkAccessStatus: "verified_local",
+          verificationStatus: "source_grounded" as const,
+          evidenceLocator: cleanLocator,
+          excerpt,
+          contentVersion: "1.2"
+        };
+      });
+
       return {
         text: fallbackText,
         evidenceStatus: "sufficient" as const,
         verification,
-        references: [
-          {
-            title: `เอกสาร: ${documentContext.title}`,
-            uri: `#doc-${encodeURIComponent(documentContext.title)}`
-          }
-        ]
+        references: chunkReferences
       };
     } else {
       const fallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`;
@@ -189,12 +205,7 @@ export function getAcademicFallback(
         text: fallbackText,
         evidenceStatus: "insufficient" as const,
         verification,
-        references: [
-          {
-            title: `เอกสาร: ${documentContext.title}`,
-            uri: `#doc-${encodeURIComponent(documentContext.title)}`
-          }
-        ]
+        references: []
       };
     }
   }
@@ -654,6 +665,30 @@ app.post("/api/gemini/generate", async (req, res) => {
     documentContext.chunks.length > 0
   );
 
+  const isDocQuery = latestPrompt.toLowerCase().includes('root') ||
+    latestPrompt.toLowerCase().includes('prefix') ||
+    latestPrompt.toLowerCase().includes('suffix') ||
+    latestPrompt.toLowerCase().includes('combining') ||
+    latestPrompt.toLowerCase().includes('ศัพท์เทคนิค') ||
+    latestPrompt.toLowerCase().includes('hemoglobin') ||
+    latestPrompt.toLowerCase().includes('hct') ||
+    latestPrompt.toLowerCase().includes('pcr') ||
+    latestPrompt.toLowerCase().includes('cq') ||
+    latestPrompt.toLowerCase().includes('ct') ||
+    latestPrompt.toLowerCase().includes('gram') ||
+    latestPrompt.toLowerCase().includes('dengue') ||
+    latestPrompt.toLowerCase().includes('ไข้เลือดออก') ||
+    latestPrompt.toLowerCase().includes('จากเอกสาร');
+
+  if (!isDocumentGrounding && isDocQuery) {
+    return res.json({
+      text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Offline Document Grounding อย่างแม่นยำ`,
+      source: "academic_fallback",
+      evidenceStatus: "insufficient",
+      references: []
+    });
+  }
+
   // If document grounding context is attached, switch instruction to strict document grounding
   if (isDocumentGrounding) {
     const formattedChunks = documentContext.chunks
@@ -737,26 +772,38 @@ ${evidenceNotice}
           conversationHistory: validatedMessages
         });
 
-        const docReferences = (documentContext.chunks || []).map((c: any) => ({
-          title: `เอกสาร: ${documentContext.title}${c.pageNumber ? ` (หน้า ${c.pageNumber})` : ` (ชิ้นส่วนที่ ${c.chunkIndex})`}`,
-          uri: `#chunk-${c.chunkIndex}`,
-          type: "document_chunk",
-          linkAccessStatus: "verified_local",
-          verificationStatus: verification.stages.evidenceFidelity.passed ? "source_grounded" : "unsupported_citation",
-          reviewer: "Academic Verifier v1.2",
-          reviewDate: new Date().toISOString(),
-          evidenceLocator: c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`,
-          contentVersion: "1.2"
-        }));
+        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE' || !verification.stages.evidenceFidelity.passed;
 
-        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE';
+        const retrieval = retrieveGroundedChunks(chunksForVerification, latestPrompt, 4);
+        const docReferences = isInsufficient ? [] : retrieval.relevantChunks.map((c: any) => {
+          const firstLine = (c.text || '').split('\n')[0].replace(/^[#*-\s]+/, '').trim();
+          const cleanFirstLine = firstLine.replace(/[*_#]+/g, '').trim();
+          const sectionTitle = cleanFirstLine.length > 3 && cleanFirstLine.length < 60 ? cleanFirstLine : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+          const excerpt = extractRelevantExcerpt(c.text || '', latestPrompt, 140);
+          const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+          const cleanLocator = locator.replace(/&#x[0-9a-fA-F]+;/g, (match) => {
+            const code = parseInt(match.replace(/&#x([0-9a-fA-F]+);/, '$1'), 16);
+            return String.fromCharCode(code);
+          }).replace(/[*_#]+/g, '').trim();
+
+          return {
+            title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
+            uri: `#chunk-${c.chunkIndex}`,
+            type: "document_chunk",
+            linkAccessStatus: "verified_local",
+            verificationStatus: verification.stages.evidenceFidelity.passed ? "source_grounded" : "unsupported_citation",
+            evidenceLocator: cleanLocator,
+            excerpt,
+            contentVersion: "1.2"
+          };
+        });
 
         return res.json({
           text,
           source: "document_grounding",
           evidenceStatus: isInsufficient ? "insufficient" : "sufficient",
           verification,
-          references: docReferences.length > 0 ? docReferences : undefined,
+          references: docReferences,
         });
       }
 

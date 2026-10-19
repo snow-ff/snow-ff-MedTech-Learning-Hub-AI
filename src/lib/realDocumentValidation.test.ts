@@ -242,7 +242,8 @@ describe('Track B1.3: Real-Document Learning Validation', () => {
       // Assert verified citation structure
       expect(fallback.evidenceStatus).toBe('sufficient');
       expect(fallback.text).toContain('• **[ส่วนอ้างอิง 2 | หน้า 2]**');
-      expect(fallback.references?.[0].title).toBe('เอกสาร: คู่มือโลหิตวิทยา CBC');
+      expect(fallback.references?.[0].title).toContain('เอกสาร: คู่มือโลหิตวิทยา CBC');
+      expect((fallback.references?.[0] as any).excerpt).toBeDefined();
     });
   });
 

@@ -1,5 +1,17 @@
 import { DocumentChunk } from '../models/coreModel';
 
+export function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 export interface ChunkOptions {
   maxChunkChars?: number;
   overlapChars?: number;
@@ -15,6 +27,7 @@ const DEFAULT_OVERLAP_CHARS = 150;
  * Accurately tracks whether genuine page numbers exist from the source document.
  */
 export function chunkText(rawText: string, options: ChunkOptions = {}): DocumentChunk[] {
+  const decodedRawText = decodeHtmlEntities(rawText);
   const maxChars = options.maxChunkChars || DEFAULT_MAX_CHARS;
   const overlap = options.overlapChars || DEFAULT_OVERLAP_CHARS;
   const docId = options.documentId || 'doc';
@@ -26,7 +39,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
   if (options.pages && options.pages.length > 0) {
     options.pages.forEach((pageText, pIdx) => {
       const pageNumber = pIdx + 1;
-      const cleanPageText = pageText.trim();
+      const cleanPageText = decodeHtmlEntities(pageText).trim();
       if (!cleanPageText) return;
 
       if (cleanPageText.length <= maxChars) {
@@ -64,7 +77,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
   }
 
   // Case 2: Detect page markers in single text string (e.g., "--- Page 1 ---" or \f)
-  const formFeedPages = rawText.split(/\f|\n--- (?:Page|หน้า) (\d+) ---\n/i);
+  const formFeedPages = decodedRawText.split(/\f|\n--- (?:Page|หน้า) (\d+) ---\n/i);
   if (formFeedPages.length > 1) {
     let currentPage = 1;
     for (let i = 0; i < formFeedPages.length; i++) {
@@ -335,6 +348,20 @@ export function retrieveGroundedChunks(
     const chunkLower = chunk.text.toLowerCase();
     let score = 0;
 
+    // Cross-topic relevance guard: If query is about Word Parts or academic terms, ignore administrative/notice chunks or medication chunks
+    const isWordPartsQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม|ส่วนของคำศัพท์/i.test(cleanQuery);
+    const isMedicationChunk = /0\.5\s*mg|mgso4|mso4|ขนาดยา|การบริหารยา|mg\b|ml\b/i.test(chunkLower);
+    const isAdministrativeOrNoticeChunk = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|การให้เครดิตแหล่งข้อมูล|หนังสือต้นฉบับ/i.test(chunkLower);
+    const hasWordPartsInChunk = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม|ส่วนของคำศัพท์/i.test(chunkLower);
+
+    if (isAdministrativeOrNoticeChunk && !hasWordPartsInChunk && !/ลิขสิทธิ์|เครดิต|attribution|notice|adaptation/i.test(cleanQuery)) {
+      return { chunk, score: 0 };
+    }
+
+    if (isWordPartsQuery && isMedicationChunk && !hasWordPartsInChunk) {
+      return { chunk, score: 0 };
+    }
+
     // Exact full query match (minimum 4 chars to prevent trivial matches)
     if (cleanQuery.length >= 4 && !ACADEMIC_STOPWORDS.has(cleanQuery) && chunkLower.includes(cleanQuery)) {
       score += 25;
@@ -400,4 +427,66 @@ export function buildGroundingContext(
     .join('\n\n---\n\n');
 
   return `${header}\n\n${body}`;
+}
+
+/**
+ * Extract clean, readable excerpt around matching query terms or sentence start,
+ * avoiding mid-word cutoffs.
+ */
+export function extractRelevantExcerpt(text: string, query: string, maxLength: number = 140): string {
+  if (!text) return '';
+  // Strip markdown symbols (*, _, #) and normalize whitespace
+  const cleanText = text.replace(/[*_#]+/g, '').replace(/\s+/g, ' ').trim();
+  const queryLower = query.toLowerCase();
+  
+  const tokens = queryLower.split(/[\s,;:.!?()\/+\-]+/).filter(t => t.length >= 3);
+  
+  let bestIndex = -1;
+  for (const token of tokens) {
+    let idx = cleanText.toLowerCase().indexOf(token);
+    while (idx !== -1) {
+      const preambleCheck = cleanText.substring(0, idx).toLowerCase();
+      const isInPreamble = preambleCheck.includes('notice of adaptation') || preambleCheck.includes('การให้เครดิต') || preambleCheck.includes('non-endorsement');
+      if (isInPreamble) {
+        idx = cleanText.toLowerCase().indexOf(token, idx + token.length);
+      } else {
+        bestIndex = idx;
+        break;
+      }
+    }
+    if (bestIndex !== -1) break;
+  }
+
+  let start = 0;
+  if (bestIndex !== -1) {
+    start = Math.max(0, bestIndex - 25);
+    if (start > 0) {
+      const spaceIdx = cleanText.lastIndexOf(' ', start);
+      if (spaceIdx !== -1 && spaceIdx >= bestIndex - 50) {
+        start = spaceIdx + 1;
+      }
+    }
+  } else {
+    start = 0;
+    while (start < cleanText.length && /^[\s\-_:]/.test(cleanText[start])) {
+      start++;
+    }
+  }
+
+  let end = Math.min(cleanText.length, start + maxLength);
+  if (end < cleanText.length) {
+    const spaceIdx = cleanText.lastIndexOf(' ', end);
+    if (spaceIdx > start + 30) {
+      end = spaceIdx;
+    }
+  }
+
+  let excerpt = cleanText.slice(start, end).trim();
+  // Ensure excerpt starts cleanly without partial symbol/punctuation
+  excerpt = excerpt.replace(/^[^a-zA-Z0-9ก-ฮะ-์]+/, '').trim();
+
+  if (start > 0) excerpt = '...' + excerpt;
+  if (end < cleanText.length) excerpt = excerpt + '...';
+  
+  return excerpt;
 }

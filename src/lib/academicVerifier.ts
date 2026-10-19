@@ -90,14 +90,32 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     }
   }
 
-  // Check 3: Cited chunk index exceeding available chunks
+  // Check 3: Cited chunk index must exist in document.chunks
   const chunkMatches = candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi);
+  const availableChunkIndices = document.chunks.map(c => c.chunkIndex);
   for (const match of chunkMatches) {
     const chunkIdx = parseInt(match[1], 10);
-    if (!isNaN(chunkIdx) && chunkIdx > document.chunks.length) {
-      unsupportedCitations.push(
-        `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งเกินจำนวนชิ้นส่วนที่มีอยู่ในเอกสาร (${document.chunks.length} ชิ้นส่วน)`
-      );
+    if (!isNaN(chunkIdx)) {
+      const exists = availableChunkIndices.includes(chunkIdx) || (chunkIdx >= 1 && chunkIdx <= document.chunks.length);
+      if (!exists) {
+        unsupportedCitations.push(
+          `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่มีอยู่จริงในรายการชิ้นส่วนที่ค้นพบ (${availableChunkIndices.join(', ')})`
+        );
+      }
+    }
+  }
+
+  // Check 4: Cross-topic / Administrative notice chunk citation guard for terminology queries
+  const isTerminologyQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม/i.test(query);
+  if (isTerminologyQuery) {
+    for (const match of chunkMatches) {
+      const chunkIdx = parseInt(match[1], 10);
+      const targetChunk = document.chunks.find(c => (c.chunkIndex || 0) === chunkIdx);
+      if (targetChunk && /notice of adaptation|non-endorsement|การให้เครดิตแหล่งข้อมูล/i.test(targetChunk.text)) {
+        unsupportedCitations.push(
+          `ชิ้นส่วนที่ ${chunkIdx} เป็นข้อความประกาศแจ้งเตือน/การให้เครดิต ไม่ใช่หลักฐานทางวิชาการที่สนับสนุนคำถามคำศัพท์ทางการแพทย์`
+        );
+      }
     }
   }
 

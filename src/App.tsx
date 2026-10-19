@@ -46,6 +46,7 @@ import { LearningGuideModal } from './components/LearningGuideModal';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
 import { rankRelevantChunks, retrieveGroundedChunks } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
+import { getAllDocuments, seedSampleDocumentsIfEmpty } from './lib/documentStorage';
 
 export interface ReferenceItem {
   id: string;
@@ -1086,7 +1087,7 @@ export default function App() {
                         </p>
                         <div className="space-y-1.5">
                           {msg.references.map((ref, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-xs">
+                            <div key={idx} className="flex items-start gap-2 text-xs p-2 rounded-xl bg-slate-950/60 border border-slate-800/60">
                               <ExternalLink className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
                               <div className="flex-1 min-w-0">
                                 {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (
@@ -1099,20 +1100,25 @@ export default function App() {
                                     {ref.title || ref.uri}
                                   </a>
                                 ) : (
-                                  <span className="text-slate-300 font-medium">{ref.title}</span>
+                                  <span className="text-slate-200 font-semibold block">{ref.title}</span>
                                 )}
-                                <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-2">
-                                  <span>Type: {ref.type || 'reference'}</span>
+                                {(ref as any).excerpt && (
+                                  <p className="text-[11px] text-slate-300 italic mt-1 bg-slate-900/90 p-1.5 rounded border border-slate-800/80">
+                                    "{(ref as any).excerpt}"
+                                  </p>
+                                )}
+                                <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
+                                  <span>Locator: {(ref as any).evidenceLocator || `Chunk #${idx + 1}`}</span>
                                   <span className={
                                     ref.verificationStatus === 'source_grounded'
                                       ? 'text-emerald-400 font-medium'
                                       : ref.verificationStatus === 'unsupported_citation'
                                       ? 'text-rose-400 font-medium'
-                                      : 'text-slate-500'
+                                      : 'text-slate-400'
                                   }>
                                     • Status: {
                                       ref.verificationStatus === 'source_grounded'
-                                        ? 'Verified Local Chunk'
+                                        ? 'Source Grounded Match'
                                         : ref.verificationStatus === 'unsupported_citation'
                                         ? '⚠️ Unsupported Citation'
                                         : 'Unverified External'
