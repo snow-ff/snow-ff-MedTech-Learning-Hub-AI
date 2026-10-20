@@ -731,7 +731,7 @@ app.post("/api/gemini/generate", async (req, res) => {
 
     preComputedRetrieval = retrieveGroundedChunks(activeChunksForGrounding, latestPrompt, 4);
 
-    const isPageNumberQuery = /หน้า|page/i.test(latestPrompt);
+    const isPageNumberQuery = (/(?:หน้า|page)\s*\d+/i.test(latestPrompt) || /หน้าเท่าไหร่|หน้าไหน|เปิดหน้า|ดูหน้า/i.test(latestPrompt)) && !/หน้าที่ของ/i.test(latestPrompt);
     const isUnpagedDocument = documentContext.hasNativePages === false || !documentContext.hasNativePages;
 
     if (isPageNumberQuery && isUnpagedDocument) {

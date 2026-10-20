@@ -180,4 +180,26 @@ describe('Track B1.5: Verification Pipeline Integration Audit (Offline)', () => 
       expect(report.stages.evidenceFidelity.citedPages).toEqual([2]);
     });
   });
+
+  describe('5. Regression Tests: General Knowledge Unblocking & Server Retrieval', () => {
+    it('should handle general knowledge query without document context successfully', () => {
+      const result = getAcademicFallback('PCR คืออะไร', undefined, undefined);
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+    });
+
+    it('should correctly retrieve relevant chunks from full document chunks on server side', () => {
+      const result = getAcademicFallback('ฮีโมโกลบิน', undefined, {
+        title: 'คู่มือโลหิตวิทยาคลินิก',
+        courseCode: 'MT2567',
+        hasNativePages: true,
+        totalPages: 2,
+        chunks: samplePdfChunks
+      });
+
+      expect(result).toBeDefined();
+      expect(result.evidenceStatus).toBe('sufficient');
+      expect(result.references.length).toBeGreaterThan(0);
+    });
+  });
 });
