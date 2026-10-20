@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   chunkText,
   rankRelevantChunks,
-  buildGroundingContext
+  buildGroundingContext,
+  decodeHtmlEntities,
+  retrieveGroundedChunks
 } from './documentChunker';
 import { DocumentChunk } from '../models/coreModel';
 
@@ -122,6 +124,30 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       expect(formatted).toContain('=== เอกสารอ้างอิง: Clinical Chemistry Guide (รหัสวิชา: DTM101) ===');
       expect(formatted).toContain('[ส่วนอ้างอิง: ชิ้นส่วนที่ 1 | หน้า 2]');
       expect(formatted).toContain('HbA1c >= 6.5%');
+    });
+  });
+
+  describe('decodeHtmlEntities', () => {
+    it('should decode hexadecimal, decimal, and named html entities correctly', () => {
+      expect(decodeHtmlEntities('&#x33;3')).toBe('33');
+      expect(decodeHtmlEntities('&#51;3')).toBe('33');
+      expect(decodeHtmlEntities('&amp; &lt; &gt; &quot; &#39;')).toBe('& < > " \'');
+    });
+  });
+
+  describe('retrieveGroundedChunks with mixed relevant and irrelevant chunks', () => {
+    it('should correctly prioritize prefix/suffix relevant chunks over administrative or unrelated chunks', () => {
+      const chunks: DocumentChunk[] = [
+        { id: 'c1', documentId: 'd1', chunkIndex: 1, text: 'Notice of adaptation and disclaimer regarding copyright.' },
+        { id: 'c2', documentId: 'd1', chunkIndex: 2, text: 'Common Prefixes such as brady-, tachy-, dys-, sub- modify medical terms.' },
+        { id: 'c3', documentId: 'd1', chunkIndex: 3, text: 'Unrelated body cavities and anatomical standard positions text.' },
+        { id: 'c4', documentId: 'd1', chunkIndex: 4, text: 'Diagnostic Suffixes include -itis, -ectomy, and -scopy.' }
+      ];
+
+      const result = retrieveGroundedChunks(chunks, 'prefix brady- suffix -itis', 2);
+      expect(result.hasEvidence).toBe(true);
+      expect(result.relevantChunks.some(c => c.chunkIndex === 2)).toBe(true);
+      expect(result.relevantChunks.some(c => c.chunkIndex === 4)).toBe(true);
     });
   });
 });

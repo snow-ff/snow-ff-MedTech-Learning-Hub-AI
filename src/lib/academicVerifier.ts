@@ -91,7 +91,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   }
 
   // Check 3: Cited chunk index must exist in document.chunks
-  const chunkMatches = candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi);
+  const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi));
   const availableChunkIndices = document.chunks.map(c => c.chunkIndex);
   for (const match of chunkMatches) {
     const chunkIdx = parseInt(match[1], 10);
@@ -230,13 +230,16 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   let verdict: VerificationVerdict = 'PASS';
   let isVerified = false;
 
+  const isPageNumberQuery = /หน้า|page/i.test(query);
+  const unpagedQueryWithoutPages = isPageNumberQuery && document.hasNativePages === false && citedPages.length === 0;
+
   if (answerStatus === 'insufficient_evidence') {
     verdict = 'INSUFFICIENT_EVIDENCE';
     isVerified = true; // Successfully verified as insufficient evidence with correct refusal
   } else if (!retrievalPassed || !evidenceFidelityPassed || answerStatus === 'contradictory' || answerStatus === 'hallucinated' || !reasoningFidelityPassed) {
     verdict = 'FAIL';
     isVerified = false;
-  } else if (answerStatus === 'overgeneralized') {
+  } else if (answerStatus === 'overgeneralized' || unpagedQueryWithoutPages) {
     verdict = 'WARNING';
     isVerified = false;
   } else {

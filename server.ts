@@ -110,6 +110,24 @@ function determineTopic(p: string, messages?: Array<{ role: string; text: string
   return null;
 }
 
+function getCleanSectionTitle(text: string, chunkIndex: number): string {
+  const decoded = decodeHtmlEntities(text || '');
+  const lines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
+    if (
+      cleaned.length >= 3 &&
+      cleaned.length <= 60 &&
+      !cleaned.includes('&#') &&
+      !/[*#_`~[\]()]/.test(cleaned) &&
+      !/^[^\w\sก-ฮะ-์]+$/.test(cleaned)
+    ) {
+      return cleaned;
+    }
+  }
+  return `ชิ้นส่วนที่ ${chunkIndex}`;
+}
+
 // Academic fallback generator for robust offline / quota-exceeded handling
 export function getAcademicFallback(
   prompt: string,
@@ -161,12 +179,11 @@ export function getAcademicFallback(
 
       const chunkReferences = retrieval.relevantChunks.map(c => {
         const decodedText = decodeHtmlEntities(c.text || '');
-        const firstLine = decodedText.split('\n')[0].replace(/^[#*-\s]+/, '').trim();
-        const cleanFirstLine = decodeHtmlEntities(firstLine.replace(/[*_#]+/g, '')).trim();
-        const sectionTitle = cleanFirstLine.length > 3 && cleanFirstLine.length < 60 ? cleanFirstLine : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+        const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
         const excerpt = extractRelevantExcerpt(decodedText, prompt, 140);
         const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
         const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
+        const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
 
         return {
           title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
@@ -174,7 +191,7 @@ export function getAcademicFallback(
           type: "document_chunk",
           linkAccessStatus: "verified_local",
           verificationStatus: "source_grounded" as const,
-          evidenceLocator: cleanLocator,
+          evidenceLocator: finalLocator,
           excerpt,
           contentVersion: "1.2"
         };
@@ -689,15 +706,78 @@ app.post("/api/gemini/generate", async (req, res) => {
     });
   }
 
+  let preComputedRetrieval: any = null;
+  let activeChunksForGrounding: any[] = [];
+
   // If document grounding context is attached, switch instruction to strict document grounding
   if (isDocumentGrounding) {
-    const formattedChunks = documentContext.chunks
-      .map((c: any) => `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${c.chunkIndex || ''}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
-      .join('\n\n');
+    activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => ({
+      id: `ctx-chunk-${idx + 1}`,
+      documentId: 'doc-ctx',
+      chunkIndex: c.chunkIndex || idx + 1,
+      pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
+      hasNativePage: typeof c.pageNumber === 'number',
+      text: c.text || '',
+      charCount: (c.text || '').length
+    }));
 
-    const evidenceNotice = documentContext.evidenceStatus === 'insufficient'
-      ? `\n*** ข้อควรระวัง: ระบบตรวจสอบแล้วว่าคำถามของผู้ใช้ไม่มีคำสำคัญใดตรงกับเนื้อหาในเอกสารที่แนบมาอย่างมีนัยสำคัญ ***\nให้ตอบว่า "จากการตรวจสอบเนื้อหาในเอกสาร '${documentContext.title}' ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" โดยห้ามแต่งข้อมูลขึ้นมาเองเด็ดขาด\n`
-      : '';
+    preComputedRetrieval = retrieveGroundedChunks(activeChunksForGrounding, latestPrompt, 4);
+
+    const isPageNumberQuery = /หน้า|page/i.test(latestPrompt);
+    const isUnpagedDocument = documentContext.hasNativePages === false || !documentContext.hasNativePages;
+
+    if (isPageNumberQuery && isUnpagedDocument) {
+      const shortCircuitText = `*(แจ้งเตือน: เอกสาร "${documentContext.title}" เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ)*\n\nจากการตรวจสอบคำถามเกี่ยวกับการระบุเลขหน้า เนื่องจากเอกสารนี้ไม่มีเลขหน้าจริงในต้นฉบับ ระบบจึงไม่สามารถยืนยันหรือระบุเลขหน้าได้\n\n*(หมายเหตุ: ระบบเน้นตอบคำถามวิชาการจากเนื้อหาข้อความในเอกสารโดยตรงโดยไม่สามารถอ้างอิงเลขหน้าได้)*`;
+
+      const verification = verifyAcademicAnswer({
+        query: latestPrompt,
+        candidateAnswer: shortCircuitText,
+        document: {
+          title: documentContext.title,
+          hasNativePages: documentContext.hasNativePages,
+          totalPages: documentContext.totalPages,
+          chunks: activeChunksForGrounding
+        },
+        conversationHistory: validatedMessages
+      });
+
+      console.log(`[Perf Backend] Deterministic short-circuit executed for unpaged document page number query (0 API calls to Gemini).`);
+      return res.json({
+        text: shortCircuitText,
+        source: "document_grounding",
+        evidenceStatus: "sufficient",
+        verification,
+        references: []
+      });
+    }
+
+    if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0 || documentContext.evidenceStatus === 'insufficient') {
+      const insufficientText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง`;
+
+      const verification = verifyAcademicAnswer({
+        query: latestPrompt,
+        candidateAnswer: insufficientText,
+        document: {
+          title: documentContext.title,
+          hasNativePages: documentContext.hasNativePages,
+          totalPages: documentContext.totalPages,
+          chunks: activeChunksForGrounding
+        },
+        conversationHistory: validatedMessages
+      });
+
+      return res.json({
+        text: insufficientText,
+        source: "document_grounding",
+        evidenceStatus: "insufficient",
+        verification,
+        references: []
+      });
+    }
+
+    const formattedChunks = preComputedRetrieval.relevantChunks
+      .map((c: any) => `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
+      .join('\n\n');
 
     systemInstruction = `คุณคือผู้ช่วย AI สรุปและตอบคำถามเชิงวิชาการจากเอกสารการเรียนรู้ (Document-Grounded Learning Assistant) สำหรับ MedTech Learning Hub AI
 คุณกำลังช่วยผู้ใช้ศึกษาเนื้อหาจากเอกสาร: "${documentContext.title || 'เอกสารการเรียนรู้'}" ${documentContext.courseCode ? `(เชื่อมโยงรายวิชา: ${documentContext.courseCode})` : ''}
@@ -705,11 +785,11 @@ app.post("/api/gemini/generate", async (req, res) => {
 === เนื้อหาเอกสารอ้างอิงที่แนบมา (Document Grounding Context) ===
 ${formattedChunks}
 =============================================================
-${evidenceNotice}
+
 กฎเหล็กในการตอบคำถามอย่างเคร่งครัด (Strict Anti-Hallucination & Document Grounding):
 1. ให้ตอบคำถามโดยอ้างอิงข้อมูลจาก "เนื้อหาเอกสารอ้างอิง" ด้านบนเป็นหลัก
-2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" (เฉพาะกรณีที่เอกสารมีเลขหน้าจริง) หรือ "[ส่วนที่ 1]" (กรณีเป็นบันทึกสรุป/ข้อความที่ไม่มีเลขหน้า) ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร ห้ามแต่งเลขหน้าขึ้นมาเองเด็ดขาด
-3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" หรือ "ในเอกสารไม่มีรายละเอียดเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
+2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" หรือ "[ส่วนที่ 1]" ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร ห้ามแต่งเลขหน้าขึ้นมาเองเด็ดขาด
+3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
 4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้`;
   }
 
@@ -750,16 +830,6 @@ ${evidenceNotice}
 
       // If document grounding, build genuine document citations from actual chunks and verify academic answer
       if (isDocumentGrounding) {
-        const chunksForVerification = (documentContext.chunks || []).map((c: any, idx: number) => ({
-          id: `ctx-chunk-${idx + 1}`,
-          documentId: 'doc-ctx',
-          chunkIndex: c.chunkIndex || idx + 1,
-          pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
-          hasNativePage: typeof c.pageNumber === 'number',
-          text: c.text || '',
-          charCount: (c.text || '').length
-        }));
-
         const verification = verifyAcademicAnswer({
           query: latestPrompt,
           candidateAnswer: text,
@@ -767,24 +837,19 @@ ${evidenceNotice}
             title: documentContext.title,
             hasNativePages: documentContext.hasNativePages,
             totalPages: documentContext.totalPages,
-            chunks: chunksForVerification
+            chunks: activeChunksForGrounding
           },
           conversationHistory: validatedMessages
         });
 
         const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE' || !verification.stages.evidenceFidelity.passed;
 
-        const retrieval = retrieveGroundedChunks(chunksForVerification, latestPrompt, 4);
-        const docReferences = isInsufficient ? [] : retrieval.relevantChunks.map((c: any) => {
-          const firstLine = (c.text || '').split('\n')[0].replace(/^[#*-\s]+/, '').trim();
-          const cleanFirstLine = firstLine.replace(/[*_#]+/g, '').trim();
-          const sectionTitle = cleanFirstLine.length > 3 && cleanFirstLine.length < 60 ? cleanFirstLine : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+        const docReferences = isInsufficient ? [] : preComputedRetrieval.relevantChunks.map((c: any) => {
+          const sectionTitle = getCleanSectionTitle(c.text || '', c.chunkIndex);
           const excerpt = extractRelevantExcerpt(c.text || '', latestPrompt, 140);
           const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
-          const cleanLocator = locator.replace(/&#x[0-9a-fA-F]+;/g, (match) => {
-            const code = parseInt(match.replace(/&#x([0-9a-fA-F]+);/, '$1'), 16);
-            return String.fromCharCode(code);
-          }).replace(/[*_#]+/g, '').trim();
+          const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
+          const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
 
           return {
             title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
@@ -792,7 +857,7 @@ ${evidenceNotice}
             type: "document_chunk",
             linkAccessStatus: "verified_local",
             verificationStatus: verification.stages.evidenceFidelity.passed ? "source_grounded" : "unsupported_citation",
-            evidenceLocator: cleanLocator,
+            evidenceLocator: finalLocator,
             excerpt,
             contentVersion: "1.2"
           };

@@ -8,8 +8,8 @@
  * into Document Library without relying on inaccessible local file pickers or proxy/cookie check HTML fallbacks.
  */
 
-import dtmSourceRaw from '../../public/downloads/dtm67-111-source.md?raw';
-import dtmManifestRaw from '../../public/downloads/dtm67-111-source-manifest.md?raw';
+import dtmSourceRaw from '../../test-assets/ground-truth/dtm67-111-source.md?raw';
+import dtmManifestRaw from '../../test-assets/ground-truth/dtm67-111-source-manifest.md?raw';
 
 export interface LearningSourceMetadata {
   id: string;

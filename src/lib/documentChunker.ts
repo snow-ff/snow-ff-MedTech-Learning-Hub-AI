@@ -2,14 +2,19 @@ import { DocumentChunk } from '../models/coreModel';
 
 export function decodeHtmlEntities(str: string): string {
   if (!str) return '';
-  return str
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  let decoded = str;
+  for (let i = 0; i < 2; i++) {
+    decoded = decoded
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ');
+  }
+  return decoded;
 }
 
 export interface ChunkOptions {
@@ -351,6 +356,8 @@ export function retrieveGroundedChunks(
     // Cross-topic relevance guard: If query is about Word Parts or academic terms, ignore administrative/notice chunks or medication chunks
     const isWordPartsQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม|ส่วนของคำศัพท์/i.test(cleanQuery);
     const isMedicationChunk = /0\.5\s*mg|mgso4|mso4|ขนาดยา|การบริหารยา|mg\b|ml\b/i.test(chunkLower);
+    const isMedicationSafetyChunk = /do not use|medication safety|u, iu, qd, mso4|รายการห้ามใช้|ความปลอดภัยทางยา/i.test(chunkLower);
+    const isDigitalStandardsChunk = /digital standards|fhir|hl7|icd-10|loinc|dicom|pacs|สารสนเทศสุขภาพ|มาตรฐานข้อมูล/i.test(chunkLower);
     const isAdministrativeOrNoticeChunk = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|การให้เครดิตแหล่งข้อมูล|หนังสือต้นฉบับ/i.test(chunkLower);
     const hasWordPartsInChunk = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม|ส่วนของคำศัพท์/i.test(chunkLower);
 
@@ -358,7 +365,12 @@ export function retrieveGroundedChunks(
       return { chunk, score: 0 };
     }
 
-    if (isWordPartsQuery && isMedicationChunk && !hasWordPartsInChunk) {
+    if (isWordPartsQuery && (isMedicationChunk || isMedicationSafetyChunk || isDigitalStandardsChunk) && !hasWordPartsInChunk) {
+      return { chunk, score: 0 };
+    }
+
+    const isAnatomicalCavitiesOrPlanesChunk = /anatomical position|directional terms|anatomical planes|body cavities|abdominal quadrants|ช่องว่างภายในร่างกาย|ระนาบกายวิภาค|ท่ากายวิภาค|จตุภาคหน้าท้อง/i.test(chunkLower);
+    if (isWordPartsQuery && isAnatomicalCavitiesOrPlanesChunk && !hasWordPartsInChunk) {
       return { chunk, score: 0 };
     }
 
@@ -445,9 +457,9 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
   for (const token of tokens) {
     let idx = cleanText.toLowerCase().indexOf(token);
     while (idx !== -1) {
-      const preambleCheck = cleanText.substring(0, idx).toLowerCase();
-      const isInPreamble = preambleCheck.includes('notice of adaptation') || preambleCheck.includes('การให้เครดิต') || preambleCheck.includes('non-endorsement');
-      if (isInPreamble) {
+      const snippetBefore = cleanText.substring(Math.max(0, idx - 150), idx).toLowerCase();
+      const isInNoticeBlock = (snippetBefore.includes('notice of adaptation') || snippetBefore.includes('การให้เครดิต') || snippetBefore.includes('non-endorsement')) && !snippetBefore.includes('ส่วนที่') && !snippetBefore.includes('1.') && !snippetBefore.includes('2.');
+      if (isInNoticeBlock) {
         idx = cleanText.toLowerCase().indexOf(token, idx + token.length);
       } else {
         bestIndex = idx;
