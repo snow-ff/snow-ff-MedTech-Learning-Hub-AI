@@ -80,26 +80,40 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     );
   }
 
-  // Check 2: Page numbers beyond document totalPages
-  if (document.totalPages !== undefined && document.totalPages > 0) {
-    const outOfBounds = citedPages.filter(p => p > document.totalPages!);
-    if (outOfBounds.length > 0) {
+  // Check 2: Page numbers must exist in retrieved relevant chunks (not just anywhere in document)
+  if (document.hasNativePages && citedPages.length > 0) {
+    if (document.totalPages !== undefined && document.totalPages > 0) {
+      const outOfBounds = citedPages.filter(p => p > document.totalPages!);
+      if (outOfBounds.length > 0) {
+        unsupportedCitations.push(
+          `คำตอบอ้างอิงเลขหน้า ${outOfBounds.join(', ')} ซึ่งเกินจำนวนหน้าจริงของเอกสาร (${document.totalPages} หน้า)`
+        );
+      }
+    }
+
+    const retrievedPages = retrieval.relevantChunks
+      .map(c => c.pageNumber)
+      .filter((p): p is number => typeof p === 'number');
+    
+    const validCitedPages = citedPages.filter(p => document.totalPages === undefined || p <= document.totalPages);
+    const unretrievedPages = validCitedPages.filter(p => !retrievedPages.includes(p));
+    if (unretrievedPages.length > 0) {
       unsupportedCitations.push(
-        `คำตอบอ้างอิงเลขหน้า ${outOfBounds.join(', ')} ซึ่งเกินจำนวนหน้าจริงของเอกสาร (${document.totalPages} หน้า)`
+        `คำตอบอ้างอิงหน้า ${unretrievedPages.join(', ')} ซึ่งไม่อยู่ในชิ้นส่วนหลักฐานที่สืบค้นและนำมาอ้างอิง`
       );
     }
   }
 
-  // Check 3: Cited chunk index must exist in document.chunks
+  // Check 3: Cited chunk index must exist in retrieved relevant chunks
   const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi));
-  const availableChunkIndices = document.chunks.map(c => c.chunkIndex);
+  const retrievedChunkIndices = retrieval.relevantChunks.map(c => c.chunkIndex);
   for (const match of chunkMatches) {
     const chunkIdx = parseInt(match[1], 10);
     if (!isNaN(chunkIdx)) {
-      const exists = availableChunkIndices.includes(chunkIdx) || (chunkIdx >= 1 && chunkIdx <= document.chunks.length);
-      if (!exists) {
+      const isRetrieved = retrievedChunkIndices.includes(chunkIdx);
+      if (!isRetrieved) {
         unsupportedCitations.push(
-          `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่มีอยู่จริงในรายการชิ้นส่วนที่ค้นพบ (${availableChunkIndices.join(', ')})`
+          `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่ได้อยู่ในหลักฐานที่สืบค้นพบและเกี่ยวข้อง (${retrievedChunkIndices.join(', ')})`
         );
       }
     }

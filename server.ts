@@ -15,7 +15,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+
+// Handle payload too large (413) gracefully with JSON error response
+app.use((err: any, req: any, res: any, next: any) => {
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({ error: 'ขนาดเอกสารหรือคำขอใหญ่เกินขีดจำกัดของระบบ (Payload Too Large). กรุณาลดขนาดข้อมูลเอกสาร' });
+  }
+  next(err);
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -690,22 +698,14 @@ app.post("/api/gemini/generate", async (req, res) => {
     documentContext.chunks.length > 0
   );
 
-  const isDocQuery = latestPrompt.toLowerCase().includes('root') ||
-    latestPrompt.toLowerCase().includes('prefix') ||
-    latestPrompt.toLowerCase().includes('suffix') ||
-    latestPrompt.toLowerCase().includes('combining') ||
-    latestPrompt.toLowerCase().includes('ศัพท์เทคนิค') ||
-    latestPrompt.toLowerCase().includes('hemoglobin') ||
-    latestPrompt.toLowerCase().includes('hct') ||
-    latestPrompt.toLowerCase().includes('pcr') ||
-    latestPrompt.toLowerCase().includes('cq') ||
-    latestPrompt.toLowerCase().includes('ct') ||
-    latestPrompt.toLowerCase().includes('gram') ||
-    latestPrompt.toLowerCase().includes('dengue') ||
-    latestPrompt.toLowerCase().includes('ไข้เลือดออก') ||
-    latestPrompt.toLowerCase().includes('จากเอกสาร');
+  const explicitDocRequest = latestPrompt.toLowerCase().includes('จากเอกสาร') ||
+    latestPrompt.toLowerCase().includes('ในเอกสาร') ||
+    latestPrompt.toLowerCase().includes('เอกสารนี้') ||
+    latestPrompt.toLowerCase().includes('ตามเอกสาร') ||
+    latestPrompt.toLowerCase().includes('อ้างอิงจาก') ||
+    (/หน้า|page/i.test(latestPrompt) && !isDocumentGrounding);
 
-  if (!isDocumentGrounding && isDocQuery) {
+  if (!isDocumentGrounding && explicitDocRequest) {
     return res.json({
       text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Offline Document Grounding อย่างแม่นยำ`,
       source: "academic_fallback",
@@ -759,7 +759,7 @@ app.post("/api/gemini/generate", async (req, res) => {
       });
     }
 
-    if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0 || documentContext.evidenceStatus === 'insufficient') {
+    if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0) {
       const insufficientText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง`;
 
       const verification = verifyAcademicAnswer({

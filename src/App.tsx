@@ -368,20 +368,15 @@ export default function App() {
         }
       }
 
-      // If activeDocument is selected, retrieve relevant chunks with grounding validation
+      // If activeDocument is selected, send all document chunks to server for server-side grounding retrieval
       let documentContextPayload: any = undefined;
-      let calculatedEvidenceStatus: 'sufficient' | 'insufficient' = 'sufficient';
       if (activeDocument && activeDocument.chunks && activeDocument.chunks.length > 0) {
-        const retrieval = retrieveGroundedChunks(activeDocument.chunks, queryText, 4);
-        calculatedEvidenceStatus = retrieval.hasEvidence ? 'sufficient' : 'insufficient';
         documentContextPayload = {
           title: activeDocument.title,
           courseCode: activeDocument.courseCode,
           hasNativePages: activeDocument.hasNativePages,
           totalPages: activeDocument.totalPages,
-          evidenceStatus: calculatedEvidenceStatus,
-          matchedKeywords: retrieval.matchedKeywords,
-          chunks: retrieval.relevantChunks.map((c) => ({
+          chunks: activeDocument.chunks.map((c) => ({
             id: c.id,
             documentId: c.documentId,
             chunkIndex: c.chunkIndex,
