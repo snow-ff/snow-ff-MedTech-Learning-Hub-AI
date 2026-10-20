@@ -897,7 +897,9 @@ export default function App() {
                           {msg.verification?.verdict === 'FAIL'
                             ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (พบข้อบกพร่อง ไม่ผ่านการรับรองวิชาการ)`
                             : msg.verification?.verdict === 'WARNING'
-                            ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (มีข้อควรระวังทางวิชาการ — สรุปเกินหลักฐาน)`
+                            ? (msg.verification.stages.answerFidelity.unsupportedClaims.length > 0
+                                ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (มีข้อควรระวังทางวิชาการ — สรุปเกินหลักฐาน)`
+                                : `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ข้อจำกัดทางวิชาการ — เอกสารไม่มีเลขหน้าต้นฉบับ)`)
                             : msg.evidenceStatus === 'insufficient'
                             ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ไม่พบหลักฐานตรงในเอกสาร — ไม่คาดเดาข้อมูล)`
                             : `อ้างอิงตรงจากเอกสาร: ${msg.groundedDocumentTitle} (มีหลักฐานรองรับ)`}
@@ -932,7 +934,11 @@ export default function App() {
                             )}
                             <span>
                               {msg.verification.verdict === 'PASS' && 'ผ่านการตรวจสอบวิชาการ (Academic Verification: PASS)'}
-                              {msg.verification.verdict === 'WARNING' && 'คำเตือนวิชาการ: มีข้อความสรุปเกินหลักฐาน (Academic Warning)'}
+                              {msg.verification.verdict === 'WARNING' && (
+                                msg.verification.stages.answerFidelity.unsupportedClaims.length > 0
+                                  ? 'คำเตือนวิชาการ: มีข้อความสรุปเกินหลักฐาน (Academic Warning)'
+                                  : 'คำเตือนวิชาการ: ข้อจำกัดโครงสร้างเอกสาร (Unpaged Document Notice)'
+                              )}
                               {msg.verification.verdict === 'INSUFFICIENT_EVIDENCE' && 'ปฏิเสธการตอบตามหลักวิชาการ (Strict Anti-Hallucination)'}
                               {msg.verification.verdict === 'FAIL' && 'ไม่ผ่านการตรวจสอบวิชาการ (Academic Verification: FAIL)'}
                             </span>
@@ -975,7 +981,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {msg.verification.verdict === 'WARNING' && (
+                        {msg.verification.verdict === 'WARNING' && msg.verification.stages.answerFidelity.unsupportedClaims.length > 0 && (
                           <div className="mt-2 text-[11px] bg-amber-950/80 p-2 rounded border border-amber-800 text-amber-200">
                             <p className="font-semibold text-amber-300">ข้อความที่ควรตรวจทานเพิ่มเติม:</p>
                             <ul className="list-disc list-inside mt-1 space-y-0.5 text-amber-200">

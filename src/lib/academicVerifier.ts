@@ -182,6 +182,35 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
         answerStatus = 'hallucinated';
       }
     }
+
+    // Case 5: Ungrounded technical term examples check for terminology queries
+    const isTerminologyQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม/i.test(query);
+    if (isTerminologyQuery && answerStatus === 'aligned') {
+      const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
+      const technicalTerms = answerLower.match(/-[a-z]{3,}/g);
+      if (technicalTerms) {
+        for (const term of technicalTerms) {
+          if (!combinedChunksText.includes(term)) {
+            unsupportedClaims.push(`คำตอบอ้างอิงตัวอย่างศัพท์ (${term}) ซึ่งไม่ปรากฏในหลักฐานชิ้นส่วนเอกสารที่สืบค้นได้`);
+          }
+        }
+        if (unsupportedClaims.length > 0) {
+          answerStatus = 'hallucinated';
+        }
+      }
+    }
+
+    // Case 6: Multi-part query coverage check (e.g. Prefix and Suffix comparison)
+    const asksPrefixAndSuffix = /prefix.*suffix|suffix.*prefix|ความแตกต่างระหว่าง.*prefix.*suffix/i.test(query) || (/prefix/i.test(query) && /suffix/i.test(query));
+    if (asksPrefixAndSuffix && answerStatus === 'aligned') {
+      const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
+      const hasPrefixEvidence = /prefix|อุปสรรค/i.test(combinedChunksText);
+      const hasSuffixEvidence = /suffix|ปัจจัยท้าย/i.test(combinedChunksText);
+      if (!hasPrefixEvidence || !hasSuffixEvidence) {
+        answerStatus = 'overgeneralized';
+        unsupportedClaims.push('คำถามต้องการคำอธิบายและหลักฐานเปรียบเทียบทั้ง Prefix และ Suffix แต่ชิ้นส่วนหลักฐานที่สืบค้นได้ครอบคลุมไม่ครบถ้วนทั้งสองส่วน');
+      }
+    }
   }
 
   const answerFidelityPassed = answerStatus === 'aligned' || answerStatus === 'insufficient_evidence';

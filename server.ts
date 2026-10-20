@@ -114,15 +114,23 @@ function getCleanSectionTitle(text: string, chunkIndex: number): string {
   const decoded = decodeHtmlEntities(text || '');
   const lines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
   for (const line of lines) {
-    const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
-    if (
-      cleaned.length >= 3 &&
-      cleaned.length <= 60 &&
-      !cleaned.includes('&#') &&
-      !/[*#_`~[\]()]/.test(cleaned) &&
-      !/^[^\w\sก-ฮะ-์]+$/.test(cleaned)
-    ) {
-      return cleaned;
+    const isGenuineHeading =
+      /^#+\s+/.test(line) ||
+      /^===+\s*/.test(line) ||
+      /^===.*\s*===$/.test(line) ||
+      /^(ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*[:#\-]?/i.test(line);
+
+    if (isGenuineHeading) {
+      const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
+      if (
+        cleaned.length >= 3 &&
+        cleaned.length <= 60 &&
+        !cleaned.includes('&#') &&
+        !/[*#_`~[\]()]/.test(cleaned) &&
+        !/^[^\w\sก-ฮะ-์]+$/.test(cleaned)
+      ) {
+        return cleaned;
+      }
     }
   }
   return `ชิ้นส่วนที่ ${chunkIndex}`;
@@ -180,8 +188,8 @@ export function getAcademicFallback(
       const chunkReferences = retrieval.relevantChunks.map(c => {
         const decodedText = decodeHtmlEntities(c.text || '');
         const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
-        const excerpt = extractRelevantExcerpt(decodedText, prompt, 140);
-        const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+        const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt, 140));
+        const locator = c.hasNativePage && typeof c.pageNumber === 'number' ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
         const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
         const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
 
@@ -745,7 +753,7 @@ app.post("/api/gemini/generate", async (req, res) => {
       return res.json({
         text: shortCircuitText,
         source: "document_grounding",
-        evidenceStatus: "sufficient",
+        evidenceStatus: "insufficient",
         verification,
         references: []
       });
@@ -790,7 +798,8 @@ ${formattedChunks}
 1. ให้ตอบคำถามโดยอ้างอิงข้อมูลจาก "เนื้อหาเอกสารอ้างอิง" ด้านบนเป็นหลัก
 2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" หรือ "[ส่วนที่ 1]" ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร ห้ามแต่งเลขหน้าขึ้นมาเองเด็ดขาด
 3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
-4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้`;
+4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้
+5. ห้ามใส่ข้อความอ้างอิงแบบอินไลน์ เช่น [ส่วนอ้างอิง ...] ไว้ในเนื้อหาคำตอบเด็ดขาด ให้ตอบด้วยภาษาเนื้อหาทางวิชาการอย่างเป็นธรรมชาติ และให้ระบบจัดการแสดงกล่องแหล่งอ้างอิงแยกต่างหากเอง`;
   }
 
   // Map validated messages to Gemini SDK contents format
@@ -823,9 +832,18 @@ ${formattedChunks}
       const totalBackendDuration = Date.now() - requestStartTime;
       console.log(`[Perf Backend] Gemini API success on attempt ${attempt}. Call duration: ${attemptDuration}ms, Total backend duration: ${totalBackendDuration}ms`);
 
-      const text = response.text;
+      let text = response.text;
       if (!text) {
         throw new Error("ไม่ได้รับคำตอบจากโมเดล Gemini");
+      }
+
+      if (isDocumentGrounding) {
+        text = text
+          .replace(/\[ส่วนอ้างอิง[^\]]*\]/g, '')
+          .replace(/\[chunk\s*\d+[^\]]*\]/gi, '')
+          .replace(/\[ส่วนที่\s*\d+[^\]]*\]/gi, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
       }
 
       // If document grounding, build genuine document citations from actual chunks and verify academic answer
@@ -845,9 +863,10 @@ ${formattedChunks}
         const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE' || !verification.stages.evidenceFidelity.passed;
 
         const docReferences = isInsufficient ? [] : preComputedRetrieval.relevantChunks.map((c: any) => {
-          const sectionTitle = getCleanSectionTitle(c.text || '', c.chunkIndex);
-          const excerpt = extractRelevantExcerpt(c.text || '', latestPrompt, 140);
-          const locator = c.hasNativePage && c.pageNumber ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
+          const decodedText = decodeHtmlEntities(c.text || '');
+          const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
+          const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, latestPrompt, 140));
+          const locator = c.hasNativePage && typeof c.pageNumber === 'number' ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
           const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
           const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
 
@@ -956,7 +975,7 @@ ${formattedChunks}
         : "unverified",
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
-      evidenceLocator: r.uri ? (isDocumentGrounding ? "Local Document Chunk" : "Direct Academic Source") : null,
+      evidenceLocator: (r as any).evidenceLocator || (r.uri ? (isDocumentGrounding ? "Local Document Chunk" : "Direct Academic Source") : null),
       contentVersion: "1.2"
     })),
   });
