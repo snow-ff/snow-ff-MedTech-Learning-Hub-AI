@@ -225,6 +225,24 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
         unsupportedClaims.push('คำถามต้องการคำอธิบายและหลักฐานเปรียบเทียบทั้ง Prefix และ Suffix แต่ชิ้นส่วนหลักฐานที่สืบค้นได้ครอบคลุมไม่ครบถ้วนทั้งสองส่วน');
       }
     }
+
+    // Case 7: Semantic Topic Mismatch for Terminology / Specific Queries
+    const isSuffixQuery = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(query);
+    const isPrefixQuery = /prefix|คำอุปสรรค/i.test(query);
+    if ((isSuffixQuery || isPrefixQuery) && answerStatus === 'aligned') {
+      const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
+      const hasSuffixKeywords = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy|itis|ectomy/i.test(combinedChunksText);
+      const hasPrefixKeywords = /prefix|คำอุปสรรค|brady-|tachy-|dys-|sub-/i.test(combinedChunksText);
+
+      if (isSuffixQuery && !hasSuffixKeywords) {
+        answerStatus = 'hallucinated';
+        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Suffix ที่ระบุในคำถาม (Semantic Topic Mismatch)');
+      }
+      if (isPrefixQuery && !hasPrefixKeywords) {
+        answerStatus = 'hallucinated';
+        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Prefix ที่ระบุในคำถาม (Semantic Topic Mismatch)');
+      }
+    }
   }
 
   const answerFidelityPassed = answerStatus === 'aligned' || answerStatus === 'insufficient_evidence';

@@ -150,4 +150,51 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       expect(l).not.toContain('&amp;');
     });
   });
+
+  it('Test I — Semantic Mismatch, Positive Control, and Multi-Part Regression Tests', () => {
+    // 1. Negative Case: Suffix query with only anatomical position evidence must NOT be PASS
+    const docNegative = {
+      title: 'Anatomy Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'Standard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
+      ]
+    };
+    const negReport = verifyAcademicAnswer({
+      query: 'อธิบายความแตกต่างของ suffix -scopy, -gram',
+      candidateAnswer: 'Suffix -scopy คือการส่องกล้อง',
+      document: { title: 'Guide', chunks: docNegative.chunks }
+    });
+    expect(negReport.verdict).not.toBe('PASS');
+
+    // 2. Positive Control Case: Valid Suffix evidence must be correctly selected and evaluated
+    const docPositive = {
+      title: 'Medical Terminology Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 }
+      ]
+    };
+    const posReport = verifyAcademicAnswer({
+      query: 'อธิบาย suffix -scopy',
+      candidateAnswer: 'Suffix -scopy คือการส่องกล้องอ้างอิงจากชิ้นส่วนที่ 3',
+      document: { title: 'Guide', chunks: docPositive.chunks }
+    });
+    expect(posReport.stages.retrieval.relevantChunksCount).toBeGreaterThan(0);
+
+    // 3. Multi-Part Case: Prefix and Suffix query with only Prefix evidence must NOT be PASS
+    const docMultipart = {
+      title: 'Prefix Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) อยู่ข้างหน้าคำหลัก เช่น brady- และ tachy-', charCount: 60 }
+      ]
+    };
+    const multiReport = verifyAcademicAnswer({
+      query: 'เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์',
+      candidateAnswer: 'Prefix คือคำอุปสรรค ส่วน Suffix คือปัจจัยท้าย',
+      document: { title: 'Guide', chunks: docMultipart.chunks }
+    });
+    expect(multiReport.verdict).not.toBe('PASS');
+  });
 });
