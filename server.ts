@@ -966,15 +966,21 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   // If document grounding context is attached, switch instruction to strict document grounding
   if (isDocumentGrounding) {
-    activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => ({
-      id: `ctx-chunk-${idx + 1}`,
-      documentId: 'doc-ctx',
-      chunkIndex: c.chunkIndex || idx + 1,
-      pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
-      hasNativePage: typeof c.pageNumber === 'number',
-      text: c.text || '',
-      charCount: (c.text || '').length
-    }));
+    activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => {
+      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : String(idx + 1);
+      const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
+      const parsedIdx = parseInt(cleanIdxStr, 10);
+      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : (idx + 1);
+      return {
+        id: `ctx-chunk-${idx + 1}`,
+        documentId: 'doc-ctx',
+        chunkIndex: validIdx,
+        pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : (typeof c.pageNumber === 'string' ? parseInt(cleanChunkLocator(1, c.pageNumber).replace(/^หน้า\s*/, ''), 10) || undefined : undefined),
+        hasNativePage: typeof c.pageNumber === 'number',
+        text: decodeHtmlEntities(c.text || ''),
+        charCount: (c.text || '').length
+      };
+    });
 
     const retrievalStart = Date.now();
     preComputedRetrieval = retrieveGroundedChunks(activeChunksForGrounding, latestPrompt, 4);
