@@ -198,10 +198,11 @@ export function getAcademicFallback(
     const retrieval = retrieveGroundedChunks(chunksForRetrieval, prompt, 3);
 
     if (retrieval.hasEvidence && retrieval.relevantChunks.length > 0) {
+      const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
       const citations = retrieval.relevantChunks
         .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
         .join('\n\n');
-      const fallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
+      const fallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
 
       const verification = verifyAcademicAnswer({
         query: prompt,
@@ -1225,9 +1226,10 @@ ${formattedChunks}
           const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
           const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, latestPrompt, 140));
           const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
+          const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
 
           return {
-            title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
+            title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
             uri: `#chunk-${c.chunkIndex}`,
             type: "document_chunk",
             linkAccessStatus: "verified_local",
