@@ -365,5 +365,107 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // Chunk 13 must be unsupported_citation because of its own violation
     expect(ref13?.verificationStatus).toBe('unsupported_citation');
   });
+
+  it('Test P — Multipart Coverage Discrepancy: Prefix-only evidence for query asking both Prefix and Suffix', () => {
+    const docPrefixOnly = {
+      title: 'Prefix Only Reference Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 }
+      ]
+    };
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docPrefixOnly);
+
+    // 1. Answer-level must be insufficient because Suffix is missing
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.isVerified).toBe(false);
+    expect(res.verification?.stages.answerFidelity.status).toBe('overgeneralized');
+
+    // 2. Reference-level: Prefix chunk genuinely supports the Prefix portion and is source_grounded
+    expect(res.references).toHaveLength(1);
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    expect(ref1).toBeDefined();
+    expect(ref1?.verificationStatus).toBe('source_grounded');
+
+    // 3. Suffix must NOT be concluded as supported (no grounded reference for suffix exists)
+    const hasGroundedSuffixRef = res.references.some(r =>
+      r.verificationStatus === 'source_grounded' && /-(?:itis|ectomy|scopy|gram)/.test(r.excerpt || '')
+    );
+    expect(hasGroundedSuffixRef).toBe(false);
+  });
+
+  it('Test Q — Positive Control for Multipart Coverage: Genuine evidence for both Prefix and Suffix', () => {
+    const docBothParts = {
+      title: 'Complete Word Parts Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
+      ]
+    };
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docBothParts);
+
+    // 1. Answer-level must be sufficient and verified
+    expect(res.evidenceStatus).toBe('sufficient');
+    expect(res.verification?.verdict).toBe('PASS');
+    expect(res.verification?.isVerified).toBe(true);
+    expect(res.verification?.stages.answerFidelity.status).toBe('aligned');
+
+    // 2. Reference-level: Both chunks must be source_grounded
+    expect(res.references).toHaveLength(2);
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    expect(ref1?.verificationStatus).toBe('source_grounded');
+    expect(ref3?.verificationStatus).toBe('source_grounded');
+  });
+
+  it('Test R — Robust Citation Parsing: Exact Integer Matching, Duplicate Citations, and Malformed Formats', () => {
+    const docRobust = {
+      title: 'Robust Citation Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
+      ]
+    };
+
+    // Candidate answer with valid chunk 1, duplicate chunk 13, and malformed citations (ชิ้นส่วนที่ abc, empty ชิ้นส่วนที่ )
+    const candidateAnswer =
+      'คำตอบนี้อ้างอิงจากชิ้นส่วนที่ 1 และ ชิ้นส่วนที่ 13 และ ชิ้นส่วนที่ 13 ซ้ำ และ ชิ้นส่วนที่ abc รวมทั้ง ชิ้นส่วนที่ ';
+
+    const report = verifyAcademicAnswer({
+      query: 'อธิบาย prefix',
+      candidateAnswer,
+      document: {
+        title: docRobust.title,
+        hasNativePages: false,
+        chunks: docRobust.chunks
+      }
+    });
+
+    // 1. Unsupported citations must flag chunk 13 exactly once (deduplicated across duplicate citations)
+    const notice13Violations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('ชิ้นส่วนที่ 13')
+    );
+    expect(notice13Violations.length).toBe(1);
+    expect(notice13Violations[0]).toContain('เป็นข้อความประกาศแจ้งเตือน');
+
+    // 2. Unsupported citations must NOT flag chunk 1
+    const chunk1Violations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('ชิ้นส่วนที่ 1 ') || uc.includes('ชิ้นส่วนที่ 1 ซึ่ง')
+    );
+    expect(chunk1Violations.length).toBe(0);
+
+    // 3. Fallback evaluation with exact locator isolation
+    const fallback = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docRobust);
+    const ref1 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref13 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
+
+    expect(ref1?.verificationStatus).toBe('source_grounded');
+    expect(ref13?.verificationStatus).toBe('unsupported_citation');
+  });
 });
 

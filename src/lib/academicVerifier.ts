@@ -105,25 +105,23 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   }
 
   // Check 3: Cited chunk index must exist in retrieved relevant chunks
+  // Handles duplicate citations and malformed formats by extracting unique valid integer indices
   const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)\s*(\d+)/gi));
+  const uniqueCitedChunkIndices = Array.from(new Set(chunkMatches.map(m => parseInt(m[1], 10)).filter(n => !isNaN(n))));
   const retrievedChunkIndices = retrieval.relevantChunks.map(c => c.chunkIndex);
-  for (const match of chunkMatches) {
-    const chunkIdx = parseInt(match[1], 10);
-    if (!isNaN(chunkIdx)) {
-      const isRetrieved = retrievedChunkIndices.includes(chunkIdx);
-      if (!isRetrieved) {
-        unsupportedCitations.push(
-          `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่ได้อยู่ในหลักฐานที่สืบค้นพบและเกี่ยวข้อง (${retrievedChunkIndices.join(', ')})`
-        );
-      }
+  for (const chunkIdx of uniqueCitedChunkIndices) {
+    const isRetrieved = retrievedChunkIndices.includes(chunkIdx);
+    if (!isRetrieved) {
+      unsupportedCitations.push(
+        `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่ได้อยู่ในหลักฐานที่สืบค้นพบและเกี่ยวข้อง (${retrievedChunkIndices.join(', ')})`
+      );
     }
   }
 
   // Check 4: Cross-topic / Administrative notice chunk citation guard for terminology queries
   const isTerminologyQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม/i.test(query);
   if (isTerminologyQuery) {
-    for (const match of chunkMatches) {
-      const chunkIdx = parseInt(match[1], 10);
+    for (const chunkIdx of uniqueCitedChunkIndices) {
       const targetChunk = document.chunks.find(c => (c.chunkIndex || 0) === chunkIdx);
       if (targetChunk && /notice of adaptation|non-endorsement|การให้เครดิตแหล่งข้อมูล/i.test(targetChunk.text)) {
         unsupportedCitations.push(
@@ -218,8 +216,18 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     const asksPrefixAndSuffix = /prefix.*suffix|suffix.*prefix|ความแตกต่างระหว่าง.*prefix.*suffix/i.test(query) || (/prefix/i.test(query) && /suffix/i.test(query));
     if (asksPrefixAndSuffix && answerStatus === 'aligned') {
       const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
-      const hasPrefixEvidence = /prefix|อุปสรรค/i.test(combinedChunksText);
-      const hasSuffixEvidence = /suffix|ปัจจัยท้าย/i.test(combinedChunksText);
+      const hasWordPartsComposition = /(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบ|โครงสร้าง).*?(?:prefix).*?(?:suffix)|(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบ|โครงสร้าง).*?(?:suffix).*?(?:prefix)/i.test(combinedChunksText);
+
+      const hasPrefixEvidence =
+        hasWordPartsComposition ||
+        /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(combinedChunksText) ||
+        /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|\:|\-|\/))/i.test(combinedChunksText);
+
+      const hasSuffixEvidence =
+        hasWordPartsComposition ||
+        /-[a-z]{2,}\b/i.test(combinedChunksText) ||
+        /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|อยู่ข้างหลัง|อยู่ท้าย|เติมท้าย|\:|\-|\/))/i.test(combinedChunksText);
+
       if (!hasPrefixEvidence || !hasSuffixEvidence) {
         answerStatus = 'overgeneralized';
         unsupportedClaims.push('คำถามต้องการคำอธิบายและหลักฐานเปรียบเทียบทั้ง Prefix และ Suffix แต่ชิ้นส่วนหลักฐานที่สืบค้นได้ครอบคลุมไม่ครบถ้วนทั้งสองส่วน');
