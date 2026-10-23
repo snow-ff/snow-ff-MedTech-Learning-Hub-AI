@@ -26,7 +26,7 @@ import {
   seedSampleDocumentsIfEmpty,
   getStorageStatus
 } from '../lib/documentStorage';
-import { chunkText } from '../lib/documentChunker';
+import { chunkText, cleanChunkLocator } from '../lib/documentChunker';
 import { extractTextFromFile } from '../lib/pdfExtractor';
 import { OFFICIAL_COURSES_2567 } from '../data/curriculumData';
 import { downloadDtm67111SourceSecurely, downloadDtm67111ManifestSecurely } from '../lib/learningSourceDownload';
@@ -755,7 +755,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
                 >
                   <div className="flex items-center justify-between text-[11px] text-cyan-400 font-mono">
                     <span>
-                      Chunk #{chunk.chunkIndex}
+                      Chunk #{cleanChunkLocator(chunk.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '')}
                       {chunk.pageNumber ? ` • หน้า ${chunk.pageNumber}` : ' • ชิ้นส่วนสรุป (ไม่มีเลขหน้า)'}
                     </span>
                     <span className="text-slate-500">{chunk.charCount} chars</span>

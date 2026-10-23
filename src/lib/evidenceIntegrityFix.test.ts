@@ -792,5 +792,31 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(excerpt.startsWith('ำ')).toBe(false);
     expect(excerpt.startsWith('...ำ')).toBe(false);
   });
+
+  it('Test AB — Locator Entity Normalization: Chunk index with HTML entities (e.g. &#x35;, &#x33;) decodes cleanly to normal numbers without entity remnants', () => {
+    const docWithEntities = {
+      title: 'Entity Locator Guide',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: '&#x33;' as any, text: '=== ส่วนที่ 3: Prefix ===' },
+        { chunkIndex: '&#x35;' as any, text: '=== ส่วนที่ 5: Suffix ===' },
+        { chunkIndex: '&#x36;' as any, text: '=== ส่วนที่ 6: Safety ===' }
+      ]
+    };
+
+    const res = getAcademicFallback('Prefix Suffix Safety', [], docWithEntities);
+    for (const ref of res.references) {
+      expect(ref.evidenceLocator).not.toContain('&#');
+      expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
+    }
+
+    const loc3 = cleanChunkLocator('&#x33;');
+    const loc5 = cleanChunkLocator('&#x35;');
+    const loc6 = cleanChunkLocator('&#x36;');
+
+    expect(loc3).toBe('ชิ้นส่วนที่ 3');
+    expect(loc5).toBe('ชิ้นส่วนที่ 5');
+    expect(loc6).toBe('ชิ้นส่วนที่ 6');
+  });
 });
 
