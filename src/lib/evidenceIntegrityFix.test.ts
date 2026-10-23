@@ -189,10 +189,15 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(posReport.stages.retrieval.relevantChunksCount).toBeGreaterThan(0);
     expect(posReport.stages.retrieval.passed).toBe(true);
     expect(posReport.stages.evidenceFidelity.passed).toBe(true);
+    expect(posReport.stages.answerFidelity.passed).toBe(true);
+    expect(posReport.verdict).toBe('PASS');
+    expect(posReport.isVerified).toBe(true);
 
     const posFallback = getAcademicFallback('อธิบาย suffix -scopy', [], docPositive);
     expect(posFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3')).toBe(true);
     expect(posFallback.evidenceStatus).toBe('sufficient');
+    expect(posFallback.verification?.verdict).toBe('PASS');
+    expect(posFallback.verification?.isVerified).toBe(true);
     expect(posFallback.references[0].verificationStatus).toBe('source_grounded');
 
     // 3. Multi-Part Case: Prefix and Suffix query with only Prefix evidence must NOT report full coverage
@@ -209,11 +214,15 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       document: { title: 'Guide', chunks: docMultipart.chunks }
     });
     expect(multiReport.verdict).not.toBe('PASS');
+    expect(multiReport.isVerified).toBe(false);
     expect(multiReport.stages.answerFidelity.status).toBe('overgeneralized');
 
     const multiFallback = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docMultipart);
     expect(multiFallback.evidenceStatus).toBe('insufficient');
     expect(multiFallback.verification?.verdict).not.toBe('PASS');
-    expect(multiFallback.references.every(r => r.verificationStatus !== 'source_grounded')).toBe(true);
+    expect(multiFallback.verification?.isVerified).toBe(false);
+    // Reference-level: chunk 1 is a genuine local document chunk covering prefix
+    expect(multiFallback.references[0].verificationStatus).toBe('source_grounded');
+    expect(multiFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(true);
   });
 });

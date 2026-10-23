@@ -215,20 +215,33 @@ export function getAcademicFallback(
         verification.stages.answerFidelity.status === 'hallucinated' ||
         verification.stages.answerFidelity.status === 'overgeneralized';
 
+      const isTopicMismatch = verification.stages.answerFidelity.unsupportedClaims.some(
+        claim => claim.includes('Topic Mismatch')
+      );
+
       const chunkReferences = retrieval.relevantChunks.map(c => {
         const decodedText = decodeHtmlEntities(c.text || '');
         const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
         const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt, 140));
         const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
 
+        // Reference-level evidence validity:
+        // A reference is marked 'unsupported_citation' if evidence fidelity failed,
+        // if this specific chunk is cited erroneously, or if the entire query has a topic mismatch.
+        // Otherwise, genuine local document chunks retain 'source_grounded'.
+        const isChunkUnsupported =
+          !verification.stages.evidenceFidelity.passed ||
+          isTopicMismatch ||
+          verification.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes(`ชิ้นส่วนที่ ${c.chunkIndex}`));
+
         return {
           title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
           uri: `#chunk-${c.chunkIndex}`,
           type: "document_chunk",
           linkAccessStatus: "verified_local",
-          verificationStatus: (!isFallbackInsufficient && verification.stages.evidenceFidelity.passed)
-            ? ("source_grounded" as const)
-            : ("unsupported_citation" as const),
+          verificationStatus: isChunkUnsupported
+            ? ("unsupported_citation" as const)
+            : ("source_grounded" as const),
           evidenceLocator: finalLocator,
           excerpt,
           contentVersion: "1.2"
