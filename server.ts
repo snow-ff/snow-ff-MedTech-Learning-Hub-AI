@@ -246,26 +246,62 @@ export function getAcademicFallback(
             // Query asks general suffix/prefix/root (without specific -term):
             // Requires substantive morphological patterns (-itis, brady-) or definition frames (คือ, หมายถึง, เช่น, ประกอบด้วย, :)
             // Casual mention (e.g. "กล่าวถึง prefix และ suffix ทั่วไป") is rejected as unsupported_citation.
-            const chunkHasSubstantiveSuffix =
-              /-[a-z]{2,}\b/i.test(chunkLower) ||
-              /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower);
+            const asksDefinitionOrFunction = /(?:คืออะไร|หมายถึง|นิยาม|หน้าที่|ความหมาย|ทำหน้าที่|อธิบายหน้าที่|อธิบายความหมาย)/i.test(queryLower);
 
-            const chunkHasSubstantivePrefix =
+            // Split into clauses to ensure composition logic does not cross sentence boundaries
+            const clauses = chunkLower
+              .split(/(?:\r?\n+|[.;|•\u2022]+|\s{2,}|ฯ(?:ลฯ)?)/)
+              .map(s => s.trim())
+              .filter(s => s.length > 0);
+
+            const chunkHasWordPartsComposition = clauses.some(cl =>
+              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(cl)
+            );
+
+            const chunkHasPrefixDefinition =
+              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(chunkLower) ||
+              /\bprefix\b.*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(chunkLower);
+
+            const chunkHasSuffixDefinition =
+              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(chunkLower) ||
+              /\bsuffix\b.*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(chunkLower);
+
+            const chunkHasPrefixExamples =
               /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(chunkLower) ||
-              /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower);
+              /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(chunkLower);
+
+            const chunkHasSuffixExamples =
+              /-[a-z]{2,}\b/i.test(chunkLower) ||
+              /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(chunkLower);
+
+            // Clause-specific composition to prevent intra-chunk cross-sentence match
+            const clauseHasPrefixComposition = clauses.some(cl =>
+              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:prefix|คำอุปสรรค)/i.test(cl)
+            );
+
+            const clauseHasSuffixComposition = clauses.some(cl =>
+              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)/i.test(cl)
+            );
+
+            const chunkHasSubstantivePrefix = asksDefinitionOrFunction
+              ? (chunkHasPrefixDefinition || clauseHasPrefixComposition)
+              : (chunkHasPrefixDefinition || chunkHasPrefixExamples || clauseHasPrefixComposition);
+
+            const chunkHasSubstantiveSuffix = asksDefinitionOrFunction
+              ? (chunkHasSuffixDefinition || clauseHasSuffixComposition)
+              : (chunkHasSuffixDefinition || chunkHasSuffixExamples || clauseHasSuffixComposition);
 
             const chunkHasSubstantiveRoot =
               /(?:รากศัพท์|word root|แกนหลักของคำ)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower) ||
               /รากศัพท์|แกนหลักของคำ/i.test(chunkLower);
 
-            const chunkHasWordPartsComposition =
-              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(chunkLower);
+            const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
 
             isChunkTopicRelevant =
-              (asksSuffix && chunkHasSubstantiveSuffix) ||
-              (asksPrefix && chunkHasSubstantivePrefix) ||
-              (asksRoot && chunkHasSubstantiveRoot) ||
-              ((asksSuffix || asksPrefix || asksRoot) && chunkHasWordPartsComposition);
+              !isNoticeOrDisclaimer &&
+              ((asksSuffix && chunkHasSubstantiveSuffix) ||
+               (asksPrefix && chunkHasSubstantivePrefix) ||
+               (asksRoot && chunkHasSubstantiveRoot));
           }
         } else {
           // For general queries, do not assume relevance solely from retrieval match;

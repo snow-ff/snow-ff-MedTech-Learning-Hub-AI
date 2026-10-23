@@ -422,7 +422,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(ref3?.verificationStatus).toBe('source_grounded');
   });
 
-  it('Test R — Robust Citation Parsing: Exact Integer Matching, Duplicate Citations, and Malformed Formats', () => {
+  it('Test R — Robust Citation Parsing: Exact Integer Matching, Duplicate Citations, and Strict Malformed Delimited Citations', () => {
     const docRobust = {
       title: 'Robust Citation Guide',
       hasNativePages: false,
@@ -432,9 +432,10 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       ]
     };
 
-    // Candidate answer with valid chunk 1, duplicate chunk 13, and malformed citations (ชิ้นส่วนที่ abc, empty ชิ้นส่วนที่ )
+    // Candidate answer with valid chunk 1, duplicate chunk 13, and strict malformed bracket citations ([ชิ้นส่วนที่ abc], [ส่วนอ้างอิง: ], [chunk null])
+    // along with regular Thai text containing "ชิ้นส่วนที่" ("ชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ") to verify no false positives
     const candidateAnswer =
-      'คำตอบนี้อ้างอิงจากชิ้นส่วนที่ 1 และ ชิ้นส่วนที่ 13 และ ชิ้นส่วนที่ 13 ซ้ำ และ ชิ้นส่วนที่ abc รวมทั้ง ชิ้นส่วนที่ ';
+      'คำตอบนี้อ้างอิงจากชิ้นส่วนที่ 1 และ ชิ้นส่วนที่ 13 และ ชิ้นส่วนที่ 13 ซ้ำ และ [ชิ้นส่วนที่ abc] และ [ส่วนอ้างอิง: ] และ [chunk null] รวมทั้งมีชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ และ [CBC] ปกติ';
 
     const report = verifyAcademicAnswer({
       query: 'อธิบาย prefix',
@@ -459,13 +460,126 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     );
     expect(chunk1Violations.length).toBe(0);
 
-    // 3. Fallback evaluation with exact locator isolation
+    // 3. Strict Delimited Citation checking: Malformed bracketed citations must be flagged
+    const malformedViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('รูปแบบการอ้างอิงผิดพลาด (Malformed Citation)')
+    );
+    expect(malformedViolations.length).toBeGreaterThanOrEqual(3);
+    expect(malformedViolations.some(m => m.includes('[ชิ้นส่วนที่ abc]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[ส่วนอ้างอิง: ]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk null]'))).toBe(true);
+
+    // 4. Regular Thai prose ("ชิ้นส่วนที่นำมาตรวจ") and non-citation brackets ("[CBC]") must NOT be flagged as citation errors
+    const thaiProseViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('ชิ้นส่วนที่นำมาตรวจ')
+    );
+    expect(thaiProseViolations.length).toBe(0);
+
+    const cbcBracketViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('CBC')
+    );
+    expect(cbcBracketViolations.length).toBe(0);
+
+    // 5. Fallback evaluation with exact locator isolation
     const fallback = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docRobust);
     const ref1 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
     const ref13 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
 
     expect(ref1?.verificationStatus).toBe('source_grounded');
     expect(ref13?.verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test S — Multi-Chunk Dispersed Match: Concatenation across chunks cannot synthesize a fake composite definition', () => {
+    const docDispersed = {
+      title: 'Dispersed Medical Notes',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'คำศัพท์ทางการแพทย์ ประกอบด้วยเนื้อหาหลายบทเรียนในหลักสูตร', charCount: 65 },
+        { id: '2', documentId: 'doc1', chunkIndex: 2, text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'ประกาศลิขสิทธิ์: สงวนลิขสิทธิ์คู่มือการใช้ suffix ทางการแพทย์ โดยชมรมวิชาการ', charCount: 75 }
+      ]
+    };
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docDispersed);
+
+    // 1. Answer-level must be insufficient because Suffix has no genuine substantive explanation
+    // Chunk 1 ("ประกอบด้วย...") + Chunk 3 ("...suffix...") must NOT bridge across chunks to form a fake composite
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.stages.answerFidelity.status).toBe('overgeneralized');
+
+    // 2. Reference-level:
+    // Chunk 2 (genuine prefix evidence) is source_grounded
+    const ref2 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 2');
+    expect(ref2).toBeDefined();
+    expect(ref2?.verificationStatus).toBe('source_grounded');
+
+    // Chunk 1 (general intro) and Chunk 3 (disclaimer/copyright) must be unsupported_citation
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    if (ref1) expect(ref1.verificationStatus).toBe('unsupported_citation');
+    if (ref3) expect(ref3.verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test T — Cross-Sentence Match: Matching across distant sentences in the same chunk cannot fool composition check', () => {
+    const docCrossSentence = {
+      title: 'Intra-Chunk Separation Guide',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          documentId: 'doc1',
+          chunkIndex: 1,
+          text: 'คำศัพท์ทางการแพทย์ ประกอบด้วย 3 ส่วนหลัก ได้แก่ รากศัพท์ (Word Root). ส่วนแบบฝึกหัดท้ายเล่มจะมีคำถามเรื่อง prefix และ suffix ให้นักศึกษาทำ',
+          charCount: 135
+        }
+      ]
+    };
+
+    const report = verifyAcademicAnswer({
+      query: 'อธิบายองค์ประกอบของคำศัพท์ Prefix และ Suffix',
+      candidateAnswer: 'คำศัพท์ทางการแพทย์มีองค์ประกอบคือ Prefix และ Suffix',
+      document: { title: docCrossSentence.title, chunks: docCrossSentence.chunks }
+    });
+
+    // Crossing sentence 1 ("ประกอบด้วย...") into sentence 2 ("prefix และ suffix ให้นักศึกษาทำ") must NOT trigger hasWordPartsComposition
+    expect(report.verdict).not.toBe('PASS');
+    expect(report.stages.answerFidelity.status).toBe('overgeneralized');
+
+    const res = getAcademicFallback('อธิบายองค์ประกอบของคำศัพท์ Prefix และ Suffix', [], docCrossSentence);
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.references[0].verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test U — Raw Examples Without Definition: Query asking for definition/function cannot be satisfied solely by raw morpheme examples', () => {
+    const docRawExamples = {
+      title: 'Morpheme List',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          documentId: 'doc1',
+          chunkIndex: 1,
+          text: 'รายการตัวอย่างคำศัพท์ทางการแพทย์: Prefix เช่น brady-, tachy- และ Suffix เช่น -itis, -ectomy (ไม่มีคำอธิบายความหมายหรือหน้าที่)',
+          charCount: 125
+        }
+      ]
+    };
+
+    // Query specifically asks for function/definition
+    const report = verifyAcademicAnswer({
+      query: 'อธิบายหน้าที่และนิยามของ Prefix และ Suffix',
+      candidateAnswer: 'หน้าที่ของ Prefix และ Suffix คือการระบุตำแหน่งและความหมายของคำศัพท์',
+      document: { title: docRawExamples.title, chunks: docRawExamples.chunks }
+    });
+
+    // Having only raw tokens without definition/explanation cannot satisfy definition queries
+    expect(report.verdict).not.toBe('PASS');
+    expect(report.stages.answerFidelity.status).toBe('overgeneralized');
+
+    const res = getAcademicFallback('อธิบายหน้าที่และนิยามของ Prefix และ Suffix', [], docRawExamples);
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.references[0].verificationStatus).toBe('unsupported_citation');
   });
 });
 

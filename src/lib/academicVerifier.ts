@@ -118,6 +118,44 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     }
   }
 
+  // Check 3a: Strict Delimited Citation Format Validation
+  // Detects citations specifically inside brackets [...] or explicit markers that intend to cite but lack valid numeric indices
+  // Examples: "[ชิ้นส่วนที่ abc]", "[ส่วนอ้างอิง: ]", "[chunk null]", "[ชิ้นส่วนที่ undefined]", "[chunk: NaN]"
+  // Strictly ignores normal Thai text (e.g. "ชิ้นส่วนที่นำมาตรวจ") and non-citation bracketed terms (e.g. "[CBC]", "[EDTA]")
+  const malformedBracketMatches = Array.from(
+    candidateAnswer.matchAll(/\[\s*(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)[\s:]*([^\]]*)\]/gi)
+  );
+  const seenMalformed = new Set<string>();
+
+  for (const match of malformedBracketMatches) {
+    const fullMatch = match[0];
+    const innerContent = match[1] || '';
+    // If the bracketed citation marker does NOT contain any valid digit, it is malformed
+    if (!/\d+/.test(innerContent)) {
+      const trimmed = fullMatch.trim();
+      if (!seenMalformed.has(trimmed)) {
+        seenMalformed.add(trimmed);
+        unsupportedCitations.push(
+          `รูปแบบการอ้างอิงผิดพลาด (Malformed Citation): พบ "${trimmed}" ซึ่งไม่ระบุหมายเลขชิ้นส่วนที่ถูกต้อง`
+        );
+      }
+    }
+  }
+
+  // Also check for explicit invalid literal keywords (null, undefined, NaN) following a citation prefix even if unbracketed
+  const explicitInvalidLiterals = Array.from(
+    candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)[\s:]*(?:null|undefined|nan)\b/gi)
+  );
+  for (const match of explicitInvalidLiterals) {
+    const trimmed = match[0].trim();
+    if (!seenMalformed.has(trimmed)) {
+      seenMalformed.add(trimmed);
+      unsupportedCitations.push(
+        `รูปแบบการอ้างอิงผิดพลาด (Malformed Citation): พบ "${trimmed}" ซึ่งมีค่าอ้างอิงไม่ถูกต้อง`
+      );
+    }
+  }
+
   // Check 4: Cross-topic / Administrative notice chunk citation guard for terminology queries
   const isTerminologyQuery = /root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|สระเชื่อม/i.test(query);
   if (isTerminologyQuery) {
@@ -215,20 +253,65 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     // Case 6: Multi-part query coverage check (e.g. Prefix and Suffix comparison)
     const asksPrefixAndSuffix = /prefix.*suffix|suffix.*prefix|ความแตกต่างระหว่าง.*prefix.*suffix/i.test(query) || (/prefix/i.test(query) && /suffix/i.test(query));
     if (asksPrefixAndSuffix && answerStatus === 'aligned') {
-      const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
-      const hasWordPartsComposition = /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:prefix).*?(?:suffix)|(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:suffix).*?(?:prefix)/i.test(combinedChunksText);
+      const asksDefinitionOrFunction = /(?:คืออะไร|หมายถึง|นิยาม|หน้าที่|ความหมาย|ทำหน้าที่|อธิบายหน้าที่|อธิบายความหมาย)/i.test(query);
 
-      const hasPrefixEvidence =
-        hasWordPartsComposition ||
-        /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(combinedChunksText) ||
-        /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|\:|\-|\/))/i.test(combinedChunksText);
+      // Evaluate per-chunk rather than concatenating all chunks into one string,
+      // avoiding cross-chunk spanning where unrelated pieces are merged.
+      let hasValidPrefixEvidence = false;
+      let hasValidSuffixEvidence = false;
 
-      const hasSuffixEvidence =
-        hasWordPartsComposition ||
-        /-[a-z]{2,}\b/i.test(combinedChunksText) ||
-        /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|อยู่ข้างหลัง|อยู่ท้าย|เติมท้าย|\:|\-|\/))/i.test(combinedChunksText);
+      for (const chunk of retrieval.relevantChunks) {
+        const text = (chunk.text || '').toLowerCase();
 
-      if (!hasPrefixEvidence || !hasSuffixEvidence) {
+        // Guard against notice / disclaimer chunks
+        if (/notice of adaptation|non-endorsement|สงวนลิขสิทธิ์|disclaimer|ประกาศเตือน/i.test(text)) {
+          continue;
+        }
+
+        // Clause splitting to check intra-sentence boundaries
+        // Splits by newline, period, bullet, semicolon, Thai punctuation ฯ, ฯลฯ, or multiple spaces
+        const clauses = text
+          .split(/(?:\r?\n+|[.;|•\u2022]+|\s{2,}|ฯ(?:ลฯ)?)/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+
+        // Check for genuine word parts composition definition strictly within a single clause
+        const clauseHasComposition = clauses.some(cl =>
+          /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:prefix|คำอุปสรรค)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)|(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)[^.!?;\n]*?(?:prefix|คำอุปสรรค)/i.test(cl)
+        );
+
+        // Substantive definition / explanation of Prefix
+        const hasPrefixDef =
+          clauseHasComposition ||
+          /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(text) ||
+          /\bprefix\b.*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(text);
+
+        // Substantive definition / explanation of Suffix
+        const hasSuffixDef =
+          clauseHasComposition ||
+          /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(text) ||
+          /\bsuffix\b.*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(text);
+
+        // Examples of Prefix
+        const hasPrefixEx =
+          /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(text) ||
+          /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(text);
+
+        // Examples of Suffix
+        const hasSuffixEx =
+          /-[a-z]{2,}\b/i.test(text) ||
+          /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(text);
+
+        if (asksDefinitionOrFunction) {
+          if (hasPrefixDef) hasValidPrefixEvidence = true;
+          if (hasSuffixDef) hasValidSuffixEvidence = true;
+        } else {
+          if (hasPrefixDef || hasPrefixEx) hasValidPrefixEvidence = true;
+          if (hasSuffixDef || hasSuffixEx) hasValidSuffixEvidence = true;
+        }
+      }
+
+      if (!hasValidPrefixEvidence || !hasValidSuffixEvidence) {
         answerStatus = 'overgeneralized';
         unsupportedClaims.push('คำถามต้องการคำอธิบายและหลักฐานเปรียบเทียบทั้ง Prefix และ Suffix แต่ชิ้นส่วนหลักฐานที่สืบค้นได้ครอบคลุมไม่ครบถ้วนทั้งสองส่วน');
       }
