@@ -477,46 +477,37 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
 
   let start = 0;
   if (bestIndex !== -1) {
-    // Look backward for sentence/clause boundary up to 60 chars before bestIndex
-    const searchBackRange = cleanText.substring(Math.max(0, bestIndex - 60), bestIndex);
-    const boundaryMatch = searchBackRange.match(/(?:[\n.!?•|\-–—;:]|\s{2,}|\s(?=[ก-ฮa-zA-Z]))[^\n.!?•|\-–—;:]*$/);
+    const searchBackRange = cleanText.substring(Math.max(0, bestIndex - 80), bestIndex);
+    const boundaryMatch = searchBackRange.match(/(?:[\n.!?•|\-–—;:]|\s)[^\n.!?•|\-–—;:]*$/);
     if (boundaryMatch && boundaryMatch.index !== undefined) {
-      const boundaryOffset = Math.max(0, bestIndex - 60) + boundaryMatch.index + 1;
-      start = boundaryOffset;
+      start = Math.max(0, bestIndex - 80) + boundaryMatch.index + 1;
     } else {
       start = Math.max(0, bestIndex - 25);
-      const spaceIdx = cleanText.lastIndexOf(' ', start);
-      if (spaceIdx !== -1 && spaceIdx >= bestIndex - 50) {
-        start = spaceIdx + 1;
-      }
     }
-  } else {
-    start = 0;
-    while (start < cleanText.length && /^[\s\-_:]/.test(cleanText[start])) {
-      start++;
-    }
+  }
+
+  // Ensure start does not begin with orphaned vowels, tone marks, punctuation, or mid-word
+  while (start < cleanText.length && (
+    /^[^a-zA-Z0-9ก-ฮ]/.test(cleanText[start]) ||
+    /^[\u0E31\u0E33-\u0E3A\u0E47-\u0E4E]/.test(cleanText[start]) ||
+    (start > 0 && /[ก-ฮa-zA-Z0-9]/.test(cleanText[start - 1]) && /[ก-ฮa-zA-Z0-9]/.test(cleanText[start]))
+  )) {
+    start++;
   }
 
   let end = Math.min(cleanText.length, start + maxLength);
   if (end < cleanText.length) {
-    // Look forward for sentence/clause boundary or space within [end - 25, end + 35]
-    const searchForwardRange = cleanText.substring(Math.max(start + 40, end - 25), Math.min(cleanText.length, end + 35));
+    const searchForwardRange = cleanText.substring(Math.max(start + 40, end - 20), Math.min(cleanText.length, end + 30));
     const forwardBoundary = searchForwardRange.match(/[\n.!?•|\-–—;:]|\s/);
     if (forwardBoundary && forwardBoundary.index !== undefined) {
-      end = Math.max(start + 40, end - 25) + forwardBoundary.index;
-    } else {
-      const spaceIdx = cleanText.lastIndexOf(' ', end);
-      if (spaceIdx > start + 30) {
-        end = spaceIdx;
-      }
+      end = Math.max(start + 40, end - 20) + forwardBoundary.index;
     }
   }
 
   let excerpt = cleanText.slice(start, end).trim();
-  // Ensure excerpt starts cleanly with a valid Thai consonant or alphanumeric character, stripping any leading punctuation, symbols, spaces, or orphaned Thai dependent vowels/tone marks
   excerpt = excerpt.replace(/^[^a-zA-Z0-9ก-ฮ]+/, '').replace(/^[\u0E31\u0E33-\u0E3A\u0E47-\u0E4E]+/, '').trim();
 
-  if (start > 0) excerpt = '...' + excerpt;
+  if (start > 10) excerpt = '...' + excerpt;
   if (end < cleanText.length) excerpt = excerpt + '...';
   
   return excerpt;
