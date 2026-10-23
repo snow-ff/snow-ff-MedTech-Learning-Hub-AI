@@ -383,15 +383,7 @@ export function getAcademicFallback(
           }
         }
 
-        // Exact chunk index matching to prevent prefix collision (e.g. chunk 1 falsely matching chunk 13)
-        const isFidelityViolated =
-          !verification.stages.evidenceFidelity.passed &&
-          verification.stages.evidenceFidelity.unsupportedCitations.some(uc => {
-            const matches = Array.from(uc.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)\s*(\d+)/gi));
-            return matches.some(m => parseInt(m[1], 10) === c.chunkIndex);
-          });
-
-        const isChunkUnsupported = isFidelityViolated || !isChunkTopicRelevant;
+        const isChunkUnsupported = !isChunkTopicRelevant;
 
         const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
         return {
