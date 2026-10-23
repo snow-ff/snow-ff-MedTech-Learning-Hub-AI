@@ -837,35 +837,44 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       }))
     });
 
-    // 1. Evidence and Verification status must be fully sufficient and PASS
-    expect(res.evidenceStatus).toBe('sufficient');
-    expect(res.verification?.verdict).toBe('PASS');
-    expect(res.verification?.isVerified).toBe(true);
+    // Part 1: Source Document Content Check (Ground Truth contains info)
+    const hasSourcePrefixDef = /คำอุปสรรค|เติมหน้า/i.test(rawText);
+    const hasSourcePrefixEx = /brady-|tachy-/i.test(rawText);
+    const hasSourceSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(rawText);
+    const hasSourceSuffixEx = /-itis|-ectomy|-scopy/i.test(rawText);
 
-    // 2. References must be non-empty and clean of HTML entities
+    expect(hasSourcePrefixDef).toBe(true);
+    expect(hasSourcePrefixEx).toBe(true);
+    expect(hasSourceSuffixDef).toBe(true);
+    expect(hasSourceSuffixEx).toBe(true);
+
+    // Part 2: System Retrieval & Reference Evidence Check (Strictly excluding res.text)
     expect(res.references.length).toBeGreaterThan(0);
     for (const ref of res.references) {
       expect(ref.evidenceLocator).not.toContain('&#');
       expect(ref.evidenceLocator).not.toContain('&amp;');
       expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
-      // No synthetic page numbers on unpaged document
       expect(ref.evidenceLocator).not.toContain('หน้า');
     }
 
-    // 3. Rigorous independent source evidence verification in full retrieved chunk texts and reference excerpts:
-    // - Prefix definition & example
-    // - Suffix definition & example
-    const allText = res.text + ' ' + res.references.map(r => r.excerpt || '').join(' ');
-    
-    const hasPrefixDefinition = /คำอุปสรรค|เติมหน้า/i.test(allText);
-    const hasPrefixExample = /brady-|tachy-/i.test(allText);
-    const hasSuffixDefinition = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ/i.test(allText);
-    const hasSuffixExample = /-itis|-ectomy|-scopy/i.test(allText);
+    const referenceEvidenceText = res.references.map(r => (r.excerpt || '') + ' ' + (r.title || '')).join(' ');
+    const matchedChunkTexts = chunks.filter(c => res.references.some(r => r.evidenceLocator?.includes(String(c.chunkIndex)))).map(c => c.text).join(' ');
+    const combinedRetrievalEvidence = referenceEvidenceText + ' ' + matchedChunkTexts;
 
-    expect(hasPrefixDefinition).toBe(true);
-    expect(hasPrefixExample).toBe(true);
-    expect(hasSuffixDefinition).toBe(true);
-    expect(hasSuffixExample).toBe(true);
+    const hasRetrievedPrefixDef = /คำอุปสรรค|เติมหน้า/i.test(combinedRetrievalEvidence);
+    const hasRetrievedPrefixEx = /brady-|tachy-/i.test(combinedRetrievalEvidence);
+    const hasRetrievedSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(combinedRetrievalEvidence);
+    const hasRetrievedSuffixEx = /-itis|-ectomy|-scopy/i.test(combinedRetrievalEvidence);
+
+    expect(hasRetrievedPrefixDef).toBe(true);
+    expect(hasRetrievedPrefixEx).toBe(true);
+    expect(hasRetrievedSuffixDef).toBe(true);
+    expect(hasRetrievedSuffixEx).toBe(true);
+
+    // Part 3: Answer Completeness & Verification Verdict Check
+    expect(res.evidenceStatus).toBe('sufficient');
+    expect(res.verification?.verdict).toBe('PASS');
+    expect(res.verification?.isVerified).toBe(true);
   });
 
   it('Test AD — Negative Test: Document with only Prefix and no Suffix detects missing parts and returns insufficient status', () => {
@@ -890,6 +899,54 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.text).toContain('คำเตือนความครอบคลุมของหลักฐาน');
     expect(res.text).toContain('ปัจจัยท้าย (Suffix)');
     expect(res.text).toContain('[ส่วนอ้างอิง 1]');
+  });
+
+  it('Test AE — False Positive Prevention: Answer mentions both Prefix and Suffix, but retrieved references support only Prefix', () => {
+    const docPrefixOnlyGroundTruth = {
+      title: 'เอกสารตัวอย่างเฉพาะ Prefix เท่านั้น',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)' }
+      ]
+    };
+
+    const prompt = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix พร้อมยกตัวอย่าง ความหมาย และอ้างอิงจากเอกสารที่เลือก';
+    const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], docPrefixOnlyGroundTruth);
+
+    // 1. Source Document Check: source lacks Suffix
+    const sourceText = docPrefixOnlyGroundTruth.chunks.map(c => c.text).join(' ');
+    expect(/ปัจจัยท้าย|Suffix/i.test(sourceText)).toBe(false);
+
+    // 2. Retrieved Reference Evidence Check (Strictly excluding res.text): reference evidence lacks Suffix
+    const refEvidenceText = res.references.map(r => r.excerpt || '').join(' ');
+    expect(/-itis|-ectomy|-scopy/i.test(refEvidenceText)).toBe(false);
+
+    // 3. Completeness & Verification Check: must NOT be PASS / must be insufficient
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.isVerified).toBe(false);
+  });
+
+  it('Test AF — Traceability & Citation Mismatch Prevention: Reference excerpt not matching source chunk text is flagged as unsupported', () => {
+    const docTraceability = {
+      title: 'Traceability Test Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)' },
+        { id: '5', documentId: 'doc1', chunkIndex: 5, text: '=== ส่วนที่ 5: ข้อความทั่วไปที่ไม่มีเนื้อหาอ้างอิงทางการแพทย์ ===' }
+      ]
+    };
+
+    const report = verifyAcademicAnswer({
+      query: 'อธิบาย Prefix ในเอกสาร',
+      candidateAnswer: 'Prefix คือคำอุปสรรค [ชิ้นส่วนที่ 5 อ้างอิงข้อความปลอมว่า -itis คือการอักเสบ]',
+      document: { title: docTraceability.title, chunks: docTraceability.chunks }
+    });
+
+    // Chunk 5 has no medical suffix/prefix definition matching the cited claim -> must be flagged as unsupported / not verified
+    expect(report.verdict).not.toBe('PASS');
+    expect(report.stages.evidenceFidelity.unsupportedCitations.length).toBeGreaterThan(0);
   });
 });
 

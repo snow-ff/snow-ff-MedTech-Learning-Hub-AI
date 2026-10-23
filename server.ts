@@ -195,7 +195,7 @@ export function getAcademicFallback(
       };
     });
 
-    const retrieval = retrieveGroundedChunks(chunksForRetrieval, prompt, 3);
+    const retrieval = retrieveGroundedChunks(chunksForRetrieval, prompt, Math.max(10, chunksForRetrieval.length));
 
     if (retrieval.hasEvidence && retrieval.relevantChunks.length > 0) {
       const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
