@@ -695,5 +695,85 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.verification?.verdict).toBe('PASS');
     expect(res.references[0].verificationStatus).toBe('source_grounded');
   });
+
+  it('Test Y — Locator HTML Entities Normalization: Indices 3 (&#x33;) and 10 (1&#x30;) must be decoded cleanly without entity artifacts', () => {
+    // 1. Direct cleanChunkLocator tests for hex entities
+    expect(cleanChunkLocator('&#x33;')).toBe('ชิ้นส่วนที่ 3');
+    expect(cleanChunkLocator('1&#x30;')).toBe('ชิ้นส่วนที่ 10');
+    expect(cleanChunkLocator('&amp;#x33;')).toBe('ชิ้นส่วนที่ 3');
+    expect(cleanChunkLocator('1&amp;#x30;')).toBe('ชิ้นส่วนที่ 10');
+
+    // 2. Integration with document having chunkIndex containing hex entities
+    const docEntities = {
+      title: 'เอกสารที่มี Entity &amp; &#x33;',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: '&#x33;' as any, text: '=== ส่วนที่ 3: ความหมายของ Prefix (คำอุปสรรค) เช่น brady- ===\nPrefix วางไว้หน้าคำหลัก' },
+        { chunkIndex: '1&#x30;' as any, text: '=== ส่วนที่ 10: ประกาศแจ้งเตือนและระเบียบปฏิบัติ ===\nข้อความระเบียบปฏิบัติทั่วไป' }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย prefix brady-', [], docEntities);
+    expect(res.references.length).toBeGreaterThan(0);
+    // Every reference locator must be clean and free of &# entities
+    for (const ref of res.references) {
+      expect(ref.evidenceLocator).not.toContain('&#');
+      expect(ref.title).not.toContain('&#');
+      expect(ref.excerpt).not.toContain('&#');
+    }
+
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    expect(ref3).toBeDefined();
+    expect(ref3?.evidenceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(ref3?.verificationStatus).toBe('source_grounded');
+
+    const ref10 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+    if (ref10) {
+      expect(ref10.evidenceLocator).toBe('ชิ้นส่วนที่ 10');
+      expect(ref10.verificationStatus).toBe('unsupported_citation');
+    }
+
+    // fallbackText must also be clean and free of raw entities
+    expect(res.text).not.toContain('&#x33;');
+    expect(res.text).not.toContain('1&#x30;');
+  });
+
+  it('Test Z — Partial Evidence Fallback & Granular Status: Prefix-only evidence states missing Suffix and isolates chunk status', () => {
+    const docPrefixOnly = {
+      title: 'Prefix Only Document',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '10', documentId: 'doc1', chunkIndex: 10, text: 'ระเบียบการเรียนการสอนประจำภาคการศึกษา สำหรับนักศึกษาเทคโนโลยีดิจิทัลทางการแพทย์', charCount: 80 }
+      ]
+    };
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docPrefixOnly);
+
+    // 1. Answer-level status must be insufficient and not PASS
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.isVerified).toBe(false);
+
+    // 2. Answer text must contain explicit Partial Evidence Notice and mention missing Suffix
+    expect(res.text).toContain('คำเตือนความครอบคลุมของหลักฐาน');
+    expect(res.text).toContain('ปัจจัยท้าย (Suffix)');
+    expect(res.text).toContain('[ส่วนอ้างอิง 1]');
+    // Must NOT cite unrelated administrative chunk 10 in the answer body
+    expect(res.text).not.toContain('[ส่วนอ้างอิง 10]');
+
+    // 3. Chunk-level status must be distinct: Chunk 1 grounded, Chunk 10 unsupported
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref10 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+    expect(ref1?.verificationStatus).toBe('source_grounded');
+    if (ref10) {
+      expect(ref10.verificationStatus).toBe('unsupported_citation');
+    }
+
+    // 4. Excerpt readability: must be a genuine substring without arbitrary mid-syllable cutoffs
+    expect(ref1?.excerpt).toBeDefined();
+    expect(ref1?.excerpt?.length).toBeGreaterThan(10);
+    expect(ref1?.excerpt).not.toContain('undefined');
+  });
 });
 

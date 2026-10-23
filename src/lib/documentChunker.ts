@@ -477,8 +477,14 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
 
   let start = 0;
   if (bestIndex !== -1) {
-    start = Math.max(0, bestIndex - 25);
-    if (start > 0) {
+    // Look backward for sentence/clause boundary up to 60 chars before bestIndex
+    const searchBackRange = cleanText.substring(Math.max(0, bestIndex - 60), bestIndex);
+    const boundaryMatch = searchBackRange.match(/(?:[\n.!?•|\-–—;:]|\s{2,}|\s(?=[ก-ฮa-zA-Z]))[^\n.!?•|\-–—;:]*$/);
+    if (boundaryMatch && boundaryMatch.index !== undefined) {
+      const boundaryOffset = Math.max(0, bestIndex - 60) + boundaryMatch.index + 1;
+      start = boundaryOffset;
+    } else {
+      start = Math.max(0, bestIndex - 25);
       const spaceIdx = cleanText.lastIndexOf(' ', start);
       if (spaceIdx !== -1 && spaceIdx >= bestIndex - 50) {
         start = spaceIdx + 1;
@@ -493,9 +499,16 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
 
   let end = Math.min(cleanText.length, start + maxLength);
   if (end < cleanText.length) {
-    const spaceIdx = cleanText.lastIndexOf(' ', end);
-    if (spaceIdx > start + 30) {
-      end = spaceIdx;
+    // Look forward for sentence/clause boundary or space within [end - 25, end + 35]
+    const searchForwardRange = cleanText.substring(Math.max(start + 40, end - 25), Math.min(cleanText.length, end + 35));
+    const forwardBoundary = searchForwardRange.match(/[\n.!?•|\-–—;:]|\s/);
+    if (forwardBoundary && forwardBoundary.index !== undefined) {
+      end = Math.max(start + 40, end - 25) + forwardBoundary.index;
+    } else {
+      const spaceIdx = cleanText.lastIndexOf(' ', end);
+      if (spaceIdx > start + 30) {
+        end = spaceIdx;
+      }
     }
   }
 
@@ -513,9 +526,14 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
  * Clean and normalize chunk locator or page number, ensuring robust decoding
  * of HTML entities (numeric, hex, double-encoded) and safe digit extraction.
  */
-export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: number): string {
-  if (typeof pageNumber === 'number' && !isNaN(pageNumber)) {
-    return `หน้า ${pageNumber}`;
+export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: number | string): string {
+  if (pageNumber !== undefined && pageNumber !== null && String(pageNumber).trim() !== '') {
+    const rawPageStr = String(pageNumber);
+    const decodedPage = decodeHtmlEntities(rawPageStr);
+    const cleanPage = decodedPage.replace(/\D/g, '');
+    if (cleanPage) {
+      return `หน้า ${cleanPage}`;
+    }
   }
   const rawStr = chunkIndex !== undefined && chunkIndex !== null ? String(chunkIndex) : '1';
   const decoded = decodeHtmlEntities(rawStr);

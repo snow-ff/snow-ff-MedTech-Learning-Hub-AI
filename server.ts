@@ -124,7 +124,7 @@ function determineTopic(p: string, messages?: Array<{ role: string; text: string
   return null;
 }
 
-function getCleanSectionTitle(text: string, chunkIndex: number): string {
+function getCleanSectionTitle(text: string, chunkIndex: number | string): string {
   const decoded = decodeHtmlEntities(text || '');
   const lines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
   for (const line of lines) {
@@ -136,18 +136,19 @@ function getCleanSectionTitle(text: string, chunkIndex: number): string {
 
     if (isGenuineHeading) {
       const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
+      const decodedCleaned = decodeHtmlEntities(cleaned);
       if (
-        cleaned.length >= 3 &&
-        cleaned.length <= 60 &&
-        !cleaned.includes('&#') &&
-        !/[*#_`~[\]()]/.test(cleaned) &&
-        !/^[^\w\sก-ฮะ-์]+$/.test(cleaned)
+        decodedCleaned.length >= 3 &&
+        decodedCleaned.length <= 60 &&
+        !decodedCleaned.includes('&#') &&
+        !/[*#_`~[\]()]/.test(decodedCleaned) &&
+        !/^[^\w\sก-ฮะ-์]+$/.test(decodedCleaned)
       ) {
-        return cleaned;
+        return decodedCleaned;
       }
     }
   }
-  return `ชิ้นส่วนที่ ${chunkIndex}`;
+  return cleanChunkLocator(chunkIndex);
 }
 
 // Academic fallback generator for robust offline / quota-exceeded handling
@@ -159,7 +160,7 @@ export function getAcademicFallback(
     courseCode?: string;
     hasNativePages?: boolean;
     totalPages?: number;
-    chunks: Array<{ chunkIndex?: number; pageNumber?: number | string; text: string }>;
+    chunks: Array<{ chunkIndex?: number | string; pageNumber?: number | string; text: string }>;
   }
 ): {
   text: string;
@@ -178,15 +179,21 @@ export function getAcademicFallback(
 } {
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
-    const chunksForRetrieval = documentContext.chunks.map((c, idx) => ({
-      id: `ctx-chunk-${idx + 1}`,
-      documentId: 'doc-ctx',
-      chunkIndex: c.chunkIndex || idx + 1,
-      pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : undefined,
-      hasNativePage: typeof c.pageNumber === 'number',
-      text: c.text,
-      charCount: c.text.length
-    }));
+    const chunksForRetrieval = documentContext.chunks.map((c, idx) => {
+      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : String(idx + 1);
+      const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
+      const parsedIdx = parseInt(cleanIdxStr, 10);
+      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : (idx + 1);
+      return {
+        id: `ctx-chunk-${idx + 1}`,
+        documentId: 'doc-ctx',
+        chunkIndex: validIdx,
+        pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : (typeof c.pageNumber === 'string' ? parseInt(cleanChunkLocator(1, c.pageNumber).replace(/^หน้า\s*/, ''), 10) || undefined : undefined),
+        hasNativePage: typeof c.pageNumber === 'number',
+        text: decodeHtmlEntities(c.text || ''),
+        charCount: (c.text || '').length
+      };
+    });
 
     const retrieval = retrieveGroundedChunks(chunksForRetrieval, prompt, 3);
 
@@ -385,8 +392,9 @@ export function getAcademicFallback(
 
         const isChunkUnsupported = isFidelityViolated || !isChunkTopicRelevant;
 
+        const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
         return {
-          title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
+          title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
           uri: `#chunk-${c.chunkIndex}`,
           type: "document_chunk",
           linkAccessStatus: "verified_local",
@@ -402,8 +410,46 @@ export function getAcademicFallback(
       const hasAnyGroundedReference = chunkReferences.some(r => r.verificationStatus === 'source_grounded');
       const isOverallEvidenceInsufficient = isFallbackInsufficient || !hasAnyGroundedReference;
 
+      // Adjust fallback answer text when evidence is incomplete or overgeneralized:
+      // Show ONLY conclusions supported by actual evidence and explicitly state missing parts.
+      let finalFallbackText = fallbackText;
+      if (isOverallEvidenceInsufficient || isFallbackInsufficient) {
+        const queryLower = prompt.toLowerCase();
+        const asksSuffix = /suffix|ปัจจัยท้าย/i.test(queryLower);
+        const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
+        const asksRoot = /root|รากศัพท์/i.test(queryLower);
+
+        const hasGroundedPrefix = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /prefix|คำอุปสรรค|brady|tachy/i.test(r.excerpt || ''));
+        const hasGroundedSuffix = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram/i.test(r.excerpt || ''));
+        const hasGroundedRoot = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /root|รากศัพท์|cardi|nephr/i.test(r.excerpt || ''));
+
+        const missingParts: string[] = [];
+        if (asksPrefix && !hasGroundedPrefix) missingParts.push('คำอุปสรรค (Prefix)');
+        if (asksSuffix && !hasGroundedSuffix) missingParts.push('ปัจจัยท้าย (Suffix)');
+        if (asksRoot && !hasGroundedRoot) missingParts.push('รากศัพท์ (Word Root)');
+
+        const groundedChunks = retrieval.relevantChunks.filter(c => {
+          const ref = chunkReferences.find(r => r.uri === `#chunk-${c.chunkIndex}`);
+          return ref && ref.verificationStatus === 'source_grounded';
+        });
+
+        if (groundedChunks.length > 0) {
+          const groundedCitations = groundedChunks
+            .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
+            .join('\n\n');
+
+          const missingClause = missingParts.length > 0
+            ? `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วนของคำถาม โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ในเอกสารนี้ ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้จากเอกสาร ดังนี้:\n\n`
+            : `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Incomplete Evidence Notice):**\nเอกสารนี้มีหลักฐานไม่ครอบคลุมประเด็นคำถามทั้งหมด ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้จากเอกสาร ดังนี้:\n\n`;
+
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
+        } else {
+          finalFallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
+        }
+      }
+
       return {
-        text: fallbackText,
+        text: finalFallbackText,
         evidenceStatus: isOverallEvidenceInsufficient ? ("insufficient" as const) : ("sufficient" as const),
         verification,
         references: chunkReferences
@@ -1326,7 +1372,7 @@ ${formattedChunks}
       type: r.uri ? (isDocumentGrounding ? "document_chunk" : "external_academic_link") : "simulated_reference",
       linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
       verificationStatus: isDocumentGrounding
-        ? ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation")
+        ? (r.verificationStatus || ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation"))
         : "unverified",
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,

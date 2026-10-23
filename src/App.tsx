@@ -44,7 +44,7 @@ import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationRepor
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
-import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities } from './lib/documentChunker';
+import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities, cleanChunkLocator } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
 import { getAllDocuments, seedSampleDocumentsIfEmpty } from './lib/documentStorage';
 
@@ -473,7 +473,9 @@ export default function App() {
         verification: verificationReport,
         references: Array.isArray(data.references) ? data.references.map((r: any) => ({
           ...r,
-          evidenceLocator: r.evidenceLocator ? decodeHtmlEntities(r.evidenceLocator) : r.evidenceLocator
+          title: r.title ? decodeHtmlEntities(r.title) : r.title,
+          excerpt: r.excerpt ? decodeHtmlEntities(r.excerpt) : r.excerpt,
+          evidenceLocator: r.evidenceLocator ? cleanChunkLocator(r.evidenceLocator) : r.evidenceLocator
         })) : undefined
       };
 
@@ -988,7 +990,7 @@ export default function App() {
                             <p className="font-semibold text-rose-300">⚠️ ข้อบกพร่องที่ตรวจพบ (ห้ามใช้อ้างอิงโดยตรง):</p>
                             <ul className="list-disc list-inside mt-1 space-y-0.5 text-rose-200">
                               {msg.verification.stages.evidenceFidelity.unsupportedCitations.map((e, idx) => (
-                                <li key={idx}>{e}</li>
+                                <li key={idx}>{decodeHtmlEntities(e)}</li>
                               ))}
                               {msg.verification.stages.answerFidelity.contradictions.map((e, idx) => (
                                 <li key={idx}>{e}</li>
@@ -1143,7 +1145,7 @@ export default function App() {
                                   </p>
                                 )}
                                 <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
-                                  <span>Locator: {(ref as any).evidenceLocator || `Chunk #${idx + 1}`}</span>
+                                  <span>Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `Chunk #${idx + 1}`}</span>
                                   <span className={
                                     ref.verificationStatus === 'source_grounded'
                                       ? 'text-emerald-400 font-medium'
@@ -1151,12 +1153,12 @@ export default function App() {
                                       ? 'text-rose-400 font-medium'
                                       : 'text-slate-400'
                                   }>
-                                    • Status: {
+                                    • ชิ้นส่วนอ้างอิง (Chunk Status): {
                                       ref.verificationStatus === 'source_grounded'
-                                        ? 'Source Grounded Match'
+                                        ? 'พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)'
                                         : ref.verificationStatus === 'unsupported_citation'
-                                        ? '⚠️ Unsupported Citation'
-                                        : 'Unverified External'
+                                        ? '⚠️ ชิ้นส่วนไม่สนับสนุนคำถาม (Unsupported Chunk)'
+                                        : 'แหล่งภายนอกยังไม่รับรอง (Unverified External)'
                                     }
                                   </span>
                                 </div>
