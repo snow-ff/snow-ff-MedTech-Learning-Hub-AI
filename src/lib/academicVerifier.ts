@@ -216,7 +216,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     const asksPrefixAndSuffix = /prefix.*suffix|suffix.*prefix|ความแตกต่างระหว่าง.*prefix.*suffix/i.test(query) || (/prefix/i.test(query) && /suffix/i.test(query));
     if (asksPrefixAndSuffix && answerStatus === 'aligned') {
       const combinedChunksText = retrieval.relevantChunks.map(c => c.text.toLowerCase()).join(' ');
-      const hasWordPartsComposition = /(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบ|โครงสร้าง).*?(?:prefix).*?(?:suffix)|(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบ|โครงสร้าง).*?(?:suffix).*?(?:prefix)/i.test(combinedChunksText);
+      const hasWordPartsComposition = /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:prefix).*?(?:suffix)|(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:suffix).*?(?:prefix)/i.test(combinedChunksText);
 
       const hasPrefixEvidence =
         hasWordPartsComposition ||

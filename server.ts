@@ -259,7 +259,7 @@ export function getAcademicFallback(
               /รากศัพท์|แกนหลักของคำ/i.test(chunkLower);
 
             const chunkHasWordPartsComposition =
-              /(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบของคำ|โครงสร้างของคำ).*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(chunkLower);
+              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก).*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(chunkLower);
 
             isChunkTopicRelevant =
               (asksSuffix && chunkHasSubstantiveSuffix) ||
