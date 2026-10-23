@@ -4,7 +4,8 @@ import {
   rankRelevantChunks,
   buildGroundingContext,
   decodeHtmlEntities,
-  retrieveGroundedChunks
+  retrieveGroundedChunks,
+  extractRelevantExcerpt
 } from './documentChunker';
 import { DocumentChunk } from '../models/coreModel';
 
@@ -147,6 +148,26 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       expect(result.hasEvidence).toBe(true);
       expect(result.relevantChunks.some(c => c.chunkIndex === 2)).toBe(true);
       expect(result.relevantChunks.some(c => c.chunkIndex === 4)).toBe(true);
+    });
+  });
+
+  describe('extractRelevantExcerpt boundary regression for Thai and English', () => {
+    it('should correctly preserve Thai leading vowels (เ, แ, โ, ใ, ไ) and tone marks in words like เรียน, แพทย์, แหล่งเรียนรู้ without mid-word truncation or stripping', () => {
+      const text = 'บันทึกนี้จัดทำขึ้นเป็นแหล่งเรียนรู้เสริมสำหรับนักศึกษาแพทย์และบุคลากรทางการแพทย์ในการเรียนรู้เรื่องคำอุปสรรคและปัจจัยท้าย';
+      const excerpt = extractRelevantExcerpt(text, 'เรียนรู้', 100);
+      expect(excerpt).toContain('แหล่งเรียนรู้');
+      expect(excerpt).not.toContain('อหล่ง');
+    });
+
+    it('should correctly handle English word boundaries and avoid mid-word truncation', () => {
+      const text = 'Complete Blood Count (CBC) and Hemoglobin analysis are essential laboratory tests in hematology.';
+      const excerpt = extractRelevantExcerpt(text, 'Hemoglobin', 100);
+      expect(excerpt).toContain('Hemoglobin');
+      const idx = excerpt.indexOf('Hemoglobin');
+      if (idx > 0) {
+        const charBefore = excerpt[idx - 1];
+        expect(/[\s(]/.test(charBefore)).toBe(true);
+      }
     });
   });
 });

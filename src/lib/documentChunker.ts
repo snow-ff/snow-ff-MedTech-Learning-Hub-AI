@@ -449,7 +449,7 @@ export function buildGroundingContext(
 
 /**
  * Extract clean, readable excerpt around matching query terms or sentence start,
- * avoiding mid-word cutoffs.
+ * avoiding mid-word cutoffs and supporting Thai leading vowels and tone marks.
  */
 export function extractRelevantExcerpt(text: string, query: string, maxLength: number = 140): string {
   if (!text) return '';
@@ -486,12 +486,15 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
     }
   }
 
-  // Ensure start does not begin with orphaned vowels, tone marks, punctuation, or mid-word
-  while (start < cleanText.length && (
-    /^[^a-zA-Z0-9ก-ฮ]/.test(cleanText[start]) ||
-    /^[\u0E31\u0E33-\u0E3A\u0E47-\u0E4E]/.test(cleanText[start]) ||
-    (start > 0 && /[ก-ฮa-zA-Z0-9]/.test(cleanText[start - 1]) && /[ก-ฮa-zA-Z0-9]/.test(cleanText[start]))
-  )) {
+  const wordCharRegex = /[a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]/;
+
+  // If start lands in the middle of a word, move backward to the start of the word
+  while (start > 0 && wordCharRegex.test(cleanText[start - 1]) && wordCharRegex.test(cleanText[start])) {
+    start--;
+  }
+
+  // Ensure start does not begin with orphaned punctuation or space
+  while (start < cleanText.length && /^[^a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]/.test(cleanText[start])) {
     start++;
   }
 
@@ -505,7 +508,8 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
   }
 
   let excerpt = cleanText.slice(start, end).trim();
-  excerpt = excerpt.replace(/^[^a-zA-Z0-9ก-ฮ]+/, '').replace(/^[\u0E31\u0E33-\u0E3A\u0E47-\u0E4E]+/, '').trim();
+  // Strip any leading non-word characters
+  excerpt = excerpt.replace(/^[^a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]+/, '').trim();
 
   if (start > 10) excerpt = '...' + excerpt;
   if (end < cleanText.length) excerpt = excerpt + '...';
