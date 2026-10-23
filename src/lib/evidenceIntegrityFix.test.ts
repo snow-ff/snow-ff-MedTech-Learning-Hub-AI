@@ -696,24 +696,27 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.references[0].verificationStatus).toBe('source_grounded');
   });
 
-  it('Test Y — Locator HTML Entities Normalization: Indices 3 (&#x33;) and 10 (1&#x30;) must be decoded cleanly without entity artifacts', () => {
-    // 1. Direct cleanChunkLocator tests for hex entities
+  it('Test Y — Locator HTML Entities Normalization: Indices 3 (&#x33; / &#X33;) and 5 (&#X35;) and 10 (1&#x30;) must be decoded cleanly without entity artifacts', () => {
+    // 1. Direct cleanChunkLocator tests for hex and uppercase hex entities
     expect(cleanChunkLocator('&#x33;')).toBe('ชิ้นส่วนที่ 3');
+    expect(cleanChunkLocator('&#X33;')).toBe('ชิ้นส่วนที่ 3');
+    expect(cleanChunkLocator('&#X35;')).toBe('ชิ้นส่วนที่ 5');
     expect(cleanChunkLocator('1&#x30;')).toBe('ชิ้นส่วนที่ 10');
     expect(cleanChunkLocator('&amp;#x33;')).toBe('ชิ้นส่วนที่ 3');
     expect(cleanChunkLocator('1&amp;#x30;')).toBe('ชิ้นส่วนที่ 10');
 
-    // 2. Integration with document having chunkIndex containing hex entities
+    // 2. Integration with document having chunkIndex containing uppercase and lowercase hex entities
     const docEntities = {
-      title: 'เอกสารที่มี Entity &amp; &#x33;',
+      title: 'เอกสารที่มี Entity &amp; &#X35; และ &#x33;',
       hasNativePages: false,
       chunks: [
-        { chunkIndex: '&#x33;' as any, text: '=== ส่วนที่ 3: ความหมายของ Prefix (คำอุปสรรค) เช่น brady- ===\nPrefix วางไว้หน้าคำหลัก' },
+        { chunkIndex: '&#X33;' as any, text: '=== ส่วนที่ 3: ความหมายของ Prefix (คำอุปสรรค) เช่น brady- ===\nPrefix วางไว้หน้าคำหลัก' },
+        { chunkIndex: '&#X35;' as any, text: '=== ส่วนที่ 5: ความหมายของ Suffix เช่น -itis ===\nSuffix วางไว้ท้ายคำหลัก' },
         { chunkIndex: '1&#x30;' as any, text: '=== ส่วนที่ 10: ประกาศแจ้งเตือนและระเบียบปฏิบัติ ===\nข้อความระเบียบปฏิบัติทั่วไป' }
       ]
     };
 
-    const res = getAcademicFallback('อธิบาย prefix brady-', [], docEntities);
+    const res = getAcademicFallback('อธิบาย prefix brady- และ suffix -itis', [], docEntities);
     expect(res.references.length).toBeGreaterThan(0);
     // Every reference locator must be clean and free of &# entities
     for (const ref of res.references) {
@@ -727,6 +730,10 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(ref3?.evidenceLocator).toBe('ชิ้นส่วนที่ 3');
     expect(ref3?.verificationStatus).toBe('source_grounded');
 
+    const ref5 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 5');
+    expect(ref5).toBeDefined();
+    expect(ref5?.evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+
     const ref10 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
     if (ref10) {
       expect(ref10.evidenceLocator).toBe('ชิ้นส่วนที่ 10');
@@ -734,8 +741,10 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     }
 
     // fallbackText must also be clean and free of raw entities
-    expect(res.text).not.toContain('&#x33;');
+    expect(res.text).not.toContain('&#X33;');
+    expect(res.text).not.toContain('&#X35;');
     expect(res.text).not.toContain('1&#x30;');
+    expect(res.text).not.toContain('&#');
   });
 
   it('Test Z — Partial Evidence Fallback & Granular Status: Prefix-only evidence states missing Suffix and isolates chunk status', () => {

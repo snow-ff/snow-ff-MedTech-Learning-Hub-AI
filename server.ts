@@ -443,9 +443,9 @@ export function getAcademicFallback(
             ? `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วน โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`
             : `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Incomplete Evidence Notice):**\nเอกสารนี้มีหลักฐานไม่ครอบคลุมประเด็นคำถามทั้งหมด ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`;
 
-          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
         } else {
-          finalFallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
+          finalFallbackText = `*(ค้นหาจากเอกสาร: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
         }
       }
 
