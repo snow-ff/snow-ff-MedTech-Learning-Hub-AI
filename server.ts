@@ -440,8 +440,8 @@ export function getAcademicFallback(
             .join('\n\n');
 
           const missingClause = missingParts.length > 0
-            ? `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วนของคำถาม โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ในเอกสารนี้ ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้จากเอกสาร ดังนี้:\n\n`
-            : `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Incomplete Evidence Notice):**\nเอกสารนี้มีหลักฐานไม่ครอบคลุมประเด็นคำถามทั้งหมด ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้จากเอกสาร ดังนี้:\n\n`;
+            ? `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วน โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`
+            : `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Incomplete Evidence Notice):**\nเอกสารนี้มีหลักฐานไม่ครอบคลุมประเด็นคำถามทั้งหมด ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`;
 
           finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
         } else {
@@ -449,11 +449,18 @@ export function getAcademicFallback(
         }
       }
 
+      const seenUris = new Set<string>();
+      const uniqueChunkReferences = chunkReferences.filter(r => {
+        if (seenUris.has(r.uri)) return false;
+        seenUris.add(r.uri);
+        return true;
+      });
+
       return {
         text: finalFallbackText,
         evidenceStatus: isOverallEvidenceInsufficient ? ("insufficient" as const) : ("sufficient" as const),
         verification,
-        references: chunkReferences
+        references: uniqueChunkReferences
       };
     } else {
       const fallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`;
