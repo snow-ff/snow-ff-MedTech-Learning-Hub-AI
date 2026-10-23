@@ -100,10 +100,9 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       expect(ranked[0].id).toBe('c-1');
     });
 
-    it('should fallback to first chunks when query does not match', () => {
+    it('should return empty array when query does not match', () => {
       const ranked = rankRelevantChunks(testChunks, 'quantum physics mechanics', 2);
-      expect(ranked).toHaveLength(2);
-      expect(ranked[0].id).toBe('c-1');
+      expect(ranked).toHaveLength(0);
     });
   });
 
@@ -138,10 +137,10 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
   describe('retrieveGroundedChunks with mixed relevant and irrelevant chunks', () => {
     it('should correctly prioritize prefix/suffix relevant chunks over administrative or unrelated chunks', () => {
       const chunks: DocumentChunk[] = [
-        { id: 'c1', documentId: 'd1', chunkIndex: 1, text: 'Notice of adaptation and disclaimer regarding copyright.' },
-        { id: 'c2', documentId: 'd1', chunkIndex: 2, text: 'Common Prefixes such as brady-, tachy-, dys-, sub- modify medical terms.' },
-        { id: 'c3', documentId: 'd1', chunkIndex: 3, text: 'Unrelated body cavities and anatomical standard positions text.' },
-        { id: 'c4', documentId: 'd1', chunkIndex: 4, text: 'Diagnostic Suffixes include -itis, -ectomy, and -scopy.' }
+        { id: 'c1', documentId: 'd1', chunkIndex: 1, text: 'Notice of adaptation and disclaimer regarding copyright.', charCount: 56 },
+        { id: 'c2', documentId: 'd1', chunkIndex: 2, text: 'Common Prefixes such as brady-, tachy-, dys-, sub- modify medical terms.', charCount: 65 },
+        { id: 'c3', documentId: 'd1', chunkIndex: 3, text: 'Unrelated body cavities and anatomical standard positions text.', charCount: 57 },
+        { id: 'c4', documentId: 'd1', chunkIndex: 4, text: 'Diagnostic Suffixes include -itis, -ectomy, and -scopy.', charCount: 54 }
       ];
 
       const result = retrieveGroundedChunks(chunks, 'prefix brady- suffix -itis', 2);

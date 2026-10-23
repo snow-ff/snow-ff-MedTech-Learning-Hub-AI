@@ -44,7 +44,7 @@ import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationRepor
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
-import { rankRelevantChunks, retrieveGroundedChunks } from './lib/documentChunker';
+import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
 import { getAllDocuments, seedSampleDocumentsIfEmpty } from './lib/documentStorage';
 
@@ -62,7 +62,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding';
+  source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding' | 'external_research';
   groundedDocumentTitle?: string;
   evidenceStatus?: EvidenceStatus;
   verification?: AcademicVerificationReport;
@@ -188,6 +188,22 @@ export default function App() {
   ]);
   const [inputQuery, setInputQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingStatus, setGeneratingStatus] = useState('กำลังเตรียมข้อมูลและวิเคราะห์คำถาม...');
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setGeneratingStatus('กำลังเตรียมข้อมูลและวิเคราะห์คำถาม...');
+      return;
+    }
+    const t1 = setTimeout(() => setGeneratingStatus('กำลังค้นหาเอกสารและตรวจสอบชิ้นส่วนอ้างอิง...'), 3000);
+    const t2 = setTimeout(() => setGeneratingStatus('กำลังประเมินความถูกต้องทางวิชาการและตรวจสอบข้อเท็จจริง...'), 12000);
+    const t3 = setTimeout(() => setGeneratingStatus('กำลังสังเคราะห์คำตอบเชิงลึกด้วยโมเดลวิชาการ (AI กำลังประมวลผล)...'), 25000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [isGenerating]);
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeReference, setActiveReference] = useState<ReferenceItem | null>(null);
@@ -387,9 +403,15 @@ export default function App() {
         };
       }
 
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const clientStartTime = Date.now();
+      console.log(`[Req ${requestId}] [Perf Frontend] Sending request to /api/gemini/generate at ${new Date().toISOString()}`);
       const response = await fetch('/api/gemini/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId
+        },
         body: JSON.stringify({
           messages: validSlice,
           documentContext: documentContextPayload,
@@ -407,6 +429,9 @@ export default function App() {
         return;
       }
 
+      const clientDuration = Date.now() - clientStartTime;
+      console.log(`[Req ${requestId}] [Perf Frontend] Received response in ${clientDuration}ms. Status: ${response.status}`);
+
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (ไม่ใช่ JSON)');
@@ -418,7 +443,7 @@ export default function App() {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
 
-      const finalEvidenceStatus = data.evidenceStatus || (documentContextPayload ? calculatedEvidenceStatus : undefined);
+      const finalEvidenceStatus = data.evidenceStatus || (documentContextPayload ? 'sufficient' : undefined);
 
       // Verify academic answer using backend report or client-side evaluation guardrail
       const verificationReport: AcademicVerificationReport | undefined =
@@ -446,7 +471,10 @@ export default function App() {
         groundedDocumentTitle: activeDocument ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
         verification: verificationReport,
-        references: Array.isArray(data.references) ? data.references : undefined
+        references: Array.isArray(data.references) ? data.references.map((r: any) => ({
+          ...r,
+          evidenceLocator: r.evidenceLocator ? decodeHtmlEntities(r.evidenceLocator) : r.evidenceLocator
+        })) : undefined
       };
 
       setMessages((prev) => [...prev, aiReply]);
@@ -897,6 +925,8 @@ export default function App() {
                                 : `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ข้อจำกัดทางวิชาการ — เอกสารไม่มีเลขหน้าต้นฉบับ)`)
                             : msg.evidenceStatus === 'insufficient'
                             ? `ตรวจในเอกสาร: ${msg.groundedDocumentTitle} (ไม่พบหลักฐานตรงในเอกสาร — ไม่คาดเดาข้อมูล)`
+                            : msg.evidenceStatus === 'external_research'
+                            ? `สืบค้นจากแหล่งวิชาการภายนอก (External Academic Research)`
                             : `อ้างอิงตรงจากเอกสาร: ${msg.groundedDocumentTitle} (มีหลักฐานรองรับ)`}
                         </span>
                       </div>
@@ -1065,6 +1095,8 @@ export default function App() {
                         <span className={`px-2 py-0.5 rounded-full font-mono border ${
                           msg.source === 'document_grounding'
                             ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
+                            : msg.source === 'external_research'
+                            ? 'bg-blue-950/80 text-blue-300 border-blue-800'
                             : msg.source === 'gemini_grounding'
                             ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
                             : msg.source === 'gemini_standard'
@@ -1073,6 +1105,8 @@ export default function App() {
                         }`}>
                           {msg.source === 'document_grounding'
                             ? '📚 Document Grounded Mode'
+                            : msg.source === 'external_research'
+                            ? '🌐 External Academic Research'
                             : msg.source === 'gemini_grounding'
                             ? 'Google Search Grounding (Live)'
                             : msg.source === 'gemini_standard'
@@ -1148,8 +1182,8 @@ export default function App() {
                     <Bot className="w-4 h-4" />
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-sm rounded-tl-none flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
-                    <span>กำลังวิเคราะห์และเรียบเรียงคำตอบตามหลักวิชาการเทคโนโลยีดิจิทัลทางการแพทย์...</span>
+                    <RefreshCw className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />
+                    <span>{generatingStatus}</span>
                   </div>
                 </div>
               )}

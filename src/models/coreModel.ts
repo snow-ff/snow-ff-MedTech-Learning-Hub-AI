@@ -58,7 +58,7 @@ export interface OfficialCurriculum {
 
 // Track B1: Learning Document Foundation Models
 export type DocumentType = 'pdf' | 'slide' | 'note' | 'paper' | 'text';
-export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable';
+export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable' | 'external_research';
 
 export interface DocumentChunk {
   id: string;

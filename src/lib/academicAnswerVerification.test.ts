@@ -186,7 +186,7 @@ describe('Track B1.4: Academic Answer Verification', () => {
       expect(result.stages.answerFidelity.status).toBe('insufficient_evidence');
 
       expect(result.verdict).toBe('INSUFFICIENT_EVIDENCE');
-      expect(result.isVerified).toBe(true);
+      expect(result.isVerified).toBe(false);
     });
 
     it('should FAIL when candidate fabricates an answer despite insufficient evidence', () => {

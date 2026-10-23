@@ -3,16 +3,16 @@ import { DocumentChunk } from '../models/coreModel';
 export function decodeHtmlEntities(str: string): string {
   if (!str) return '';
   let decoded = str;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 4; i++) {
     decoded = decoded
-      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, ' ');
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
   }
   return decoded;
 }
@@ -117,7 +117,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
   }
 
   // Case 3: Standard single text / markdown / note chunking (NO native page numbers)
-  const cleanText = rawText.trim();
+  const cleanText = decodedRawText.trim();
   if (!cleanText) {
     return [];
   }
@@ -380,9 +380,14 @@ export function retrieveGroundedChunks(
       matchedKeywordsSet.add(cleanQuery);
     }
 
-    // Match candidate keywords
+    // Match candidate keywords with precision
     for (const term of uniqueCandidateTerms) {
-      if (chunkLower.includes(term)) {
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const isMatch = term.length <= 3 
+        ? new RegExp(`(^|[^a-zA-Z0-9ก-ฮะ-์])${escapedTerm}([^a-zA-Z0-9ก-ฮะ-์]|$)`, 'i').test(chunkLower)
+        : chunkLower.includes(term);
+
+      if (isMatch) {
         // Longer academic terms carry significantly more weight than short fragments
         const termWeight = term.length >= 6 ? 10 : term.length >= 4 ? 6 : 3;
         score += termWeight;
@@ -400,11 +405,12 @@ export function retrieveGroundedChunks(
   // Sort descending by score
   scored.sort((a, b) => b.score - a.score);
 
-  const positiveScored = scored.filter(s => s.score > 0);
-  const hasEvidence = positiveScored.length > 0;
+  const positiveScored = scored.filter(s => s.score >= 4);
+  const maxScore = scored[0]?.score || 0;
+  const hasEvidence = positiveScored.length > 0 && maxScore >= 4;
   const relevantChunks = hasEvidence
     ? positiveScored.slice(0, topK).map(s => s.chunk)
-    : chunks.slice(0, Math.min(topK, 2));
+    : [];
 
   // Prune matchedKeywords to keep key terms
   const finalMatchedKeywords = Array.from(matchedKeywordsSet);
@@ -502,3 +508,18 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
   
   return excerpt;
 }
+
+/**
+ * Clean and normalize chunk locator or page number, ensuring robust decoding
+ * of HTML entities (numeric, hex, double-encoded) and safe digit extraction.
+ */
+export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: number): string {
+  if (typeof pageNumber === 'number' && !isNaN(pageNumber)) {
+    return `หน้า ${pageNumber}`;
+  }
+  const rawStr = chunkIndex !== undefined && chunkIndex !== null ? String(chunkIndex) : '1';
+  const decoded = decodeHtmlEntities(rawStr);
+  const cleanNumber = decoded.replace(/\D/g, '') || '1';
+  return `ชิ้นส่วนที่ ${cleanNumber}`;
+}
+

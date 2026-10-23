@@ -44,7 +44,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   // Stage A: Retrieval Verification
   // =========================================================================
   const retrieval: GroundedRetrievalResult = retrieveGroundedChunks(document.chunks, query, 4);
-  let retrievalPassed = retrieval.hasEvidence && retrieval.relevantChunks.length > 0;
+  let retrievalPassed = retrieval.hasEvidence && retrieval.relevantChunks.length > 0 && retrieval.maxScore >= 4;
   let retrievalDetails = retrievalPassed
     ? `สืบค้นพบหลักฐานที่เกี่ยวข้องจำนวน ${retrieval.relevantChunks.length} ชิ้นส่วน (คะแนนสูงสุด: ${retrieval.maxScore})`
     : 'ไม่พบหลักฐานที่ตรงกับข้อซักถามในเอกสาร';
@@ -278,7 +278,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
 
   if (answerStatus === 'insufficient_evidence') {
     verdict = 'INSUFFICIENT_EVIDENCE';
-    isVerified = true; // Successfully verified as insufficient evidence with correct refusal
+    isVerified = false; // Refusal/insufficient evidence is not a positive academic pass
   } else if (!retrievalPassed || !evidenceFidelityPassed || answerStatus === 'contradictory' || answerStatus === 'hallucinated' || !reasoningFidelityPassed) {
     verdict = 'FAIL';
     isVerified = false;

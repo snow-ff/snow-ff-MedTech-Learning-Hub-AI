@@ -6,21 +6,33 @@ import { verifyAcademicAnswer } from './academicVerifier';
 describe('References Integrity Regression Test Suite (v1.2)', () => {
   const testChunks = [
     {
+      id: 'tc-1',
+      documentId: 'tdoc-1',
       chunkIndex: 1,
+      charCount: 140,
       text: '=== ส่วนที่ 1: ศัพท์เทคนิคทางการแพทย์ (Prefix, Suffix, Root) ===\nเนื้อหาอธิบายคำอุปสรรค (Prefix) และปัจจัยท้าย (Suffix) เช่น -itis หมายถึงการอักเสบ'
     },
     {
+      id: 'tc-2',
+      documentId: 'tdoc-1',
       chunkIndex: 2,
+      charCount: 92,
       text: 'นี่คือประโยคธรรมดาในย่อหน้ากลางที่ไม่มีหัวข้อทางการชัดเจน แต่มียาวพอสมควรเพื่อทดสอบการตัดหัวข้อ'
     },
     {
+      id: 'tc-3',
+      documentId: 'tdoc-1',
       chunkIndex: 3,
+      charCount: 95,
       text: '=== ส่วนที่ 3: ข้อมูลสารสนเทศสุขภาพ &amp; &#x33; มาตรฐานสากล ===\nเนื้อหาระบุมาตรฐาน HL7 และ DICOM &#x33;'
     },
     {
+      id: 'tc-4',
+      documentId: 'tdoc-1',
       chunkIndex: 4,
       pageNumber: 5,
       hasNativePage: true,
+      charCount: 70,
       text: '=== ส่วนที่ 4: หน้าที่มีเลขหน้าตรวจสอบได้ ===\nเนื้อหาตัวอย่างหน้าที่ 5'
     }
   ];
@@ -47,7 +59,7 @@ describe('References Integrity Regression Test Suite (v1.2)', () => {
       hasNativePages: false,
       chunks: testChunks
     });
-    const refWithEntity = fallback.references.find(r => r.title.includes('มาตรฐานสากล') || r.excerpt.includes('มาตรฐานสากล'));
+    const refWithEntity = fallback.references.find(r => r.title.includes('มาตรฐานสากล') || (r.excerpt && r.excerpt.includes('มาตรฐานสากล')));
     if (refWithEntity) {
       expect(refWithEntity.title).not.toContain('&#x33;');
       expect(refWithEntity.excerpt).not.toContain('&#x33;');
@@ -56,7 +68,7 @@ describe('References Integrity Regression Test Suite (v1.2)', () => {
 
   it('4. A genuine source heading is preserved; an arbitrary sentence is not presented as a confirmed heading', () => {
     const unpagedChunks = [
-      { chunkIndex: 1, text: 'ประโยคธรรมดาไม่มีหัวข้อใดๆ เริ่มต้นทันที' }
+      { id: 'up-1', documentId: 'updoc-1', chunkIndex: 1, text: 'ประโยคธรรมดาไม่มีหัวข้อใดๆ เริ่มต้นทันที', charCount: 40 }
     ];
     const fallback = getAcademicFallback('ประโยคธรรมดา', [], {
       title: 'เอกสารทดสอบ',
@@ -122,7 +134,7 @@ describe('References Integrity Regression Test Suite (v1.2)', () => {
     const query = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix';
     const candidateAnswer = 'Prefix และ Suffix แตกต่างกันโดย Prefix อยู่ต้นคำและ Suffix อยู่ท้ายคำ';
     const partialChunks = [
-      { chunkIndex: 1, text: '=== ส่วนที่ 1 ===\nPrefix คือคำอุปสรรค' }
+      { id: 'part-1', documentId: 'partdoc-1', chunkIndex: 1, text: '=== ส่วนที่ 1 ===\nPrefix คือคำอุปสรรค', charCount: 36 }
     ];
     const report = verifyAcademicAnswer({
       query,

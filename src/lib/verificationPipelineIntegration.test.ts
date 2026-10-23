@@ -57,7 +57,7 @@ describe('Track B1.5: Verification Pipeline Integration Audit (Offline)', () => 
       expect(result.verification?.stages.reasoningFidelity.passed).toBe(true);
     });
 
-    it('should correctly mark INSUFFICIENT_EVIDENCE when document lacks relevant evidence', () => {
+    it('should correctly mark INSUFFICIENT_EVIDENCE and isVerified false when document lacks relevant evidence', () => {
       const result = getAcademicFallback('ทฤษฎีควอนตัมฟิสิกส์และหลุมดำ', undefined, {
         title: 'คู่มือโลหิตวิทยาคลินิก',
         courseCode: 'MT2567-HEM',
@@ -70,8 +70,26 @@ describe('Track B1.5: Verification Pipeline Integration Audit (Offline)', () => 
       expect(result.evidenceStatus).toBe('insufficient');
       expect(result.verification).toBeDefined();
       expect(result.verification?.verdict).toBe('INSUFFICIENT_EVIDENCE');
-      expect(result.verification?.isVerified).toBe(true);
+      expect(result.verification?.isVerified).toBe(false);
       expect(result.verification?.stages.answerFidelity.status).toBe('insufficient_evidence');
+    });
+
+    it('Regression: should return 0 relevant chunks and NOT PASS when asking about Flow Cytometry on document without it', () => {
+      const verification = verifyAcademicAnswer({
+        query: 'Flow Cytometry คืออะไร และ FSC กับ SSC ใช้บอกอะไร?',
+        candidateAnswer: 'ไม่พบข้อมูลเกี่ยวกับ Flow Cytometry หรือ FSC และ SSC ในเอกสารนี้',
+        document: {
+          title: 'คู่มือโลหิตวิทยาคลินิก',
+          hasNativePages: true,
+          totalPages: 2,
+          chunks: samplePdfChunks
+        }
+      });
+
+      expect(verification.verdict).toBe('INSUFFICIENT_EVIDENCE');
+      expect(verification.isVerified).toBe(false);
+      expect(verification.stages.retrieval.passed).toBe(false);
+      expect(verification.stages.retrieval.relevantChunksCount).toBe(0);
     });
   });
 
@@ -200,6 +218,77 @@ describe('Track B1.5: Verification Pipeline Integration Audit (Offline)', () => 
       expect(result).toBeDefined();
       expect(result.evidenceStatus).toBe('sufficient');
       expect(result.references.length).toBeGreaterThan(0);
+    });
+
+    it('Regression Case A & D: Flow Cytometry query on unmatched document must return 0 chunks and INSUFFICIENT_EVIDENCE (not PASS)', () => {
+      const verification = verifyAcademicAnswer({
+        query: 'Flow Cytometry คืออะไร และ FSC กับ SSC ใช้บอกอะไร?',
+        candidateAnswer: 'ไม่พบข้อมูลเกี่ยวกับ Flow Cytometry ในเอกสารนี้',
+        document: {
+          title: 'คู่มือโลหิตวิทยาคลินิก',
+          hasNativePages: true,
+          totalPages: 2,
+          chunks: samplePdfChunks
+        }
+      });
+
+      expect(verification.verdict).toBe('INSUFFICIENT_EVIDENCE');
+      expect(verification.isVerified).toBe(false);
+      expect(verification.stages.retrieval.passed).toBe(false);
+      expect(verification.stages.retrieval.relevantChunksCount).toBe(0);
+    });
+
+    it('Regression Case B: Valid query about hemoglobin must successfully pass retrieval and verification', () => {
+      const verification = verifyAcademicAnswer({
+        query: 'ฮีโมโกลบิน',
+        candidateAnswer: 'ค่าอ้างอิงของฮีโมโกลบินในผู้ใหญ่เพศชายปกติคือ 13.0 ถึง 17.0 g/dL [หน้า 2]',
+        document: {
+          title: 'คู่มือโลหิตวิทยาคลินิก',
+          hasNativePages: true,
+          totalPages: 2,
+          chunks: samplePdfChunks
+        }
+      });
+
+      expect(verification.verdict).toBe('PASS');
+      expect(verification.isVerified).toBe(true);
+      expect(verification.stages.retrieval.passed).toBe(true);
+      expect(verification.stages.retrieval.relevantChunksCount).toBeGreaterThan(0);
+    });
+
+    it('Regression Case C: Insufficient evidence refusal must never be interpreted as passing answer', () => {
+      const verification = verifyAcademicAnswer({
+        query: 'หัวข้อที่ไม่ปรากฏในเอกสาร',
+        candidateAnswer: 'ไม่พบข้อมูลเกี่ยวกับหัวข้อนี้ในเอกสาร',
+        document: {
+          title: 'คู่มือโลหิตวิทยาคลินิก',
+          hasNativePages: true,
+          totalPages: 2,
+          chunks: samplePdfChunks
+        }
+      });
+
+      expect(verification.verdict).not.toBe('PASS');
+      expect(verification.isVerified).toBe(false);
+    });
+
+    it('should map external research references correctly when search grounding metadata is present', () => {
+      const mockGroundingChunks = [
+        { web: { uri: 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC123456/', title: 'Flow Cytometry Principles - NCBI' } }
+      ];
+      const extRefs = mockGroundingChunks.map(c => ({
+        title: c.web.title,
+        uri: c.web.uri,
+        type: 'external_academic_link',
+        linkAccessStatus: 'verified_external',
+        verificationStatus: 'unverified',
+        evidenceLocator: 'External Academic Search',
+        contentVersion: '1.2'
+      }));
+
+      expect(extRefs.length).toBe(1);
+      expect(extRefs[0].uri).toMatch(/^https?:\/\//);
+      expect(extRefs[0].type).toBe('external_academic_link');
     });
   });
 });

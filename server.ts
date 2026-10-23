@@ -5,9 +5,15 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
-import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities } from "./src/lib/documentChunker";
+import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
 import { AcademicVerificationReport } from "./src/models/coreModel";
+import {
+  classifyGeminiError,
+  calculateRetryDelay,
+  DEFAULT_RETRY_CONFIG,
+  formatRetryLog
+} from "./src/lib/geminiRetryPolicy";
 
 dotenv.config();
 
@@ -157,9 +163,18 @@ export function getAcademicFallback(
   }
 ): {
   text: string;
-  evidenceStatus?: "sufficient" | "insufficient";
+  evidenceStatus?: "sufficient" | "insufficient" | "external_research";
   verification?: AcademicVerificationReport;
-  references: Array<{ title: string; uri: string }>;
+  references: Array<{
+    title: string;
+    uri: string;
+    type?: string;
+    linkAccessStatus?: string;
+    verificationStatus?: "source_grounded" | "unsupported_citation" | "unverified";
+    evidenceLocator?: string;
+    excerpt?: string;
+    contentVersion?: string;
+  }>;
 } {
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
@@ -197,9 +212,7 @@ export function getAcademicFallback(
         const decodedText = decodeHtmlEntities(c.text || '');
         const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
         const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt, 140));
-        const locator = c.hasNativePage && typeof c.pageNumber === 'number' ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
-        const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
-        const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
+        const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
 
         return {
           title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
@@ -233,6 +246,8 @@ export function getAcademicFallback(
         },
         conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
       });
+      verification.verdict = 'INSUFFICIENT_EVIDENCE';
+      verification.isVerified = false;
 
       return {
         text: fallbackText,
@@ -611,7 +626,9 @@ export function getAcademicFallback(
 // API endpoint for Gemini generation with multi-turn messages, retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
+  const requestId = (req.headers['x-request-id'] as string) || `req-${Date.now()}`;
   const { messages, prompt, documentContext, courseContext } = req.body;
+  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -729,7 +746,10 @@ app.post("/api/gemini/generate", async (req, res) => {
       charCount: (c.text || '').length
     }));
 
+    const retrievalStart = Date.now();
     preComputedRetrieval = retrieveGroundedChunks(activeChunksForGrounding, latestPrompt, 4);
+    const retrievalDuration = Date.now() - retrievalStart;
+    console.log(`[Req ${requestId}] [Perf Pipeline] Retrieval step completed in ${retrievalDuration}ms. Found ${preComputedRetrieval.relevantChunks.length} relevant chunks (hasEvidence: ${preComputedRetrieval.hasEvidence}, maxScore: ${preComputedRetrieval.maxScore}).`);
 
     const isPageNumberQuery = (/(?:หน้า|page)\s*\d+/i.test(latestPrompt) || /หน้าเท่าไหร่|หน้าไหน|เปิดหน้า|ดูหน้า/i.test(latestPrompt)) && !/หน้าที่ของ/i.test(latestPrompt);
     const isUnpagedDocument = documentContext.hasNativePages === false || !documentContext.hasNativePages;
@@ -760,7 +780,91 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
 
     if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0) {
-      const insufficientText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง`;
+      console.log(`[Perf Backend] Document has insufficient evidence for query "${latestPrompt}". Attempting External Academic Research Fallback with Google Search grounding...`);
+      
+      let isRateLimited = false;
+      try {
+        const researchPrompt = `ผู้ใช้กำลังศึกษาเอกสาร "${documentContext.title}" แต่เนื้อหาในเอกสารไม่มีข้อมูลเกี่ยวกับ: "${latestPrompt}". กรุณาค้นคว้าข้อมูลและอธิบายคำตอบทางวิชาการทางการแพทย์อย่างละเอียด (เช่น Flow Cytometry คืออะไร, FSC และ SSC ใช้บอกอะไร) เป็นภาษาไทยที่สุภาพ เข้าใจง่าย พร้อมอ้างอิงแหล่งข้อมูลภายนอกที่น่าเชื่อถือ`;
+        
+        const searchResponse = await ai.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents: [{ role: 'user', parts: [{ text: researchPrompt }] }],
+          config: {
+            systemInstruction: "คุณคือผู้ช่วยวิจัยวิชาการทางการแพทย์สำหรับ MedTech Learning Hub AI เมื่อเอกสารของผู้ใช้ไม่มีข้อมูล ให้ค้นคว้าจากแหล่งวิชาการภายนอกและให้ลิงก์อ้างอิงจริง",
+            temperature: 0.2,
+            tools: [{ googleSearch: {} }],
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.LOW
+            }
+          }
+        });
+
+        const searchText = searchResponse.text;
+        const groundingMetadata = searchResponse.candidates?.[0]?.groundingMetadata;
+        const extReferences: Array<{ title: string; uri: string }> = [];
+
+        if (groundingMetadata && groundingMetadata.groundingChunks) {
+          for (const chunk of groundingMetadata.groundingChunks) {
+            if (chunk.web && chunk.web.uri && chunk.web.title) {
+              const uri = chunk.web.uri;
+              if (uri.startsWith("http://") || uri.startsWith("https://")) {
+                if (!extReferences.some(r => r.uri === uri)) {
+                  extReferences.push({
+                    title: chunk.web.title,
+                    uri: uri,
+                  });
+                }
+              }
+            }
+          }
+        }
+
+        if (searchText && extReferences.length > 0) {
+          const formattedText = `*(หมายเหตุ: เอกสาร "${documentContext.title}" ไม่มีเนื้อหาเกี่ยวกับประเด็นนี้ ระบบจึงสืบค้นคว้าเพิ่มเติมจากแหล่งวิชาการภายนอกด้วย Google Search Grounding)*\n\n${searchText}`;
+          
+          const verification = verifyAcademicAnswer({
+            query: latestPrompt,
+            candidateAnswer: formattedText,
+            document: {
+              title: documentContext.title,
+              hasNativePages: documentContext.hasNativePages,
+              totalPages: documentContext.totalPages,
+              chunks: activeChunksForGrounding
+            },
+            conversationHistory: validatedMessages
+          });
+          verification.verdict = 'WARNING';
+          verification.isVerified = false;
+
+          return res.json({
+            text: formattedText,
+            source: "external_research",
+            evidenceStatus: "external_research",
+            verification,
+            references: extReferences.map(r => ({
+              ...r,
+              type: "external_academic_link",
+              linkAccessStatus: "verified_external",
+              verificationStatus: "unverified",
+              evidenceLocator: "External Academic Search",
+              contentVersion: "1.2"
+            }))
+          });
+        }
+      } catch (searchErr: any) {
+        if (
+          searchErr?.status === 429 || 
+          searchErr?.status === 'RESOURCE_EXHAUSTED' || 
+          searchErr?.message?.includes('429') || 
+          searchErr?.message?.includes('quota') ||
+          searchErr?.message?.includes('RESOURCE_EXHAUSTED')
+        ) {
+          isRateLimited = true;
+        }
+        console.warn(`[Perf Backend] External academic research fallback search failed (Rate Limit / Quota):`, searchErr?.message);
+      }
+
+      const insufficientText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ และไม่สามารถสืบค้นจากแหล่งภายนอกได้ชั่วคราว ${isRateLimited ? '(API Quota Exceeded / HTTP 429)' : '(Strict Anti-Hallucination)'}**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง ${isRateLimited ? 'และการสืบค้นภายนอกถูกจำกัดโควตาชั่วคราว (HTTP 429 Rate Limit)' : 'และการสืบค้นภายนอกไม่พบแหล่งอ้างอิงที่ยืนยันได้'} ระบบจึงปฏิเสธการตอบเพื่อรักษาความถูกต้องทางวิชาการ`;
 
       const verification = verifyAcademicAnswer({
         query: latestPrompt,
@@ -773,6 +877,8 @@ app.post("/api/gemini/generate", async (req, res) => {
         },
         conversationHistory: validatedMessages
       });
+      verification.verdict = 'INSUFFICIENT_EVIDENCE';
+      verification.isVerified = false;
 
       return res.json({
         text: insufficientText,
@@ -809,13 +915,21 @@ ${formattedChunks}
   }));
 
   let attempt = 0;
-  const maxAttempts = 3;
+  const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
   let lastError: any = null;
+  let totalApiDuration = 0;
+  let lastRetryDelayMs: number | undefined = undefined;
 
   while (attempt < maxAttempts) {
     attempt++;
     const attemptStartTime = Date.now();
+    const attemptAbortController = new AbortController();
+    const attemptTimeoutTimer = setTimeout(() => {
+      attemptAbortController.abort();
+    }, DEFAULT_RETRY_CONFIG.attemptTimeoutMs || 12000);
+
     try {
+      console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
       // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
       const response = await ai.models.generateContent({
         model: "gemini-3.8-flash",
@@ -823,14 +937,28 @@ ${formattedChunks}
         config: {
           systemInstruction,
           temperature: isDocumentGrounding ? 0.1 : 0.3,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          maxOutputTokens: 2048,
           tools: isDocumentGrounding ? undefined : [{ googleSearch: {} }],
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW
+          },
+          abortSignal: attemptAbortController.signal
         },
       });
 
+      clearTimeout(attemptTimeoutTimer);
       const attemptDuration = Date.now() - attemptStartTime;
+      totalApiDuration += attemptDuration;
       const totalBackendDuration = Date.now() - requestStartTime;
-      console.log(`[Perf Backend] Gemini API success on attempt ${attempt}. Call duration: ${attemptDuration}ms, Total backend duration: ${totalBackendDuration}ms`);
+
+      console.log(formatRetryLog({
+        requestId,
+        attempt,
+        maxAttempts,
+        apiDurationMs: attemptDuration,
+        finalOutcome: 'SUCCESS',
+        totalBackendDurationMs: totalBackendDuration
+      }));
 
       let text = response.text;
       if (!text) {
@@ -848,6 +976,7 @@ ${formattedChunks}
 
       // If document grounding, build genuine document citations from actual chunks and verify academic answer
       if (isDocumentGrounding) {
+        const verifyStart = Date.now();
         const verification = verifyAcademicAnswer({
           query: latestPrompt,
           candidateAnswer: text,
@@ -859,16 +988,21 @@ ${formattedChunks}
           },
           conversationHistory: validatedMessages
         });
+        const verifyDuration = Date.now() - verifyStart;
+        console.log(`[Req ${requestId}] [Perf Backend] Academic verification completed in ${verifyDuration}ms. Verdict: ${verification.verdict}`);
 
-        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE' || !verification.stages.evidenceFidelity.passed;
+        const isInsufficient = text.includes("ไม่พบข้อมูล") || documentContext.evidenceStatus === 'insufficient' || verification.verdict === 'INSUFFICIENT_EVIDENCE' || !verification.stages.evidenceFidelity.passed || preComputedRetrieval.relevantChunks.length === 0;
+
+        if (isInsufficient) {
+          verification.verdict = 'INSUFFICIENT_EVIDENCE';
+          verification.isVerified = false;
+        }
 
         const docReferences = isInsufficient ? [] : preComputedRetrieval.relevantChunks.map((c: any) => {
           const decodedText = decodeHtmlEntities(c.text || '');
           const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
           const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, latestPrompt, 140));
-          const locator = c.hasNativePage && typeof c.pageNumber === 'number' ? `หน้า ${c.pageNumber}` : `ชิ้นส่วนที่ ${c.chunkIndex}`;
-          const cleanLocator = decodeHtmlEntities(locator).replace(/[*_#]+/g, '').trim();
-          const finalLocator = cleanLocator.includes('&#') ? `ชิ้นส่วนที่ ${c.chunkIndex}` : cleanLocator;
+          const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
 
           return {
             title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
@@ -926,46 +1060,91 @@ ${formattedChunks}
         })) : undefined,
       });
     } catch (err: any) {
+      clearTimeout(attemptTimeoutTimer);
       const attemptDuration = Date.now() - attemptStartTime;
+      totalApiDuration += attemptDuration;
       lastError = err;
-      const message = err.message || "";
-      const matchResult = message.match(/\b(503|429|500|408)\b/);
-      const status = err.status || err.statusCode || (matchResult ? matchResult[1] : undefined);
-      
-      console.warn(`[Perf Backend] Gemini API attempt ${attempt} failed after ${attemptDuration}ms. Error: ${message}`);
+      const totalBackendDuration = Date.now() - requestStartTime;
 
-      // Do not treat quota exhaustion (RESOURCE_EXHAUSTED / free tier request limit) as transient
-      const isQuotaExhausted = message.includes("RESOURCE_EXHAUSTED") || message.includes("generate_content_free_tier_requests") || message.includes("Quota exceeded");
+      const classification = classifyGeminiError(err);
+      const canRetry = classification.shouldRetry && attempt < maxAttempts;
 
-      const isTransient = !isQuotaExhausted && (
-        Number(status) === 503 || Number(status) === 429 || Number(status) === 500 || Number(status) === 408 ||
-        message.includes("503") || message.includes("429") || message.includes("500") || 
-        message.includes("UNAVAILABLE") || 
-        message.includes("overloaded") || message.includes("deadline") || message.includes("timeout") ||
-        message.includes("fetch failed")
-      );
-
-      if (!isTransient || attempt >= maxAttempts) {
+      if (!canRetry) {
+        console.warn(formatRetryLog({
+          requestId,
+          attempt,
+          maxAttempts,
+          apiDurationMs: attemptDuration,
+          status: classification.status,
+          reason: classification.reason,
+          finalOutcome: 'FALLBACK_ACADEMIC',
+          totalBackendDurationMs: totalBackendDuration
+        }));
         break;
       }
 
-      // Exponential backoff with random jitter (~1s, then ~2s + jitter)
-      const backoffMs = Math.pow(2, attempt - 1) * 1000 + Math.random() * 500;
-      console.warn(`[Perf Backend] Retrying in ${Math.round(backoffMs)}ms (attempt ${attempt}/${maxAttempts})...`);
-      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      const retryDelay = calculateRetryDelay(attempt, DEFAULT_RETRY_CONFIG);
+      lastRetryDelayMs = retryDelay;
+
+      console.warn(formatRetryLog({
+        requestId,
+        attempt,
+        maxAttempts,
+        apiDurationMs: attemptDuration,
+        retryDelayMs: retryDelay,
+        status: classification.status,
+        reason: classification.reason,
+        finalOutcome: 'RETRYING',
+        totalBackendDurationMs: totalBackendDuration
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
     }
   }
 
   const totalBackendDuration = Date.now() - requestStartTime;
-  console.warn(`[Perf Backend] Gemini API encountered issue after ${attempt} attempts (${totalBackendDuration}ms total), serving robust academic fallback:`, lastError?.message);
+  console.warn(formatRetryLog({
+    requestId,
+    attempt,
+    maxAttempts,
+    apiDurationMs: totalApiDuration,
+    retryDelayMs: lastRetryDelayMs,
+    status: lastError ? classifyGeminiError(lastError).status : undefined,
+    reason: lastError ? classifyGeminiError(lastError).reason : undefined,
+    finalOutcome: 'FALLBACK_ACADEMIC',
+    totalBackendDurationMs: totalBackendDuration
+  }));
 
   // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and documentContext)
   const fallback = getAcademicFallback(latestPrompt, validatedMessages, documentContext);
+
+  let serviceNoticeText = "";
+  if (lastError) {
+    const is503OrUnavailable =
+      lastError.message?.includes("503") ||
+      lastError.message?.includes("UNAVAILABLE") ||
+      lastError.message?.includes("overloaded");
+    if (is503OrUnavailable) {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 UNAVAILABLE) — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากคลังเอกสาร MedTech Hub ให้โดยอัตโนมัติ)*\n\n`;
+    } else {
+      serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากคลังเอกสาร MedTech Hub ให้โดยอัตโนมัติ)*\n\n`;
+    }
+  }
+
+  const responseText = serviceNoticeText ? `${serviceNoticeText}${fallback.text}` : fallback.text;
+
   return res.json({
-    text: fallback.text,
-    source: isDocumentGrounding ? "document_grounding" : "academic_fallback",
-    evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "insufficient" : undefined),
+    text: responseText,
+    source: "academic_fallback", // Critical: MUST remain 'academic_fallback' (never misrepresent fallback as Gemini generation)
+    evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "sufficient" : undefined),
     verification: (fallback as any).verification,
+    serviceStatus: {
+      isApiUnavailable: true,
+      lastErrorStatus: lastError ? classifyGeminiError(lastError).status : undefined,
+      reason: lastError ? classifyGeminiError(lastError).reason : undefined,
+      attemptsRun: attempt,
+      servedMode: "academic_fallback"
+    },
     references: fallback.references.map(r => ({
       ...r,
       type: r.uri ? (isDocumentGrounding ? "document_chunk" : "external_academic_link") : "simulated_reference",
@@ -995,9 +1174,13 @@ async function startServer() {
     });
   }
 
-  app.listen(Number(PORT), "0.0.0.0", () => {
+  const server = app.listen(Number(PORT), "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
   });
+  // 5 minutes socket timeout for long-running AI inference calls (~65s+)
+  server.setTimeout(300000);
+  server.keepAliveTimeout = 320000;
+  server.headersTimeout = 330000;
 }
 
 startServer();
