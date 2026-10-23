@@ -422,20 +422,34 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(ref3?.verificationStatus).toBe('source_grounded');
   });
 
-  it('Test R — Robust Citation Parsing: Exact Integer Matching, Duplicate Citations, and Strict Malformed Delimited Citations', () => {
+  it('Test R — Robust Citation Parsing: Exact Integer Matching, Duplicate Citations, and Strict Citation Grammar', () => {
     const docRobust = {
       title: 'Robust Citation Guide',
       hasNativePages: false,
       chunks: [
         { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
+        { id: '2', documentId: 'doc1', chunkIndex: 2, text: 'Suffix (ปัจจัยท้าย) เช่น -itis และ -ectomy', charCount: 50 },
         { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
       ]
     };
 
-    // Candidate answer with valid chunk 1, duplicate chunk 13, and strict malformed bracket citations ([ชิ้นส่วนที่ abc], [ส่วนอ้างอิง: ], [chunk null])
-    // along with regular Thai text containing "ชิ้นส่วนที่" ("ชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ") to verify no false positives
+    // Candidate answer with:
+    // 1. Valid syntax: [chunk 1], [ชิ้นส่วนที่ 2], [ส่วนอ้างอิง 13]
+    // 2. Duplicate citations of chunk 13
+    // 3. Strict malformed citation grammar violations:
+    //    - [chunk abc 2]
+    //    - [chunk null 2]
+    //    - [chunk 2 abc]
+    //    - [chunk null]
+    //    - [chunk undefined]
+    //    - [chunk NaN]
+    //    - [ชิ้นส่วนที่ abc]
+    //    - [ส่วนอ้างอิง: ]
+    // 4. Non-citation brackets ([CBC], [EDTA]) and regular Thai text ("ชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ")
     const candidateAnswer =
-      'คำตอบนี้อ้างอิงจากชิ้นส่วนที่ 1 และ ชิ้นส่วนที่ 13 และ ชิ้นส่วนที่ 13 ซ้ำ และ [ชิ้นส่วนที่ abc] และ [ส่วนอ้างอิง: ] และ [chunk null] รวมทั้งมีชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ และ [CBC] ปกติ';
+      'คำตอบนี้อ้างอิงจาก [chunk 1] และ [ชิ้นส่วนที่ 2] และ [ส่วนอ้างอิง 13] และ [ส่วนอ้างอิง 13] ซ้ำ ' +
+      'พร้อมรูปแบบผิด: [chunk abc 2], [chunk null 2], [chunk 2 abc], [chunk null], [chunk undefined], [chunk NaN], [ชิ้นส่วนที่ abc], [ส่วนอ้างอิง: ] ' +
+      'รวมทั้งมีชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ และ [CBC] กับ [EDTA] ปกติ';
 
     const report = verifyAcademicAnswer({
       query: 'อธิบาย prefix',
@@ -447,38 +461,43 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       }
     });
 
-    // 1. Unsupported citations must flag chunk 13 exactly once (deduplicated across duplicate citations)
+    // 1. Valid chunk citations must not be flagged as malformed
+    const malformedViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('รูปแบบการอ้างอิงผิดพลาด (Malformed Citation)')
+    );
+
+    // All 8 invalid bracket citations must be identified as format errors
+    expect(malformedViolations.some(m => m.includes('[chunk abc 2]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk null 2]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk 2 abc]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk null]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk undefined]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[chunk NaN]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[ชิ้นส่วนที่ abc]'))).toBe(true);
+    expect(malformedViolations.some(m => m.includes('[ส่วนอ้างอิง: ]'))).toBe(true);
+    expect(malformedViolations.length).toBe(8);
+
+    // 2. Valid citation [chunk 1] and [ชิ้นส่วนที่ 2] must NOT be flagged as malformed
+    expect(malformedViolations.some(m => m.includes('[chunk 1]'))).toBe(false);
+    expect(malformedViolations.some(m => m.includes('[ชิ้นส่วนที่ 2]'))).toBe(false);
+
+    // 3. Notice of adaptation chunk 13 must be flagged exactly once (deduplicated)
     const notice13Violations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
       uc.includes('ชิ้นส่วนที่ 13')
     );
     expect(notice13Violations.length).toBe(1);
     expect(notice13Violations[0]).toContain('เป็นข้อความประกาศแจ้งเตือน');
 
-    // 2. Unsupported citations must NOT flag chunk 1
-    const chunk1Violations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
-      uc.includes('ชิ้นส่วนที่ 1 ') || uc.includes('ชิ้นส่วนที่ 1 ซึ่ง')
-    );
-    expect(chunk1Violations.length).toBe(0);
-
-    // 3. Strict Delimited Citation checking: Malformed bracketed citations must be flagged
-    const malformedViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
-      uc.includes('รูปแบบการอ้างอิงผิดพลาด (Malformed Citation)')
-    );
-    expect(malformedViolations.length).toBeGreaterThanOrEqual(3);
-    expect(malformedViolations.some(m => m.includes('[ชิ้นส่วนที่ abc]'))).toBe(true);
-    expect(malformedViolations.some(m => m.includes('[ส่วนอ้างอิง: ]'))).toBe(true);
-    expect(malformedViolations.some(m => m.includes('[chunk null]'))).toBe(true);
-
-    // 4. Regular Thai prose ("ชิ้นส่วนที่นำมาตรวจ") and non-citation brackets ("[CBC]") must NOT be flagged as citation errors
+    // 4. Regular Thai prose ("ชิ้นส่วนที่นำมาตรวจ") and non-citation brackets ("[CBC]", "[EDTA]") must NOT be flagged
     const thaiProseViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
       uc.includes('ชิ้นส่วนที่นำมาตรวจ')
     );
     expect(thaiProseViolations.length).toBe(0);
 
-    const cbcBracketViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
-      uc.includes('CBC')
+    const medicalBracketViolations = report.stages.evidenceFidelity.unsupportedCitations.filter(uc =>
+      uc.includes('CBC') || uc.includes('EDTA')
     );
-    expect(cbcBracketViolations.length).toBe(0);
+    expect(medicalBracketViolations.length).toBe(0);
 
     // 5. Fallback evaluation with exact locator isolation
     const fallback = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docRobust);
@@ -580,6 +599,100 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const res = getAcademicFallback('อธิบายหน้าที่และนิยามของ Prefix และ Suffix', [], docRawExamples);
     expect(res.evidenceStatus).toBe('insufficient');
     expect(res.references[0].verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test V — Prefix Definition in Sentence 1, but "suffix" in Sentence 2 in non-explanatory context', () => {
+    const docPrefixOnlyDistant = {
+      title: 'Prefix Definition with Incidental Suffix Mention',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          documentId: 'doc1',
+          chunkIndex: 1,
+          text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลักเพื่อเปลี่ยนความหมาย เช่น brady- (ช้า). ส่วนเนื้อหาเกี่ยวกับ suffix จะมีเอกสารแจกเพิ่มเติมในสัปดาห์หน้า',
+          charCount: 145
+        }
+      ]
+    };
+
+    const report = verifyAcademicAnswer({
+      query: 'เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์',
+      candidateAnswer: 'Prefix คือส่วนที่เติมหน้าคำหลัก ส่วน Suffix คือส่วนที่เติมท้ายคำหลัก',
+      document: { title: docPrefixOnlyDistant.title, chunks: docPrefixOnlyDistant.chunks }
+    });
+
+    // Sentence 1 has genuine Prefix definition, but Sentence 2 only has incidental non-explanatory mention of "suffix"
+    expect(report.verdict).not.toBe('PASS');
+    expect(report.stages.answerFidelity.status).toBe('overgeneralized');
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docPrefixOnlyDistant);
+    expect(res.evidenceStatus).toBe('insufficient');
+    // Chunk 1 genuinely supports the Prefix portion and is source_grounded
+    expect(res.references[0].verificationStatus).toBe('source_grounded');
+  });
+
+  it('Test W — Suffix Definition in Sentence 1, but "prefix" in Sentence 2 in exercise context', () => {
+    const docSuffixOnlyDistant = {
+      title: 'Suffix Definition with Incidental Prefix Mention',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          documentId: 'doc1',
+          chunkIndex: 1,
+          text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลักเพื่อระบุพยาธิสภาพหรือหัตถการ เช่น -itis (การอักเสบ). ให้นักศึกษาทำแบบฝึกหัดเรื่อง prefix ในบทที่ 2',
+          charCount: 140
+        }
+      ]
+    };
+
+    const report = verifyAcademicAnswer({
+      query: 'เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์',
+      candidateAnswer: 'Prefix คือคำอุปสรรค ส่วน Suffix คือปัจจัยท้าย',
+      document: { title: docSuffixOnlyDistant.title, chunks: docSuffixOnlyDistant.chunks }
+    });
+
+    // Sentence 1 has genuine Suffix definition, but Sentence 2 only mentions "prefix" in exercise context
+    expect(report.verdict).not.toBe('PASS');
+    expect(report.stages.answerFidelity.status).toBe('overgeneralized');
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docSuffixOnlyDistant);
+    expect(res.evidenceStatus).toBe('insufficient');
+    // Chunk 1 genuinely supports the Suffix portion and is source_grounded
+    expect(res.references[0].verificationStatus).toBe('source_grounded');
+  });
+
+  it('Test X — Genuine Evidence for Both in Separate Sentences: Positive Control (No False Negative)', () => {
+    const docBothValid = {
+      title: 'Full Terminology Guide',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          documentId: 'doc1',
+          chunkIndex: 1,
+          text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว). Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)',
+          charCount: 165
+        }
+      ]
+    };
+
+    const report = verifyAcademicAnswer({
+      query: 'เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์',
+      candidateAnswer: 'Prefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- ส่วน Suffix คือส่วนที่เติมท้ายคำหลัก เช่น -itis อ้างอิงจาก [chunk 1]',
+      document: { title: docBothValid.title, chunks: docBothValid.chunks }
+    });
+
+    // Both Prefix and Suffix have genuine clause-level definitions and examples in chunk 1 -> Must PASS
+    expect(report.stages.answerFidelity.status).toBe('aligned');
+    expect(report.verdict).toBe('PASS');
+    expect(report.isVerified).toBe(true);
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docBothValid);
+    expect(res.evidenceStatus).toBe('sufficient');
+    expect(res.verification?.verdict).toBe('PASS');
+    expect(res.references[0].verificationStatus).toBe('source_grounded');
   });
 });
 

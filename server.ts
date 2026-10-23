@@ -258,21 +258,28 @@ export function getAcademicFallback(
               /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(cl)
             );
 
-            const chunkHasPrefixDefinition =
-              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(chunkLower) ||
-              /\bprefix\b.*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(chunkLower);
+            const chunkHasPrefixDefinition = clauses.some(cl =>
+              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+              /\bprefix\b[^.!?;\n]*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(cl)
+            );
 
-            const chunkHasSuffixDefinition =
-              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(chunkLower) ||
-              /\bsuffix\b.*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(chunkLower);
+            const chunkHasSuffixDefinition = clauses.some(cl =>
+              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+              /\bsuffix\b[^.!?;\n]*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(cl)
+            );
 
-            const chunkHasPrefixExamples =
-              /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(chunkLower) ||
-              /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(chunkLower);
+            const chunkHasPrefixExamples = clauses.some(cl =>
+              /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(cl) ||
+              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+              /\bprefix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+            );
 
-            const chunkHasSuffixExamples =
-              /-[a-z]{2,}\b/i.test(chunkLower) ||
-              /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(chunkLower);
+            const chunkHasSuffixExamples = clauses.some(cl =>
+              /(?:-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy)\b/i.test(cl) ||
+              /-[a-z]{2,}\b/i.test(cl) ||
+              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+              /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+            );
 
             // Clause-specific composition to prevent intra-chunk cross-sentence match
             const clauseHasPrefixComposition = clauses.some(cl =>

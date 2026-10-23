@@ -119,40 +119,25 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   }
 
   // Check 3a: Strict Delimited Citation Format Validation
-  // Detects citations specifically inside brackets [...] or explicit markers that intend to cite but lack valid numeric indices
-  // Examples: "[ชิ้นส่วนที่ abc]", "[ส่วนอ้างอิง: ]", "[chunk null]", "[ชิ้นส่วนที่ undefined]", "[chunk: NaN]"
-  // Strictly ignores normal Thai text (e.g. "ชิ้นส่วนที่นำมาตรวจ") and non-citation bracketed terms (e.g. "[CBC]", "[EDTA]")
-  const malformedBracketMatches = Array.from(
-    candidateAnswer.matchAll(/\[\s*(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)[\s:]*([^\]]*)\]/gi)
+  // Evaluates every citation marker inside brackets [...] against the strict Citation Grammar:
+  // Syntax: [chunk <N>], [ชิ้นส่วนที่ <N>], [ส่วนอ้างอิง <N>], or [ส่วนอ้างอิง <N> | หน้า <P>]
+  // Non-citation brackets (e.g. [CBC], [EDTA]) and normal Thai text (e.g. "ชิ้นส่วนที่นำมาตรวจ") are completely untouched.
+  const citationBracketMatches = Array.from(
+    candidateAnswer.matchAll(/\[\s*(?:chunk\b|ชิ้นส่วนที่|ส่วนอ้างอิง)[^\]]*\]/gi)
   );
   const seenMalformed = new Set<string>();
+  const VALID_CITATION_SYNTAX = /^\[\s*(?:chunk|ชิ้นส่วนที่|ส่วนอ้างอิง)[\s:]*(?:(?:ชิ้นส่วนที่|chunk)\s*)?(\d+)(?:\s*[|,]\s*(?:หน้า|page)\s*(\d+))?\s*\]$/i;
 
-  for (const match of malformedBracketMatches) {
+  for (const match of citationBracketMatches) {
     const fullMatch = match[0];
-    const innerContent = match[1] || '';
-    // If the bracketed citation marker does NOT contain any valid digit, it is malformed
-    if (!/\d+/.test(innerContent)) {
+    if (!VALID_CITATION_SYNTAX.test(fullMatch)) {
       const trimmed = fullMatch.trim();
       if (!seenMalformed.has(trimmed)) {
         seenMalformed.add(trimmed);
         unsupportedCitations.push(
-          `รูปแบบการอ้างอิงผิดพลาด (Malformed Citation): พบ "${trimmed}" ซึ่งไม่ระบุหมายเลขชิ้นส่วนที่ถูกต้อง`
+          `รูปแบบการอ้างอิงผิดพลาด (Malformed Citation): พบ "${trimmed}" ซึ่งไม่ถูกต้องตามรูปแบบที่กำหนด`
         );
       }
-    }
-  }
-
-  // Also check for explicit invalid literal keywords (null, undefined, NaN) following a citation prefix even if unbracketed
-  const explicitInvalidLiterals = Array.from(
-    candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)[\s:]*(?:null|undefined|nan)\b/gi)
-  );
-  for (const match of explicitInvalidLiterals) {
-    const trimmed = match[0].trim();
-    if (!seenMalformed.has(trimmed)) {
-      seenMalformed.add(trimmed);
-      unsupportedCitations.push(
-        `รูปแบบการอ้างอิงผิดพลาด (Malformed Citation): พบ "${trimmed}" ซึ่งมีค่าอ้างอิงไม่ถูกต้อง`
-      );
     }
   }
 
@@ -280,27 +265,38 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
           /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:prefix|คำอุปสรรค)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)|(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)[^.!?;\n]*?(?:prefix|คำอุปสรรค)/i.test(cl)
         );
 
-        // Substantive definition / explanation of Prefix
+        // Substantive definition / explanation of Prefix strictly evaluated per clause
         const hasPrefixDef =
           clauseHasComposition ||
-          /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(text) ||
-          /\bprefix\b.*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(text);
+          clauses.some(cl =>
+            /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+            /\bprefix\b[^.!?;\n]*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(cl) ||
+            /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:prefix|คำอุปสรรค)/i.test(cl)
+          );
 
-        // Substantive definition / explanation of Suffix
+        // Substantive definition / explanation of Suffix strictly evaluated per clause
         const hasSuffixDef =
           clauseHasComposition ||
-          /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(text) ||
-          /\bsuffix\b.*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(text);
+          clauses.some(cl =>
+            /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+            /\bsuffix\b[^.!?;\n]*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(cl) ||
+            /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)/i.test(cl)
+          );
 
-        // Examples of Prefix
-        const hasPrefixEx =
-          /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(text) ||
-          /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(text);
+        // Examples of Prefix strictly evaluated per clause
+        const hasPrefixEx = clauses.some(cl =>
+          /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(cl) ||
+          /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+          /\bprefix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+        );
 
-        // Examples of Suffix
-        const hasSuffixEx =
-          /-[a-z]{2,}\b/i.test(text) ||
-          /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(text);
+        // Examples of Suffix strictly evaluated per clause
+        const hasSuffixEx = clauses.some(cl =>
+          /(?:-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy)\b/i.test(cl) ||
+          /-[a-z]{2,}\b/i.test(cl) ||
+          /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+          /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+        );
 
         if (asksDefinitionOrFunction) {
           if (hasPrefixDef) hasValidPrefixEvidence = true;
