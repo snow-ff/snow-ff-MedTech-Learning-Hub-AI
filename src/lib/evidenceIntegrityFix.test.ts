@@ -226,26 +226,83 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(multiFallback.references[0].verificationStatus).toBe('source_grounded');
     expect(multiFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(true);
 
-    // 4. Mixed Chunks Case: Document contains both relevant chunk (Chunk 3: Suffix) and irrelevant chunk (Chunk 13: Anatomical Position)
+    // 4. Mixed Chunks Case: Document contains both relevant chunk (Chunk 3: Suffix with -scopy) and casual chunk (Chunk 1: Suffix without -scopy)
     const docMixed = {
       title: 'Mixed Medical Guide',
       hasNativePages: false,
       chunks: [
-        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 },
-        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'Standard Anatomical Position describes standing upright, facing forward, palms forward.', charCount: 80 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'คำนำ: เอกสารชุดนี้รวบรวมคำศัพท์ prefix และ suffix ทั่วไปในเวชระเบียนโรงพยาบาล', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ) ในเวชระเบียน.', charCount: 72 }
       ]
     };
-    const mixedFallback = getAcademicFallback('อธิบาย suffix -scopy และการตรวจส่องกล้อง', [], docMixed);
+    const mixedFallback = getAcademicFallback('อธิบาย suffix -scopy ในเวชระเบียน', [], docMixed);
     // Overall answer has sufficient evidence because of Chunk 3
     expect(mixedFallback.evidenceStatus).toBe('sufficient');
-    // Reference for Chunk 3 must be source_grounded
+    // Both chunks are retrieved due to shared terms
     const ref3 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    const ref1 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
     expect(ref3).toBeDefined();
     expect(ref3?.verificationStatus).toBe('source_grounded');
-    // If Chunk 13 is retrieved, its Reference must NOT be source_grounded because it has no suffix content
-    const ref13 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
-    if (ref13) {
-      expect(ref13.verificationStatus).toBe('unsupported_citation');
-    }
+    expect(ref1).toBeDefined();
+    // Deterministic check: Chunk 1 only casually mentions suffix without -scopy, must be unsupported_citation
+    expect(ref1?.verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test J — Casual Mention: Suffix query against chunk mentioning "suffix" casually without substantive suffix content', () => {
+    const docCasual = {
+      title: 'Introductory Notes',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'คำนำทั่วไป: เอกสารประกอบการเรียนนี้กล่าวถึงคำว่า prefix และ suffix ในทางเทคนิคการแพทย์เบื้องต้น', charCount: 95 }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย suffix -scopy', [], docCasual);
+    // Evidence is insufficient because chunk 1 lacks -scopy or substantive suffix morphemes
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.references).toHaveLength(1);
+    expect(res.references[0].verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test K — General Query: Document with substantive clinical chunk vs administrative notice chunk', () => {
+    const docGeneral = {
+      title: 'Clinical Laboratory Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '2', documentId: 'doc1', chunkIndex: 2, text: 'การตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ Complete Blood Count (CBC) ต้องใช้เลือด EDTA หลอดสีม่วง', charCount: 101 },
+        { id: '10', documentId: 'doc1', chunkIndex: 10, text: 'ข้อปฏิบัติและการใช้อาคารสำนักงานของบุคลากรทางห้องปฏิบัติการทางการแพทย์', charCount: 72 }
+      ]
+    };
+
+    const res = getAcademicFallback('การตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ Complete Blood Count', [], docGeneral);
+    expect(res.evidenceStatus).toBe('sufficient');
+
+    const refClinical = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 2');
+    const refNotice = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+
+    expect(refClinical).toBeDefined();
+    expect(refClinical?.verificationStatus).toBe('source_grounded');
+    // Administrative/notice chunk without clinical grounding must be unsupported_citation
+    expect(refNotice).toBeDefined();
+    expect(refNotice?.verificationStatus).toBe('unsupported_citation');
+  });
+
+  it('Test L — Chunk Index Collision: Unsupported citation for Chunk 13 must not falsely flag Chunk 1', () => {
+    const docCollision = {
+      title: 'Collision Test Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 55 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'Standard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docCollision);
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    expect(ref1).toBeDefined();
+    // Chunk 1 genuinely supports the prefix query, so it must be source_grounded
+    expect(ref1?.verificationStatus).toBe('source_grounded');
   });
 });
+

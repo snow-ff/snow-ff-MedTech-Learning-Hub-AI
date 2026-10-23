@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
-import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator } from "./src/lib/documentChunker";
+import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
 import { AcademicVerificationReport } from "./src/models/coreModel";
 import {
@@ -223,30 +223,74 @@ export function getAcademicFallback(
 
         // Reference-level evidence validity:
         // Evaluates whether THIS specific chunk genuinely supports the query topic parts
-        // or whether it was cited erroneously (e.g. disclaimer/notice or irrelevant content).
+        // or whether it was cited erroneously (e.g. disclaimer/notice or superficial mention).
         const queryLower = prompt.toLowerCase();
         const chunkLower = decodedText.toLowerCase();
 
+        // Extract specific technical terms from the query, e.g. "-scopy", "-gram", "-graphy", "brady-", etc.
+        const queryTerms = queryLower.match(/-[a-z]{3,}|[a-z]{3,}-/g) || [];
+
         const asksSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(queryLower);
-        const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
+        const asksPrefix = /prefix|คำอุปสรรค|brady|tachy/i.test(queryLower);
         const asksRoot = /root|รากศัพท์/i.test(queryLower);
         const isSpecificTerminologyQuery = asksSuffix || asksPrefix || asksRoot;
 
-        let isChunkTopicRelevant = true;
+        let isChunkTopicRelevant = false;
         if (isSpecificTerminologyQuery) {
-          const chunkHasSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy|itis|ectomy/i.test(chunkLower);
-          const chunkHasPrefix = /prefix|คำอุปสรรค|brady-|tachy-|dys-|sub-/i.test(chunkLower);
-          const chunkHasRoot = /root|รากศัพท์/i.test(chunkLower);
+          if (queryTerms.length > 0) {
+            // If the query asks for specific technical terms (e.g. -scopy), the chunk must contain at least one of them
+            isChunkTopicRelevant = queryTerms.some(term => chunkLower.includes(term.toLowerCase()));
+          } else {
+            const chunkHasSubstantiveSuffix = /-[a-z]{2,}\b/i.test(chunkLower) || /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)/i.test(chunkLower);
+            const chunkHasSubstantivePrefix = /(?:brady|tachy|dys|sub|hyper|hypo)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(chunkLower) || /(?:คำอุปสรรค|เติมหน้า|prefix)/i.test(chunkLower);
+            const chunkHasSubstantiveRoot = /รากศัพท์|word root|แกนหลักของคำ/i.test(chunkLower);
 
-          isChunkTopicRelevant =
-            (asksSuffix && chunkHasSuffix) ||
-            (asksPrefix && chunkHasPrefix) ||
-            (asksRoot && chunkHasRoot);
+            isChunkTopicRelevant =
+              (asksSuffix && chunkHasSubstantiveSuffix) ||
+              (asksPrefix && chunkHasSubstantivePrefix) ||
+              (asksRoot && chunkHasSubstantiveRoot);
+          }
+        } else {
+          // For general queries, do not assume relevance solely from retrieval match;
+          // 1. Guard against administrative/notice/off-topic chunks
+          const isNoticeOrAdministrative = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
+          const asksNotice = /copyright|ประกาศ|ลิขสิทธิ์|disclaimer|notice|วันหยุด/i.test(queryLower);
+
+          // 2. Guard against compromised answer fidelity
+          const isAnswerCompromised =
+            verification.stages.answerFidelity.status === 'hallucinated' ||
+            verification.stages.answerFidelity.status === 'contradictory' ||
+            verification.verdict === 'FAIL';
+
+          // 3. Extract core technical/clinical entities (English tokens, acronyms, or specific terminology)
+          const clinicalEntities = queryLower.match(/\b[a-z0-9]{2,}\b/g)?.filter(e => !['and', 'for', 'the', 'with', 'about'].includes(e)) || [];
+
+          let hasSubstantiveMatch = false;
+          if (clinicalEntities.length > 0) {
+            // If the query asks about specific clinical entities (e.g. CBC, EDTA, PCR), chunk must contain at least one
+            hasSubstantiveMatch = clinicalEntities.some(entity => chunkLower.includes(entity));
+          } else {
+            // General query without English entities: check retrieval matched keywords or Thai substantive tokens
+            const hasMatchedKeywords = (retrieval.matchedKeywords || []).some(kw => chunkLower.includes(kw.toLowerCase()));
+            const queryTokens = queryLower
+              .split(/[\s,;:.!?()\/+\-]+/)
+              .map(t => t.trim())
+              .filter(t => t.length >= 3 && !ACADEMIC_STOPWORDS.has(t) && !['อธิบาย', 'คืออะไร', 'อย่างไร', 'เปรียบเทียบ', 'สรุป', 'ความหมาย', 'ข้อใด', 'ทำไม', 'เกี่ยวกับ', 'การตรวจ', 'ข้อมูล'].includes(t));
+            hasSubstantiveMatch = hasMatchedKeywords || queryTokens.length === 0 || queryTokens.some(token => chunkLower.includes(token));
+          }
+
+          if (!isAnswerCompromised && (!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch) {
+            isChunkTopicRelevant = true;
+          }
         }
 
+        // Exact chunk index matching to prevent prefix collision (e.g. chunk 1 falsely matching chunk 13)
         const isFidelityViolated =
           !verification.stages.evidenceFidelity.passed &&
-          verification.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes(`ชิ้นส่วนที่ ${c.chunkIndex}`));
+          verification.stages.evidenceFidelity.unsupportedCitations.some(uc => {
+            const matches = Array.from(uc.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi));
+            return matches.some(m => parseInt(m[1], 10) === c.chunkIndex);
+          });
 
         const isChunkUnsupported = isFidelityViolated || !isChunkTopicRelevant;
 
@@ -264,9 +308,12 @@ export function getAcademicFallback(
         };
       });
 
+      const hasAnyGroundedReference = chunkReferences.some(r => r.verificationStatus === 'source_grounded');
+      const isOverallEvidenceInsufficient = isFallbackInsufficient || !hasAnyGroundedReference;
+
       return {
         text: fallbackText,
-        evidenceStatus: isFallbackInsufficient ? ("insufficient" as const) : ("sufficient" as const),
+        evidenceStatus: isOverallEvidenceInsufficient ? ("insufficient" as const) : ("sufficient" as const),
         verification,
         references: chunkReferences
       };

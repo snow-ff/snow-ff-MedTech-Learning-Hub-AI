@@ -234,11 +234,17 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
       const hasSuffixKeywords = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy|itis|ectomy/i.test(combinedChunksText);
       const hasPrefixKeywords = /prefix|คำอุปสรรค|brady-|tachy-|dys-|sub-/i.test(combinedChunksText);
 
-      if (isSuffixQuery && !hasSuffixKeywords) {
+      // Check specific queried technical morphemes (e.g. -scopy, -gram)
+      const queryTechnicalTerms = query.toLowerCase().match(/-[a-z]{3,}|[a-z]{3,}-/g) || [];
+      const hasSpecificTermsIfQueried =
+        queryTechnicalTerms.length === 0 ||
+        queryTechnicalTerms.some(term => combinedChunksText.includes(term.toLowerCase()));
+
+      if (isSuffixQuery && (!hasSuffixKeywords || !hasSpecificTermsIfQueried)) {
         answerStatus = 'hallucinated';
         unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Suffix ที่ระบุในคำถาม (Heuristic Topic Mismatch: ไม่พบคำสำคัญ Suffix ในหลักฐาน)');
       }
-      if (isPrefixQuery && !hasPrefixKeywords) {
+      if (isPrefixQuery && (!hasPrefixKeywords || !hasSpecificTermsIfQueried)) {
         answerStatus = 'hallucinated';
         unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Prefix ที่ระบุในคำถาม (Heuristic Topic Mismatch: ไม่พบคำสำคัญ Prefix ในหลักฐาน)');
       }
