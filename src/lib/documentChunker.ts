@@ -513,8 +513,8 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
   }
 
   let excerpt = cleanText.slice(start, end).trim();
-  // Ensure excerpt starts cleanly without partial symbol/punctuation
-  excerpt = excerpt.replace(/^[^a-zA-Z0-9ก-ฮะ-์]+/, '').trim();
+  // Ensure excerpt starts cleanly without partial symbol/punctuation or orphaned Thai vowels/tone marks
+  excerpt = excerpt.replace(/^[^a-zA-Z0-9ก-ฮะ-์]+/, '').replace(/^[\u0E31\u0E33-\u0E3A\u0E47-\u0E4E]+/, '').trim();
 
   if (start > 0) excerpt = '...' + excerpt;
   if (end < cleanText.length) excerpt = excerpt + '...';

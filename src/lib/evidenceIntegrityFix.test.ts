@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator } from './documentChunker';
+import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
 import { getAcademicFallback } from '../../server';
 
@@ -783,6 +783,14 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(ref1?.excerpt).toBeDefined();
     expect(ref1?.excerpt?.length).toBeGreaterThan(10);
     expect(ref1?.excerpt).not.toContain('undefined');
+  });
+
+  it('Test AA — Thai Excerpt Cleanup: Excerpts must not start with orphaned Thai dependent vowels or tone marks like ำ', () => {
+    const sampleText = 'การจัดทำขึ้นเป็นแหล่งเรียนรู้เสริมสำหรับนักศึกษาเทคโนโลยีดิจิทัลทางการแพทย์';
+    const excerpt = extractRelevantExcerpt(sampleText, 'แหล่งเรียนรู้');
+    // Must not start with orphaned Thai vowel 'ำ'
+    expect(excerpt.startsWith('ำ')).toBe(false);
+    expect(excerpt.startsWith('...ำ')).toBe(false);
   });
 });
 
