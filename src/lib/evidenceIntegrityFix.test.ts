@@ -448,7 +448,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // 4. Non-citation brackets ([CBC], [EDTA]) and regular Thai text ("ชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ")
     const candidateAnswer =
       'คำตอบนี้อ้างอิงจาก [chunk 1] และ [ชิ้นส่วนที่ 2] และ [ส่วนอ้างอิง 13] และ [ส่วนอ้างอิง 13] ซ้ำ ' +
-      'พร้อมรูปแบบผิด: [chunk abc 2], [chunk null 2], [chunk 2 abc], [chunk null], [chunk undefined], [chunk NaN], [ชิ้นส่วนที่ abc], [ส่วนอ้างอิง: ] ' +
+      'พร้อมรูปแบบผิด: [chunk abc 2], [chunk null 2], [chunk 2 abc], [chunk null], [chunk undefined], [chunk NaN], [ชิ้นส่วนที่ abc], [ส่วนอ้างอิง: ], [chunk ชิ้นส่วนที่ 2] ' +
       'รวมทั้งมีชิ้นส่วนที่นำมาตรวจทางห้องปฏิบัติการ และ [CBC] กับ [EDTA] ปกติ';
 
     const report = verifyAcademicAnswer({
@@ -466,7 +466,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       uc.includes('รูปแบบการอ้างอิงผิดพลาด (Malformed Citation)')
     );
 
-    // All 8 invalid bracket citations must be identified as format errors
+    // All 9 invalid bracket citations must be identified as format errors
     expect(malformedViolations.some(m => m.includes('[chunk abc 2]'))).toBe(true);
     expect(malformedViolations.some(m => m.includes('[chunk null 2]'))).toBe(true);
     expect(malformedViolations.some(m => m.includes('[chunk 2 abc]'))).toBe(true);
@@ -475,7 +475,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(malformedViolations.some(m => m.includes('[chunk NaN]'))).toBe(true);
     expect(malformedViolations.some(m => m.includes('[ชิ้นส่วนที่ abc]'))).toBe(true);
     expect(malformedViolations.some(m => m.includes('[ส่วนอ้างอิง: ]'))).toBe(true);
-    expect(malformedViolations.length).toBe(8);
+    expect(malformedViolations.some(m => m.includes('[chunk ชิ้นส่วนที่ 2]'))).toBe(true);
+    expect(malformedViolations.length).toBe(9);
 
     // 2. Valid citation [chunk 1] and [ชิ้นส่วนที่ 2] must NOT be flagged as malformed
     expect(malformedViolations.some(m => m.includes('[chunk 1]'))).toBe(false);

@@ -126,7 +126,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
     candidateAnswer.matchAll(/\[\s*(?:chunk\b|ชิ้นส่วนที่|ส่วนอ้างอิง)[^\]]*\]/gi)
   );
   const seenMalformed = new Set<string>();
-  const VALID_CITATION_SYNTAX = /^\[\s*(?:chunk|ชิ้นส่วนที่|ส่วนอ้างอิง)[\s:]*(?:(?:ชิ้นส่วนที่|chunk)\s*)?(\d+)(?:\s*[|,]\s*(?:หน้า|page)\s*(\d+))?\s*\]$/i;
+  const VALID_CITATION_SYNTAX = /^\[\s*(?:chunk[\s:]*(\d+)|ชิ้นส่วนที่[\s:]*(\d+)|ส่วนอ้างอิง[\s:]*(?:ชิ้นส่วนที่[\s:]*)?(\d+))(?:\s*[|,]\s*(?:หน้า|page)\s*(\d+))?\s*\]$/i;
 
   for (const match of citationBracketMatches) {
     const fullMatch = match[0];
