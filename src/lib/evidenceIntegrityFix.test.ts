@@ -152,7 +152,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   });
 
   it('Test I — Semantic Mismatch, Positive Control, and Multi-Part Regression Tests', () => {
-    // 1. Negative Case: Suffix query with only anatomical position evidence must NOT be PASS and must be insufficient
+    // 1. Negative Case: Suffix query with only anatomical position evidence (completely unrelated topic)
     const docNegative = {
       title: 'Anatomy Guide',
       hasNativePages: false,
@@ -171,7 +171,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const negFallback = getAcademicFallback('อธิบายความแตกต่างของ suffix -scopy, -gram', [], docNegative);
     expect(negFallback.evidenceStatus).toBe('insufficient');
     expect(negFallback.verification?.verdict).not.toBe('PASS');
-    expect(negFallback.references.every(r => r.verificationStatus !== 'source_grounded')).toBe(true);
+    // Reference-level: chunk 13 does not support suffix, so it must be unsupported_citation
+    expect(negFallback.references.every(r => r.verificationStatus === 'unsupported_citation')).toBe(true);
 
     // 2. Positive Control Case: Valid Suffix evidence must be correctly selected and evaluated
     const docPositive = {
@@ -224,5 +225,27 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // Reference-level: chunk 1 is a genuine local document chunk covering prefix
     expect(multiFallback.references[0].verificationStatus).toBe('source_grounded');
     expect(multiFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(true);
+
+    // 4. Mixed Chunks Case: Document contains both relevant chunk (Chunk 3: Suffix) and irrelevant chunk (Chunk 13: Anatomical Position)
+    const docMixed = {
+      title: 'Mixed Medical Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'Standard Anatomical Position describes standing upright, facing forward, palms forward.', charCount: 80 }
+      ]
+    };
+    const mixedFallback = getAcademicFallback('อธิบาย suffix -scopy และการตรวจส่องกล้อง', [], docMixed);
+    // Overall answer has sufficient evidence because of Chunk 3
+    expect(mixedFallback.evidenceStatus).toBe('sufficient');
+    // Reference for Chunk 3 must be source_grounded
+    const ref3 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    expect(ref3).toBeDefined();
+    expect(ref3?.verificationStatus).toBe('source_grounded');
+    // If Chunk 13 is retrieved, its Reference must NOT be source_grounded because it has no suffix content
+    const ref13 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
+    if (ref13) {
+      expect(ref13.verificationStatus).toBe('unsupported_citation');
+    }
   });
 });

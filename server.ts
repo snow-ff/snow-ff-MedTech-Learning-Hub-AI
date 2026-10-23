@@ -215,10 +215,6 @@ export function getAcademicFallback(
         verification.stages.answerFidelity.status === 'hallucinated' ||
         verification.stages.answerFidelity.status === 'overgeneralized';
 
-      const isTopicMismatch = verification.stages.answerFidelity.unsupportedClaims.some(
-        claim => claim.includes('Topic Mismatch')
-      );
-
       const chunkReferences = retrieval.relevantChunks.map(c => {
         const decodedText = decodeHtmlEntities(c.text || '');
         const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
@@ -226,13 +222,33 @@ export function getAcademicFallback(
         const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
 
         // Reference-level evidence validity:
-        // A reference is marked 'unsupported_citation' if evidence fidelity failed,
-        // if this specific chunk is cited erroneously, or if the entire query has a topic mismatch.
-        // Otherwise, genuine local document chunks retain 'source_grounded'.
-        const isChunkUnsupported =
-          !verification.stages.evidenceFidelity.passed ||
-          isTopicMismatch ||
+        // Evaluates whether THIS specific chunk genuinely supports the query topic parts
+        // or whether it was cited erroneously (e.g. disclaimer/notice or irrelevant content).
+        const queryLower = prompt.toLowerCase();
+        const chunkLower = decodedText.toLowerCase();
+
+        const asksSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(queryLower);
+        const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
+        const asksRoot = /root|รากศัพท์/i.test(queryLower);
+        const isSpecificTerminologyQuery = asksSuffix || asksPrefix || asksRoot;
+
+        let isChunkTopicRelevant = true;
+        if (isSpecificTerminologyQuery) {
+          const chunkHasSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy|itis|ectomy/i.test(chunkLower);
+          const chunkHasPrefix = /prefix|คำอุปสรรค|brady-|tachy-|dys-|sub-/i.test(chunkLower);
+          const chunkHasRoot = /root|รากศัพท์/i.test(chunkLower);
+
+          isChunkTopicRelevant =
+            (asksSuffix && chunkHasSuffix) ||
+            (asksPrefix && chunkHasPrefix) ||
+            (asksRoot && chunkHasRoot);
+        }
+
+        const isFidelityViolated =
+          !verification.stages.evidenceFidelity.passed &&
           verification.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes(`ชิ้นส่วนที่ ${c.chunkIndex}`));
+
+        const isChunkUnsupported = isFidelityViolated || !isChunkTopicRelevant;
 
         return {
           title: `เอกสาร: ${documentContext.title} — ${sectionTitle}`,
