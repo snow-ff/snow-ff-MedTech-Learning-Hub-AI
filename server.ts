@@ -378,7 +378,7 @@ export function getAcademicFallback(
             }
           }
 
-          if (!isAnswerCompromised && (!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch) {
+          if ((!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch) {
             isChunkTopicRelevant = true;
           }
         }
@@ -428,7 +428,7 @@ export function getAcademicFallback(
 
         if (groundedChunks.length > 0) {
           const groundedCitations = groundedChunks
-            .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`)
+            .map(c => `• **[ส่วนอ้างอิง ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${decodeHtmlEntities(c.text || '')}`)
             .join('\n\n');
 
           const missingClause = missingParts.length > 0
