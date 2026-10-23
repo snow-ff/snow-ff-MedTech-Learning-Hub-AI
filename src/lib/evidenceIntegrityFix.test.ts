@@ -824,7 +824,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   it('Test AC — Real DTM67-111 Source Integration & Full-Text Grounding for Prefix & Suffix', () => {
     const rawText = fs.readFileSync(path.resolve(process.cwd(), 'test-assets/ground-truth/dtm67-111-source.md'), 'utf-8');
     const chunks = chunkText(rawText, { documentId: 'doc-dtm-real', maxChunkChars: 900 });
-    const prompt = 'องค์ประกอบ 4 ส่วนของคำศัพท์การแพทย์ Word Root Prefix Suffix Combining Vowel พร้อมยกตัวอย่างและความหมาย';
+    const prompt = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix พร้อมยกตัวอย่าง ความหมาย และอ้างอิงจากเอกสารที่เลือก';
     
     const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
       title: 'เอกสารสรุป: ศัพท์เทคนิคทางการแพทย์',
@@ -852,11 +852,20 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       expect(ref.evidenceLocator).not.toContain('หน้า');
     }
 
-    // 3. Must find both Prefix and Suffix evidence in retrieved references or response text
-    const hasPrefixEvidence = res.text.includes('Prefix') || res.references.some(r => /(?:prefix|คำอุปสรรค)/i.test(r.excerpt || r.title || ''));
-    const hasSuffixEvidence = res.text.includes('Suffix') || res.references.some(r => /(?:suffix|ปัจจัยท้าย)/i.test(r.excerpt || r.title || ''));
-    expect(hasPrefixEvidence).toBe(true);
-    expect(hasSuffixEvidence).toBe(true);
+    // 3. Rigorous independent source evidence verification in full retrieved chunk texts and reference excerpts:
+    // - Prefix definition & example
+    // - Suffix definition & example
+    const allText = res.text + ' ' + res.references.map(r => r.excerpt || '').join(' ');
+    
+    const hasPrefixDefinition = /คำอุปสรรค|เติมหน้า/i.test(allText);
+    const hasPrefixExample = /brady-|tachy-/i.test(allText);
+    const hasSuffixDefinition = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ/i.test(allText);
+    const hasSuffixExample = /-itis|-ectomy|-scopy/i.test(allText);
+
+    expect(hasPrefixDefinition).toBe(true);
+    expect(hasPrefixExample).toBe(true);
+    expect(hasSuffixDefinition).toBe(true);
+    expect(hasSuffixExample).toBe(true);
   });
 
   it('Test AD — Negative Test: Document with only Prefix and no Suffix detects missing parts and returns insufficient status', () => {
