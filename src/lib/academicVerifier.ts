@@ -105,7 +105,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   }
 
   // Check 3: Cited chunk index must exist in retrieved relevant chunks
-  const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi));
+  const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)\s*(\d+)/gi));
   const retrievedChunkIndices = retrieval.relevantChunks.map(c => c.chunkIndex);
   for (const match of chunkMatches) {
     const chunkIdx = parseInt(match[1], 10);

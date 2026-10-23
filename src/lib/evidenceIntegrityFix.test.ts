@@ -304,5 +304,66 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // Chunk 1 genuinely supports the prefix query, so it must be source_grounded
     expect(ref1?.verificationStatus).toBe('source_grounded');
   });
+
+  it('Test M — Casual Mention Without Specific Morpheme: Query "อธิบาย suffix" against chunk mentioning "suffix" casually', () => {
+    const docCasualGeneral = {
+      title: 'General Overview',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'คำนำทั่วไป: เอกสารประกอบการเรียนนี้กล่าวถึงคำว่า prefix และ suffix ในทางเทคนิคการแพทย์เบื้องต้น', charCount: 95 }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย suffix', [], docCasualGeneral);
+    expect(res.references).toHaveLength(1);
+    // Deterministic Heuristic: Must NOT be source_grounded simply because "suffix" word matched
+    expect(res.references[0].verificationStatus).toBe('unsupported_citation');
+    expect(res.evidenceStatus).toBe('insufficient');
+  });
+
+  it('Test N — General English Word Overlap vs Clinical Markers: Matching words like "guide", "note", "report" without queried CBC/EDTA/PCR must not be source_grounded', () => {
+    const docGeneralEnglish = {
+      title: 'Lab Study Notes',
+      hasNativePages: false,
+      chunks: [
+        { id: '4', documentId: 'doc1', chunkIndex: 4, text: 'Study guide, student notes, and standard laboratory report format.', charCount: 66 }
+      ]
+    };
+
+    const res = getAcademicFallback('การตรวจ CBC และ EDTA ตาม study guide, notes, and report', [], docGeneralEnglish);
+    expect(res.references).toHaveLength(1);
+    // Chunk matches general English words (guide, notes, report) but has NO cbc or edta -> must be unsupported_citation
+    expect(res.references[0].verificationStatus).toBe('unsupported_citation');
+    expect(res.evidenceStatus).toBe('insufficient');
+  });
+
+  it('Test O — Exact Integer Citation Isolation: unsupportedCitations specifying "ชิ้นส่วนที่ 13" does not falsely violate Chunk 1', () => {
+    const docExact = {
+      title: 'Collision Isolation Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- และ tachy-', charCount: 68 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docExact);
+    expect(res.references).toHaveLength(2);
+
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref13 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
+
+    expect(ref1).toBeDefined();
+    expect(ref13).toBeDefined();
+
+    // Verify that unsupportedCitations actually flagged chunk 13
+    expect(res.verification?.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes('ชิ้นส่วนที่ 13'))).toBe(true);
+
+    // Chunk 1 must be source_grounded and NOT contaminated by chunk 13's violation
+    expect(ref1?.verificationStatus).toBe('source_grounded');
+
+    // Chunk 13 must be unsupported_citation because of its own violation
+    expect(ref13?.verificationStatus).toBe('unsupported_citation');
+  });
 });
 

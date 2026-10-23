@@ -235,20 +235,37 @@ export function getAcademicFallback(
         const asksRoot = /root|รากศัพท์/i.test(queryLower);
         const isSpecificTerminologyQuery = asksSuffix || asksPrefix || asksRoot;
 
+        // Note: Reference evaluation uses deterministic heuristics (exact morpheme patterns,
+        // definition frames, and target entity filtering) rather than deep NLI or semantic entailment.
         let isChunkTopicRelevant = false;
         if (isSpecificTerminologyQuery) {
           if (queryTerms.length > 0) {
             // If the query asks for specific technical terms (e.g. -scopy), the chunk must contain at least one of them
             isChunkTopicRelevant = queryTerms.some(term => chunkLower.includes(term.toLowerCase()));
           } else {
-            const chunkHasSubstantiveSuffix = /-[a-z]{2,}\b/i.test(chunkLower) || /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)/i.test(chunkLower);
-            const chunkHasSubstantivePrefix = /(?:brady|tachy|dys|sub|hyper|hypo)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(chunkLower) || /(?:คำอุปสรรค|เติมหน้า|prefix)/i.test(chunkLower);
-            const chunkHasSubstantiveRoot = /รากศัพท์|word root|แกนหลักของคำ/i.test(chunkLower);
+            // Query asks general suffix/prefix/root (without specific -term):
+            // Requires substantive morphological patterns (-itis, brady-) or definition frames (คือ, หมายถึง, เช่น, ประกอบด้วย, :)
+            // Casual mention (e.g. "กล่าวถึง prefix และ suffix ทั่วไป") is rejected as unsupported_citation.
+            const chunkHasSubstantiveSuffix =
+              /-[a-z]{2,}\b/i.test(chunkLower) ||
+              /(?:ปัจจัยท้าย|คำต่อท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower);
+
+            const chunkHasSubstantivePrefix =
+              /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(chunkLower) ||
+              /(?:คำอุปสรรค|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower);
+
+            const chunkHasSubstantiveRoot =
+              /(?:รากศัพท์|word root|แกนหลักของคำ)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower) ||
+              /รากศัพท์|แกนหลักของคำ/i.test(chunkLower);
+
+            const chunkHasWordPartsComposition =
+              /(?:ประกอบด้วย|ส่วนประกอบ|องค์ประกอบของคำ|โครงสร้างของคำ).*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(chunkLower);
 
             isChunkTopicRelevant =
               (asksSuffix && chunkHasSubstantiveSuffix) ||
               (asksPrefix && chunkHasSubstantivePrefix) ||
-              (asksRoot && chunkHasSubstantiveRoot);
+              (asksRoot && chunkHasSubstantiveRoot) ||
+              ((asksSuffix || asksPrefix || asksRoot) && chunkHasWordPartsComposition);
           }
         } else {
           // For general queries, do not assume relevance solely from retrieval match;
@@ -262,21 +279,52 @@ export function getAcademicFallback(
             verification.stages.answerFidelity.status === 'contradictory' ||
             verification.verdict === 'FAIL';
 
-          // 3. Extract core technical/clinical entities (English tokens, acronyms, or specific terminology)
-          const clinicalEntities = queryLower.match(/\b[a-z0-9]{2,}\b/g)?.filter(e => !['and', 'for', 'the', 'with', 'about'].includes(e)) || [];
+          // 3. Clinical Entities vs General English words:
+          // Define specific clinical target markers (e.g. CBC, EDTA, PCR, ELISA, HbA1c, etc.)
+          const SPECIFIC_LAB_MARKERS = [
+            'cbc', 'pcr', 'edta', 'elisa', 'hba1c', 'bun', 'wbc', 'rbc', 'lft',
+            'ast', 'alt', 'alp', 'sst', 'qc', 'pt', 'inr', 'aptt', 'hiv', 'hbv',
+            'hcv', 'dna', 'rna', 'mso4', 'mgso4', 'complete blood count',
+            'flow cytometry', 'blood glucose', 'fasting blood sugar'
+          ];
+          const queriedMarkers = SPECIFIC_LAB_MARKERS.filter(marker => queryLower.includes(marker));
+
+          // General non-clinical English words that must NOT be treated as clinical evidence
+          const GENERAL_NON_CLINICAL_WORDS = new Set([
+            'and', 'for', 'the', 'with', 'about', 'from', 'into', 'over', 'after',
+            'guide', 'guidelines', 'note', 'notes', 'text', 'study', 'student', 'learning',
+            'unit', 'chapter', 'page', 'book', 'manual', 'general', 'overview', 'summary',
+            'system', 'method', 'methods', 'rule', 'rules', 'process', 'step', 'steps',
+            'record', 'records', 'report', 'information', 'data', 'format', 'case', 'cases',
+            'example', 'examples', 'user', 'time', 'date', 'item', 'list', 'title', 'name',
+            'code', 'class', 'course', 'level', 'score', 'paper', 'form', 'type', 'types',
+            'part', 'parts', 'standard', 'standards', 'practice', 'review', 'week', 'day',
+            'term', 'terms', 'how', 'what', 'why', 'when', 'which', 'where', 'who', 'does'
+          ]);
 
           let hasSubstantiveMatch = false;
-          if (clinicalEntities.length > 0) {
-            // If the query asks about specific clinical entities (e.g. CBC, EDTA, PCR), chunk must contain at least one
-            hasSubstantiveMatch = clinicalEntities.some(entity => chunkLower.includes(entity));
+
+          if (queriedMarkers.length > 0) {
+            // When query specifies clinical tests (CBC, EDTA, PCR, etc.), chunk MUST contain at least one queried marker.
+            // Matching general words (guide, note, etc.) without the queried marker is strictly rejected.
+            hasSubstantiveMatch = queriedMarkers.some(marker => chunkLower.includes(marker));
           } else {
-            // General query without English entities: check retrieval matched keywords or Thai substantive tokens
-            const hasMatchedKeywords = (retrieval.matchedKeywords || []).some(kw => chunkLower.includes(kw.toLowerCase()));
-            const queryTokens = queryLower
-              .split(/[\s,;:.!?()\/+\-]+/)
-              .map(t => t.trim())
-              .filter(t => t.length >= 3 && !ACADEMIC_STOPWORDS.has(t) && !['อธิบาย', 'คืออะไร', 'อย่างไร', 'เปรียบเทียบ', 'สรุป', 'ความหมาย', 'ข้อใด', 'ทำไม', 'เกี่ยวกับ', 'การตรวจ', 'ข้อมูล'].includes(t));
-            hasSubstantiveMatch = hasMatchedKeywords || queryTokens.length === 0 || queryTokens.some(token => chunkLower.includes(token));
+            // For other clinical / laboratory queries without explicit acronyms in the marker list:
+            const clinicalEntities = queryLower
+              .match(/\b[a-z0-9]{2,}\b/g)
+              ?.filter(e => !GENERAL_NON_CLINICAL_WORDS.has(e)) || [];
+
+            if (clinicalEntities.length > 0) {
+              hasSubstantiveMatch = clinicalEntities.some(entity => chunkLower.includes(entity));
+            } else {
+              // General query without English clinical entities: check retrieval matched keywords or Thai substantive tokens
+              const hasMatchedKeywords = (retrieval.matchedKeywords || []).some(kw => chunkLower.includes(kw.toLowerCase()));
+              const queryTokens = queryLower
+                .split(/[\s,;:.!?()\/+\-]+/)
+                .map(t => t.trim())
+                .filter(t => t.length >= 3 && !ACADEMIC_STOPWORDS.has(t) && !['อธิบาย', 'คืออะไร', 'อย่างไร', 'เปรียบเทียบ', 'สรุป', 'ความหมาย', 'ข้อใด', 'ทำไม', 'เกี่ยวกับ', 'การตรวจ', 'ข้อมูล'].includes(t));
+              hasSubstantiveMatch = hasMatchedKeywords || queryTokens.length === 0 || queryTokens.some(token => chunkLower.includes(token));
+            }
           }
 
           if (!isAnswerCompromised && (!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch) {
@@ -288,7 +336,7 @@ export function getAcademicFallback(
         const isFidelityViolated =
           !verification.stages.evidenceFidelity.passed &&
           verification.stages.evidenceFidelity.unsupportedCitations.some(uc => {
-            const matches = Array.from(uc.matchAll(/(?:ชิ้นส่วนที่|chunk)\s*(\d+)/gi));
+            const matches = Array.from(uc.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)\s*(\d+)/gi));
             return matches.some(m => parseInt(m[1], 10) === c.chunkIndex);
           });
 
