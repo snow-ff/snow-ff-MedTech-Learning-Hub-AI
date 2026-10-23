@@ -824,7 +824,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   it('Test AC — Real DTM67-111 Source Integration & Full-Text Grounding for Prefix & Suffix', () => {
     const rawText = fs.readFileSync(path.resolve(process.cwd(), 'test-assets/ground-truth/dtm67-111-source.md'), 'utf-8');
     const chunks = chunkText(rawText, { documentId: 'doc-dtm-real', maxChunkChars: 900 });
-    const prompt = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix พร้อมยกตัวอย่าง ความหมาย และอ้างอิงจากเอกสารที่เลือก';
+    const prompt = 'องค์ประกอบ 4 ส่วนของคำศัพท์การแพทย์ Word Root Prefix Suffix Combining Vowel พร้อมยกตัวอย่างและความหมาย';
     
     const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
       title: 'เอกสารสรุป: ศัพท์เทคนิคทางการแพทย์',
@@ -837,11 +837,50 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       }))
     });
 
+    // 1. Evidence and Verification status must be fully sufficient and PASS
+    expect(res.evidenceStatus).toBe('sufficient');
+    expect(res.verification?.verdict).toBe('PASS');
+    expect(res.verification?.isVerified).toBe(true);
+
+    // 2. References must be non-empty and clean of HTML entities
     expect(res.references.length).toBeGreaterThan(0);
     for (const ref of res.references) {
       expect(ref.evidenceLocator).not.toContain('&#');
       expect(ref.evidenceLocator).not.toContain('&amp;');
+      expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
+      // No synthetic page numbers on unpaged document
+      expect(ref.evidenceLocator).not.toContain('หน้า');
     }
+
+    // 3. Must find both Prefix and Suffix evidence in retrieved references or response text
+    const hasPrefixEvidence = res.text.includes('Prefix') || res.references.some(r => /(?:prefix|คำอุปสรรค)/i.test(r.excerpt || r.title || ''));
+    const hasSuffixEvidence = res.text.includes('Suffix') || res.references.some(r => /(?:suffix|ปัจจัยท้าย)/i.test(r.excerpt || r.title || ''));
+    expect(hasPrefixEvidence).toBe(true);
+    expect(hasSuffixEvidence).toBe(true);
+  });
+
+  it('Test AD — Negative Test: Document with only Prefix and no Suffix detects missing parts and returns insufficient status', () => {
+    const docPrefixOnly = {
+      title: 'เอกสารตัวอย่างเฉพาะ Prefix',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)' }
+      ]
+    };
+
+    const prompt = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix พร้อมยกตัวอย่าง ความหมาย และอ้างอิงจากเอกสารที่เลือก';
+    const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], docPrefixOnly);
+
+    // 1. Evidence status must be insufficient due to missing Suffix
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.isVerified).toBe(false);
+
+    // 2. Answer text must contain Partial Evidence Notice and indicate missing Suffix
+    expect(res.text).toContain('คำเตือนความครอบคลุมของหลักฐาน');
+    expect(res.text).toContain('ปัจจัยท้าย (Suffix)');
+    expect(res.text).toContain('[ส่วนอ้างอิง 1]');
   });
 });
 
