@@ -412,19 +412,22 @@ export function getAcademicFallback(
         const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
         const asksRoot = /root|รากศัพท์/i.test(queryLower);
 
-        const hasGroundedPrefix = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /prefix|คำอุปสรรค|brady|tachy/i.test(r.excerpt || ''));
-        const hasGroundedSuffix = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram/i.test(r.excerpt || ''));
-        const hasGroundedRoot = chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /root|รากศัพท์|cardi|nephr/i.test(r.excerpt || ''));
+        const groundedChunks = retrieval.relevantChunks.filter(c => {
+          const ref = chunkReferences.find(r => r.uri === `#chunk-${c.chunkIndex}`);
+          return ref && ref.verificationStatus === 'source_grounded';
+        });
+
+        const hasGroundedPrefix = groundedChunks.some(c => /prefix|คำอุปสรรค|brady|tachy/i.test(c.text || '')) ||
+                                  chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /prefix|คำอุปสรรค|brady|tachy/i.test(r.excerpt || ''));
+        const hasGroundedSuffix = groundedChunks.some(c => /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(c.text || '')) ||
+                                  chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(r.excerpt || ''));
+        const hasGroundedRoot = groundedChunks.some(c => /root|รากศัพท์|cardi|nephr/i.test(c.text || '')) ||
+                                chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /root|รากศัพท์|cardi|nephr/i.test(r.excerpt || ''));
 
         const missingParts: string[] = [];
         if (asksPrefix && !hasGroundedPrefix) missingParts.push('คำอุปสรรค (Prefix)');
         if (asksSuffix && !hasGroundedSuffix) missingParts.push('ปัจจัยท้าย (Suffix)');
         if (asksRoot && !hasGroundedRoot) missingParts.push('รากศัพท์ (Word Root)');
-
-        const groundedChunks = retrieval.relevantChunks.filter(c => {
-          const ref = chunkReferences.find(r => r.uri === `#chunk-${c.chunkIndex}`);
-          return ref && ref.verificationStatus === 'source_grounded';
-        });
 
         if (groundedChunks.length > 0) {
           const groundedCitations = groundedChunks

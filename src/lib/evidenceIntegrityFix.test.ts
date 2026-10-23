@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
 import { getAcademicFallback } from '../../server';
@@ -817,6 +819,29 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(loc3).toBe('ชิ้นส่วนที่ 3');
     expect(loc5).toBe('ชิ้นส่วนที่ 5');
     expect(loc6).toBe('ชิ้นส่วนที่ 6');
+  });
+
+  it('Test AC — Real DTM67-111 Source Integration & Full-Text Grounding for Prefix & Suffix', () => {
+    const rawText = fs.readFileSync(path.resolve(process.cwd(), 'test-assets/ground-truth/dtm67-111-source.md'), 'utf-8');
+    const chunks = chunkText(rawText, { documentId: 'doc-dtm-real', maxChunkChars: 900 });
+    const prompt = 'อธิบายความแตกต่างระหว่าง Prefix และ Suffix พร้อมยกตัวอย่าง ความหมาย และอ้างอิงจากเอกสารที่เลือก';
+    
+    const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
+      title: 'เอกสารสรุป: ศัพท์เทคนิคทางการแพทย์',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: chunks.map((c, idx) => ({
+        chunkIndex: c.chunkIndex || idx + 1,
+        pageNumber: c.pageNumber,
+        text: c.text
+      }))
+    });
+
+    expect(res.references.length).toBeGreaterThan(0);
+    for (const ref of res.references) {
+      expect(ref.evidenceLocator).not.toContain('&#');
+      expect(ref.evidenceLocator).not.toContain('&amp;');
+    }
   });
 });
 
