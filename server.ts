@@ -208,6 +208,13 @@ export function getAcademicFallback(
         conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
       });
 
+      const isFallbackInsufficient =
+        verification.verdict === 'INSUFFICIENT_EVIDENCE' ||
+        verification.verdict === 'FAIL' ||
+        !verification.stages.evidenceFidelity.passed ||
+        verification.stages.answerFidelity.status === 'hallucinated' ||
+        verification.stages.answerFidelity.status === 'overgeneralized';
+
       const chunkReferences = retrieval.relevantChunks.map(c => {
         const decodedText = decodeHtmlEntities(c.text || '');
         const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
@@ -219,7 +226,9 @@ export function getAcademicFallback(
           uri: `#chunk-${c.chunkIndex}`,
           type: "document_chunk",
           linkAccessStatus: "verified_local",
-          verificationStatus: "source_grounded" as const,
+          verificationStatus: (!isFallbackInsufficient && verification.stages.evidenceFidelity.passed)
+            ? ("source_grounded" as const)
+            : ("unsupported_citation" as const),
           evidenceLocator: finalLocator,
           excerpt,
           contentVersion: "1.2"
@@ -228,7 +237,7 @@ export function getAcademicFallback(
 
       return {
         text: fallbackText,
-        evidenceStatus: "sufficient" as const,
+        evidenceStatus: isFallbackInsufficient ? ("insufficient" as const) : ("sufficient" as const),
         verification,
         references: chunkReferences
       };

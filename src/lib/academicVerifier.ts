@@ -226,7 +226,7 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
       }
     }
 
-    // Case 7: Semantic Topic Mismatch for Terminology / Specific Queries
+    // Case 7: Heuristic Topic Mismatch / Insufficient Specific Evidence Check (Deterministic Heuristic, not NLI)
     const isSuffixQuery = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(query);
     const isPrefixQuery = /prefix|คำอุปสรรค/i.test(query);
     if ((isSuffixQuery || isPrefixQuery) && answerStatus === 'aligned') {
@@ -236,11 +236,11 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
 
       if (isSuffixQuery && !hasSuffixKeywords) {
         answerStatus = 'hallucinated';
-        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Suffix ที่ระบุในคำถาม (Semantic Topic Mismatch)');
+        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Suffix ที่ระบุในคำถาม (Heuristic Topic Mismatch: ไม่พบคำสำคัญ Suffix ในหลักฐาน)');
       }
       if (isPrefixQuery && !hasPrefixKeywords) {
         answerStatus = 'hallucinated';
-        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Prefix ที่ระบุในคำถาม (Semantic Topic Mismatch)');
+        unsupportedClaims.push('ชิ้นส่วนหลักฐานที่สืบค้นได้ไม่ครอบคลุมเนื้อหาเรื่อง Prefix ที่ระบุในคำถาม (Heuristic Topic Mismatch: ไม่พบคำสำคัญ Prefix ในหลักฐาน)');
       }
     }
   }

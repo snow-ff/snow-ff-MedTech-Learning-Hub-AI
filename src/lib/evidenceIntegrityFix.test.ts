@@ -152,7 +152,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   });
 
   it('Test I — Semantic Mismatch, Positive Control, and Multi-Part Regression Tests', () => {
-    // 1. Negative Case: Suffix query with only anatomical position evidence must NOT be PASS
+    // 1. Negative Case: Suffix query with only anatomical position evidence must NOT be PASS and must be insufficient
     const docNegative = {
       title: 'Anatomy Guide',
       hasNativePages: false,
@@ -166,6 +166,12 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       document: { title: 'Guide', chunks: docNegative.chunks }
     });
     expect(negReport.verdict).not.toBe('PASS');
+    expect(negReport.isVerified).toBe(false);
+
+    const negFallback = getAcademicFallback('อธิบายความแตกต่างของ suffix -scopy, -gram', [], docNegative);
+    expect(negFallback.evidenceStatus).toBe('insufficient');
+    expect(negFallback.verification?.verdict).not.toBe('PASS');
+    expect(negFallback.references.every(r => r.verificationStatus !== 'source_grounded')).toBe(true);
 
     // 2. Positive Control Case: Valid Suffix evidence must be correctly selected and evaluated
     const docPositive = {
@@ -181,8 +187,15 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       document: { title: 'Guide', chunks: docPositive.chunks }
     });
     expect(posReport.stages.retrieval.relevantChunksCount).toBeGreaterThan(0);
+    expect(posReport.stages.retrieval.passed).toBe(true);
+    expect(posReport.stages.evidenceFidelity.passed).toBe(true);
 
-    // 3. Multi-Part Case: Prefix and Suffix query with only Prefix evidence must NOT be PASS
+    const posFallback = getAcademicFallback('อธิบาย suffix -scopy', [], docPositive);
+    expect(posFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3')).toBe(true);
+    expect(posFallback.evidenceStatus).toBe('sufficient');
+    expect(posFallback.references[0].verificationStatus).toBe('source_grounded');
+
+    // 3. Multi-Part Case: Prefix and Suffix query with only Prefix evidence must NOT report full coverage
     const docMultipart = {
       title: 'Prefix Guide',
       hasNativePages: false,
@@ -196,5 +209,11 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       document: { title: 'Guide', chunks: docMultipart.chunks }
     });
     expect(multiReport.verdict).not.toBe('PASS');
+    expect(multiReport.stages.answerFidelity.status).toBe('overgeneralized');
+
+    const multiFallback = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docMultipart);
+    expect(multiFallback.evidenceStatus).toBe('insufficient');
+    expect(multiFallback.verification?.verdict).not.toBe('PASS');
+    expect(multiFallback.references.every(r => r.verificationStatus !== 'source_grounded')).toBe(true);
   });
 });
