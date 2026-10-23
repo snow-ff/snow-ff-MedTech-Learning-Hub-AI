@@ -34,11 +34,13 @@
 
 ## 2. ผลการทดสอบและการตรวจสอบ (Automated Verification)
 
-- **Unit Tests (`npx vitest run`)**: ผ่านทั้งหมด 100% (21/21 tests ใน 5 test suites)
-  - `src/lib/documentChunker.test.ts` (8 tests)
-  - `src/lib/documentStorage.test.ts` (4 tests)
-  - `src/curriculumData.test.ts` (5 tests)
-  - `src/firebaseClientInit.test.ts` (2 tests)
-  - `src/authContext.test.ts` (2 tests)
+- **Unit & Integration Tests (`npx vitest run`)**: ผ่านทั้งหมด 100% (197/197 tests ใน 19 test suites)
 - **TypeScript & Linting (`npm run lint` / `tsc --noEmit`)**: 0 errors
 - **Compilation (`npm run build`)**: สำเร็จสมบูรณ์ ไร้ข้อผิดพลาด
+
+---
+
+## 3. สรุปสถานะโครงการและการปิดรอบงาน (Master State Reference)
+- บันทึกสถานะโครงการแบบละเอียดจัดเก็บไว้ที่ `/PROJECT_MASTER_STATE.md`
+- ปิดช่องโหว่ Evidence Integrity, Clause-scoped checks และ Citation Grammar ครบถ้วน
+- ระบบผ่านการทดสอบอัตโนมัติครบ 197 รายการในสภาพแวดล้อม Google AI Studio Workspace พร้อมส่งมอบสมบูรณ์
