@@ -908,8 +908,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // Part 3: Answer Completeness & Verification Verdict Check
     expect(res.evidenceStatus).toBe('sufficient');
-    expect(res.verification?.verdict).toBe('PASS');
-    expect(res.verification?.isVerified).toBe(true);
+    expect(res.verification?.verdict).toBe('WARNING');
+    expect(res.verification?.isVerified).toBe(false);
   });
 
   it('Test AD — Negative Test: Document with only Prefix and no Suffix detects missing parts and returns insufficient status', () => {

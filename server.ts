@@ -276,12 +276,12 @@ export function getAcademicFallback(
             );
 
             const chunkHasPrefixDefinition = clauses.some(cl =>
-              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
               /\bprefix\b[^.!?;\n]*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(cl)
             );
 
             const chunkHasSuffixDefinition = clauses.some(cl =>
-              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่))/i.test(cl) ||
+              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
               /\bsuffix\b[^.!?;\n]*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(cl)
             );
 
@@ -322,11 +322,12 @@ export function getAcademicFallback(
 
             const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
 
-            isChunkTopicRelevant =
-              !isNoticeOrDisclaimer &&
-              ((asksSuffix && chunkHasSubstantiveSuffix) ||
-               (asksPrefix && chunkHasSubstantivePrefix) ||
-               (asksRoot && chunkHasSubstantiveRoot));
+            const matchesQueryPart = 
+              (asksSuffix && chunkHasSubstantiveSuffix) ||
+              (asksPrefix && chunkHasSubstantivePrefix) ||
+              (asksRoot && chunkHasSubstantiveRoot);
+
+            isChunkTopicRelevant = !isNoticeOrDisclaimer && matchesQueryPart;
           }
         } else {
           // For general queries, do not assume relevance solely from retrieval match;
@@ -463,6 +464,16 @@ export function getAcademicFallback(
         seenUris.add(r.uri);
         return true;
       });
+
+      const hasAnyUnsupportedReference = chunkReferences.some(r => r.verificationStatus === 'unsupported_citation');
+      if (hasAnyUnsupportedReference && verification.verdict === 'PASS') {
+        verification.verdict = 'WARNING';
+        verification.isVerified = false;
+      }
+      if (isOverallEvidenceInsufficient) {
+        verification.verdict = 'INSUFFICIENT_EVIDENCE';
+        verification.isVerified = false;
+      }
 
       return {
         text: finalFallbackText,

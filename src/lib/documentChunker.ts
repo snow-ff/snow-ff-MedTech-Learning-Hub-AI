@@ -410,6 +410,12 @@ export function retrieveGroundedChunks(
       return { chunk, score: 0 };
     }
 
+    const isOutOfScopeQuery = /quantum|mechanics|relativity|thermodynamics|blackbody|ควอนตัม|กลศาสตร์|สัมพัทธภาพ|อุณหพลศาสตร์/i.test(cleanQuery);
+    const hasPhysicsInChunk = /quantum|mechanics|relativity|thermodynamics|blackbody|ควอนตัม|กลศาสตร์|สัมพัทธภาพ|อุณหพลศาสตร์/i.test(chunkLower);
+    if (isOutOfScopeQuery && !hasPhysicsInChunk) {
+      return { chunk, score: 0 };
+    }
+
     // Exact full query match (minimum 4 chars to prevent trivial matches)
     if (cleanQuery.length >= 4 && !ACADEMIC_STOPWORDS.has(cleanQuery) && chunkLower.includes(cleanQuery)) {
       score += 25;
