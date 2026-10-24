@@ -398,6 +398,41 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(hasGroundedSuffixRef).toBe(false);
   });
 
+  it('Test P2 — Multipart Coverage Discrepancy: Suffix-only evidence for query asking both Prefix and Suffix', () => {
+    const docSuffixOnly = {
+      title: 'Suffix Only Reference Guide',
+      hasNativePages: false,
+      chunks: [
+        { id: '3', documentId: 'doc1', chunkIndex: 3, text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
+      ]
+    };
+
+    const res = getAcademicFallback('เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์', [], docSuffixOnly);
+
+    // 1. Answer-level must be insufficient because Prefix is missing
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.verification?.verdict).not.toBe('PASS');
+    expect(res.verification?.isVerified).toBe(false);
+    expect(res.verification?.stages.answerFidelity.status).toBe('overgeneralized');
+
+    // 2. Reference-level: Suffix chunk (chunkIndex 3) maps to real fixture chunk and is source_grounded
+    expect(res.references).toHaveLength(1);
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    expect(ref3).toBeDefined();
+    expect(ref3?.verificationStatus).toBe('source_grounded');
+
+    // 3. Verify via verifyAcademicAnswer and direct chunk content inspection that Prefix evidence is absent
+    const verifyReport = verifyAcademicAnswer({
+      query: 'เปรียบเทียบความแตกต่างระหว่าง prefix และ suffix ในศัพท์การแพทย์',
+      candidateAnswer: 'Suffix คือปัจจัยท้าย',
+      document: { title: docSuffixOnly.title, chunks: docSuffixOnly.chunks }
+    });
+    expect(verifyReport.stages.retrieval.relevantChunksCount).toBe(1);
+    const chunk3Text = docSuffixOnly.chunks[0].text.toLowerCase();
+    expect(chunk3Text.includes('prefix')).toBe(false);
+    expect(chunk3Text.includes('คำอุปสรรค')).toBe(false);
+  });
+
   it('Test Q — Positive Control for Multipart Coverage: Genuine evidence for both Prefix and Suffix', () => {
     const docBothParts = {
       title: 'Complete Word Parts Guide',
