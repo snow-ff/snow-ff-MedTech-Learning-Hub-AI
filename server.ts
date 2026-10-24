@@ -1304,7 +1304,7 @@ ${formattedChunks}
         });
       }
 
-      // Safely extract grounding metadata references for general search mode
+      // Safely extract grounding metadata references for general search mode with robust index mapping and duplicate/filter handling
       const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
       const references: Array<{
         title: string;
@@ -1316,16 +1316,22 @@ ${formattedChunks}
         warningNotice?: string;
         isAllowlistedAuthority?: boolean;
       }> = [];
+      const originalToFilteredIndex = new Map<number, number>();
 
       if (groundingMetadata && groundingMetadata.groundingChunks) {
-        for (const chunk of groundingMetadata.groundingChunks) {
+        groundingMetadata.groundingChunks.forEach((chunk: any, origIdx: number) => {
           if (chunk.web && chunk.web.uri && chunk.web.title) {
-            const uri = chunk.web.uri;
-            if (uri.startsWith("http://") || uri.startsWith("https://")) {
-              if (!references.some(r => r.uri === uri)) {
+            const uri = chunk.web.uri.trim();
+            const title = chunk.web.title.trim();
+            if (title && (uri.startsWith("http://") || uri.startsWith("https://"))) {
+              const existingIdx = references.findIndex(r => r.uri === uri);
+              if (existingIdx !== -1) {
+                originalToFilteredIndex.set(origIdx, existingIdx);
+              } else {
                 const classification = classifyMedicalSource(uri);
+                const newIdx = references.length;
                 references.push({
-                  title: chunk.web.title,
+                  title: title,
                   uri: uri,
                   sourceTier: classification.tier,
                   sourceTierLabel: classification.tierLabel,
@@ -1334,15 +1340,18 @@ ${formattedChunks}
                   warningNotice: classification.warningNotice,
                   isAllowlistedAuthority: classification.isAllowlistedAuthority
                 });
+                originalToFilteredIndex.set(origIdx, newIdx);
               }
             }
           }
-        }
+        });
       }
 
       const hasGrounding = references.length > 0;
       const mappingResult = hasGrounding
-        ? mapGroundingSegments(text, groundingMetadata?.groundingSupports, references.length)
+        ? mapGroundingSegments(text, groundingMetadata?.groundingSupports, references.length, {
+            chunkIndexMapping: originalToFilteredIndex
+          })
         : undefined;
 
       return res.json({
@@ -1353,8 +1362,8 @@ ${formattedChunks}
           searchEntryPointHtml: groundingMetadata?.searchEntryPoint?.renderedContent || undefined,
           linkageStatus: mappingResult?.linkageStatus || 'missing_metadata',
           segments: mappingResult?.segments || [],
-          supportedClaimCount: mappingResult?.supportedClaimCount || 0,
-          unsupportedClaimCount: mappingResult?.unsupportedClaimCount || 0
+          supportedClaimCount: mappingResult?.supportedSegmentCount || 0,
+          unsupportedClaimCount: mappingResult?.unsupportedSegmentCount || 0
         } : undefined,
         references: hasGrounding ? references.map(r => ({ 
           ...r, 

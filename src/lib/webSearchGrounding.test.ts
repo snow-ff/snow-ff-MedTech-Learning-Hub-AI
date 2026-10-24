@@ -6,7 +6,7 @@ import {
   RawGroundingSupport
 } from './webSearchGrounding';
 
-describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit', () => {
+describe('Track B1.8 & v1.2 P0: Web Search Grounding & Medical Source Classification Audit', () => {
   describe('1. Medical Source Classification & Domain Boundary Checks', () => {
     it('should correctly classify official global and Thai medical authorities as official_authority', () => {
       const urls = [
@@ -38,7 +38,6 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
         const result = classifyMedicalSource(url);
         expect(result.tier).toBe('academic_database');
         expect(result.trustLevel).toBe('high');
-        // Must NOT unconditionally claim peer-reviewed without article verification
         expect(result.isAllowlistedAuthority).toBe(false);
         expect(result.tierLabel).toContain('Academic / Research Database');
       }
@@ -60,20 +59,16 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
     });
 
     it('STRICT SECURITY: must prevent domain spoofing and rejected attacker domains containing authority names', () => {
-      // Attacker trying to spoof who.int
       const spoof1 = classifyMedicalSource('https://who.int.attacker.com/malicious-guide');
       expect(spoof1.tier).not.toBe('official_authority');
       expect(spoof1.domain).toBe('who.int.attacker.com');
 
-      // Attacker trying to spoof clsi.org
       const spoof2 = classifyMedicalSource('https://clsi.org.phishing-site.xyz/standards');
       expect(spoof2.tier).not.toBe('official_authority');
 
-      // Attacker subdomain with hyphen
       const spoof3 = classifyMedicalSource('https://fake-cdc.gov.co/health-claims');
       expect(spoof3.tier).not.toBe('official_authority');
 
-      // Helper function strict test
       expect(isStrictDomainMatch('who.int.evil.com', 'who.int')).toBe(false);
       expect(isStrictDomainMatch('who.int', 'who.int')).toBe(true);
       expect(isStrictDomainMatch('sub.who.int', 'who.int')).toBe(true);
@@ -112,7 +107,7 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
     });
   });
 
-  describe('2. Grounding Metadata Mapping & Segment Verification', () => {
+  describe('2. Grounding Metadata Mapping, Index Remapping & Segment Verification (P0)', () => {
     const sampleFullText =
       'การตรวจ Complete Blood Count (CBC) เป็นการตรวจพื้นฐานทางโลหิตวิทยา ส่วนการควบคุมคุณภาพอาศัย Westgard Multirules ในการประเมิน';
 
@@ -126,48 +121,84 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
 
       const validSupports: RawGroundingSupport[] = [
         {
-          groundingChunkIndices: [0], // 1st reference (index 0 -> citation [1])
-          segment: {
-            startIndex: idx1,
-            endIndex: end1,
-            text: part1
-          }
+          groundingChunkIndices: [0],
+          segment: { startIndex: idx1, endIndex: end1, text: part1 }
         },
         {
-          groundingChunkIndices: [1], // 2nd reference (index 1 -> citation [2])
-          segment: {
-            startIndex: idx2,
-            endIndex: end2,
-            text: part2
-          }
+          groundingChunkIndices: [1],
+          segment: { startIndex: idx2, endIndex: end2, text: part2 }
         }
       ];
 
       const result = mapGroundingSegments(sampleFullText, validSupports, 2);
       expect(result.linkageStatus).toBe('verified_linked');
       expect(result.totalValidSupports).toBe(2);
-      expect(result.supportedClaimCount).toBe(2);
-      expect(result.unsupportedClaimCount).toBe(0);
+      expect(result.supportedSegmentCount).toBe(2);
+      expect(result.unsupportedSegmentCount).toBe(0);
 
-      // Verify 1-based citation mapping on the grounded segments
       const grounded = result.segments.filter(s => s.isGrounded);
       expect(grounded[0].citationIndices).toEqual([1]);
       expect(grounded[1].citationIndices).toEqual([2]);
+    });
+
+    it('P0: should correctly remap citation indices using chunkIndexMapping when chunks are filtered or deduplicated', () => {
+      const part1 = 'การตรวจ Complete Blood Count (CBC) เป็นการตรวจพื้นฐานทางโลหิตวิทยา';
+      const idx1 = sampleFullText.indexOf(part1);
+      const end1 = idx1 + part1.length;
+
+      const supports: RawGroundingSupport[] = [
+        {
+          groundingChunkIndices: [3],
+          segment: { startIndex: idx1, endIndex: end1, text: part1 }
+        }
+      ];
+
+      const mapping = new Map<number, number>();
+      mapping.set(3, 0); // Original index 3 -> Filtered index 0 (citation [1])
+
+      const result = mapGroundingSegments(sampleFullText, supports, 1, {
+        chunkIndexMapping: mapping
+      });
+
+      expect(result.linkageStatus).toBe('verified_linked');
+      const grounded = result.segments.filter(s => s.isGrounded);
+      expect(grounded[0].citationIndices).toEqual([1]);
+    });
+
+    it('P0: should reject segment text mismatch between segment.text and actual text slice', () => {
+      const part1 = 'การตรวจ Complete Blood Count (CBC) เป็นการตรวจพื้นฐานทางโลหิตวิทยา';
+      const idx1 = sampleFullText.indexOf(part1);
+      const end1 = idx1 + part1.length;
+
+      const supportsWithMismatch: RawGroundingSupport[] = [
+        {
+          groundingChunkIndices: [0],
+          segment: {
+            startIndex: idx1,
+            endIndex: end1,
+            text: 'ข้อความปลอมแปลงที่ไม่ตรงกับต้นฉบับเลย'
+          }
+        }
+      ];
+
+      const result = mapGroundingSegments(sampleFullText, supportsWithMismatch, 1);
+      expect(result.linkageStatus).toBe('unlinked');
+      expect(result.totalValidSupports).toBe(0);
     });
 
     it('should reject out-of-bounds, negative, or inverted offsets without crashing', () => {
       const invalidSupports: RawGroundingSupport[] = [
         {
           groundingChunkIndices: [0],
-          segment: { startIndex: -5, endIndex: 20 } // Negative offset
+          segment: { startIndex: -5, endIndex: 20 }
         },
         {
           groundingChunkIndices: [0],
-          segment: { startIndex: 100, endIndex: 50 } // Inverted offset
+          segment: { startIndex: 100, endIndex: 50 }
         },
         {
           groundingChunkIndices: [0],
-          segment: { startIndex: 0, endIndex: 9999 } // Out of bounds offset
+          segment: { startIndex: 0, endIndex: 9999 }
         }
       ];
 
@@ -181,13 +212,12 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
     it('should return missing_metadata when groundingSupports is missing or empty', () => {
       const resNull = mapGroundingSegments(sampleFullText, undefined, 2);
       expect(resNull.linkageStatus).toBe('missing_metadata');
-      expect(resNull.supportedClaimCount).toBe(0);
 
       const resEmpty = mapGroundingSegments(sampleFullText, [], 2);
       expect(resEmpty.linkageStatus).toBe('missing_metadata');
     });
 
-    it('should identify partial linkage when only some claims have citations', () => {
+    it('P0: should identify partial linkage without arbitrary length threshold when ungrounded text exists', () => {
       const partialSupports: RawGroundingSupport[] = [
         {
           groundingChunkIndices: [0],
@@ -197,25 +227,23 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
             text: 'การตรวจ Complete Blood Count (CBC)'
           }
         }
-        // The remaining text (~80 chars) is completely ungrounded
       ];
 
       const result = mapGroundingSegments(sampleFullText, partialSupports, 1);
       expect(result.linkageStatus).toBe('partial_linked');
-      expect(result.supportedClaimCount).toBe(1);
-      expect(result.unsupportedClaimCount).toBeGreaterThan(0);
+      expect(result.supportedSegmentCount).toBe(1);
+      expect(result.unsupportedSegmentCount).toBeGreaterThan(0);
     });
 
     it('should ignore invalid chunk indices exceeding available references count', () => {
       const outOfRangeIndices: RawGroundingSupport[] = [
         {
-          groundingChunkIndices: [99], // Only 1 reference available
+          groundingChunkIndices: [99],
           segment: { startIndex: 0, endIndex: 30 }
         }
       ];
 
       const result = mapGroundingSegments(sampleFullText, outOfRangeIndices, 1);
-      // Because index 99 is invalid, support is discarded
       expect(result.linkageStatus).toBe('unlinked');
     });
   });
@@ -223,9 +251,7 @@ describe('Track B1.8: Web Search Grounding & Medical Source Classification Audit
   describe('3. Academic Verification Integrity: Web citations alone never grant PASS', () => {
     it('verifies that web citations are marked unverified and do not bypass clinical document verification', () => {
       const webResult = classifyMedicalSource('https://clsi.org/h20');
-      // Even if official authority, verificationStatus is strictly separate
       expect(webResult.isAllowlistedAuthority).toBe(true);
-      // Linkage to verification: web sources are not internal document chunks
       expect(webResult.tier).toBe('official_authority');
     });
   });

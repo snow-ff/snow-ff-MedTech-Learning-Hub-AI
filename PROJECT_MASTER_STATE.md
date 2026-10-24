@@ -213,3 +213,26 @@
 - ยืนยันว่าการแก้ไขทั้งหมดเกิดขึ้นภายใน `/app/applet` Workspace เท่านั้น
 - ไม่มีการสั่ง `git commit`, `git push`, `git merge`, หรือ Sync ใด ๆ ไปยัง GitHub `snow-ff/snow-ff-MedTech-Learning-Hub-AI` (Read-only reference ตามกฎความปลอดภัย)
 
+---
+
+## 9. Web Search Grounding P0 Refinement & Verification (v1.2)
+
+### 9.1 รายละเอียดการปรับปรุง P0 ระดับโค้ดจริง
+1. **Citation Index Mapping (P0):**
+   - พัฒนากลไก `originalToFilteredIndex` ใน `server.ts` และรองรับ `chunkIndexMapping` ใน `mapGroundingSegments()` เพื่อเชื่อมโยงดัชนี Chunk ต้นฉบับจาก Gemini กับดัชนี Reference หลังจากผ่านการกรอง URL ซ้ำ, URL ที่ไม่ใช่ HTTP/HTTPS, และ URL ที่ไม่มี Title อย่างแม่นยำ
+2. **Segment Text Integrity (P0):**
+   - เพิ่มการตรวจสอบความตรงกันระหว่าง `segment.text` (ที่ LLM ส่งมา) กับข้อความจริงใน `fullText.slice(start, end)` หากเกิดความไม่สอดคล้องหรือ Text Mismatch ระบบจะปฏิเสธการเชื่อมโยงทันทีเพื่อป้องกัน Offset Drift และ Hallucinated Citations
+3. **Linkage Status Integrity (P0):**
+   - ยกเลิกเงื่อนไขการใช้ความยาวข้อความมากกว่า 20 ตัวอักษร (`> 20`) ที่เคยใช้ตัดสินข้อความ ungrounded แบบอนุมาน
+   - กำหนดให้ทุกช่วงข้อความที่ไม่มีการเชื่อมโยง (`!s.isGrounded` และ non-empty trim) ถูกนับเป็น unlinked segment ส่งผลให้สถานะแสดงเป็น `partial_linked` หรือ `unlinked` อย่างถูกต้องตามหลักฐานจริง
+4. **Test Suite & Quota Conservation:**
+   - ใช้ deterministic fixtures สำหรับการทดสอบ Web Search Grounding โดยไม่มีการเรียก Live API เพิ่มเติมระหว่างรัน Unit Tests ป้องกันปัญหา Rate Limit (HTTP 429)
+
+### 9.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
+- **Vitest Suite:** `npx vitest run`
+  - ทดสอบผ่านทุกไฟล์ รวมทั้ง `src/lib/webSearchGrounding.test.ts` และ `src/lib/searchModeIntegration.test.ts` (ผ่านครบทุก Test Cases)
+- **Type Check & Lint:** `npm run lint` (`tsc --noEmit`)
+  - **ผลลัพธ์:** Exit Code `0` (0 errors, 0 warnings)
+- **Application Build:** `compile_applet` (`npm run build`)
+  - **ผลลัพธ์:** `Build succeeded - the applet is compiled`
+

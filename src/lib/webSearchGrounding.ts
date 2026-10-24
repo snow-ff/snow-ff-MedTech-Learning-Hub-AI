@@ -5,6 +5,7 @@
  * - Pure functions with strict domain boundary checks against spoofing
  * - Segment-level mapping from Gemini groundingSupports and groundingChunks
  * - Separation of source credibility, claim support, and link accessibility
+ * - P0 Citation Index Mapping, Segment Text Integrity, and Linkage Status Integrity
  */
 
 export type SourceTier =
@@ -54,9 +55,13 @@ export interface GroundingSegment {
 export interface GroundingMappingResult {
   linkageStatus: 'verified_linked' | 'partial_linked' | 'unlinked' | 'missing_metadata';
   segments: GroundingSegment[];
-  supportedClaimCount: number;
-  unsupportedClaimCount: number;
+  supportedSegmentCount: number;
+  unsupportedSegmentCount: number;
   totalValidSupports: number;
+}
+
+export interface GroundingMappingOptions {
+  chunkIndexMapping?: Map<number, number> | Record<number, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +69,6 @@ export interface GroundingMappingResult {
 // ---------------------------------------------------------------------------
 
 const OFFICIAL_AUTHORITY_DOMAINS = new Set([
-  // International Standard & Public Health Organizations
   'who.int',
   'cdc.gov',
   'clsi.org',
@@ -75,8 +79,6 @@ const OFFICIAL_AUTHORITY_DOMAINS = new Set([
   'nih.gov',
   'fda.gov',
   'ecdc.europa.eu',
-
-  // Thai Government & Medical Professional Bodies
   'moph.go.th',
   'dmsc.moph.go.th',
   'ddc.moph.go.th',
@@ -122,10 +124,6 @@ const KNOWN_COMMERCIAL_RISK_DOMAINS = new Set([
   'amazon.com'
 ]);
 
-/**
- * Checks whether a given hostname strictly matches a target domain or is a valid subdomain.
- * Prevents domain spoofing (e.g. "who.int.evil.com" or "clsi.org.attacker.xyz").
- */
 export function isStrictDomainMatch(hostname: string, targetDomain: string): boolean {
   if (hostname === targetDomain) {
     return true;
@@ -133,10 +131,6 @@ export function isStrictDomainMatch(hostname: string, targetDomain: string): boo
   return hostname.endsWith('.' + targetDomain);
 }
 
-/**
- * Classifies a URL into a medical source credibility tier.
- * Pure function with strict domain boundary checks.
- */
 export function classifyMedicalSource(rawUrl: string): SourceClassificationResult {
   if (!rawUrl || typeof rawUrl !== 'string') {
     return {
@@ -163,7 +157,6 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
     };
   }
 
-  // Must be http or https
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return {
       tier: 'unknown',
@@ -177,7 +170,6 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
 
   const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
 
-  // 1. Check Commercial / High-Risk / Social Forums
   for (const commercialDomain of KNOWN_COMMERCIAL_RISK_DOMAINS) {
     if (isStrictDomainMatch(hostname, commercialDomain)) {
       return {
@@ -191,7 +183,6 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
     }
   }
 
-  // 2. Check Academic & Research Databases (Check before NIH authority to classify PubMed/NCBI as academic_database)
   for (const academicDomain of ACADEMIC_DATABASE_DOMAINS) {
     if (isStrictDomainMatch(hostname, academicDomain)) {
       return {
@@ -199,12 +190,11 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
         tierLabel: 'ฐานข้อมูลวิชาการและการแพทย์ (Academic / Research Database)',
         domain: hostname,
         trustLevel: 'high',
-        isAllowlistedAuthority: false // Do not claim peer-review unconditionally without article-level verification
+        isAllowlistedAuthority: false
       };
     }
   }
 
-  // 3. Check Official Authorities
   for (const authorityDomain of OFFICIAL_AUTHORITY_DOMAINS) {
     if (isStrictDomainMatch(hostname, authorityDomain)) {
       return {
@@ -217,7 +207,6 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
     }
   }
 
-  // 4. Check University Domains (.ac.th, .edu)
   if (hostname.endsWith('.ac.th') || hostname.endsWith('.edu')) {
     return {
       tier: 'university',
@@ -228,7 +217,6 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
     };
   }
 
-  // 5. Default General Web (Do NOT block, but warn for medical context)
   return {
     tier: 'general',
     tierLabel: 'เว็บไซต์ทั่วไป (General Web)',
@@ -241,19 +229,20 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
 
 /**
  * Maps raw grounding supports and grounding chunks from Gemini to full response text.
- * Strictly verifies offsets, bounds, and chunk index integrity without guessing citations.
+ * Strictly verifies offsets, bounds, text consistency (segment.text vs slice), and index remapping.
  */
 export function mapGroundingSegments(
   fullText: string,
   supports?: RawGroundingSupport[],
-  referencesCount: number = 0
+  referencesCount: number = 0,
+  options?: GroundingMappingOptions
 ): GroundingMappingResult {
   if (!fullText || typeof fullText !== 'string') {
     return {
       linkageStatus: 'missing_metadata',
       segments: [],
-      supportedClaimCount: 0,
-      unsupportedClaimCount: 0,
+      supportedSegmentCount: 0,
+      unsupportedSegmentCount: 0,
       totalValidSupports: 0
     };
   }
@@ -270,8 +259,8 @@ export function mapGroundingSegments(
           isGrounded: false
         }
       ],
-      supportedClaimCount: 0,
-      unsupportedClaimCount: 0,
+      supportedSegmentCount: 0,
+      unsupportedSegmentCount: 0,
       totalValidSupports: 0
     };
   }
@@ -283,20 +272,62 @@ export function mapGroundingSegments(
     chunkIndices: number[];
   }> = [];
 
+  const indexMapping = options?.chunkIndexMapping;
+
   for (const s of supports) {
     if (!s || !s.segment) continue;
     const start = s.segment.startIndex ?? 0;
     const end = s.segment.endIndex ?? 0;
 
-    // Strict Out-of-Bounds & Offset Integrity Check
+    // Strict Out-of-Bounds, Negative, & Inverted Offset Check
     if (typeof start !== 'number' || typeof end !== 'number') continue;
     if (start < 0 || end > textLength || start >= end) continue;
 
-    // Filter valid reference chunk indices
+    // Segment Text Integrity Check: Verify that actual text slice matches provided segment.text (if any)
+    const actualSlice = fullText.slice(start, end);
+    if (s.segment.text && typeof s.segment.text === 'string' && s.segment.text.trim()) {
+      const expected = s.segment.text.trim();
+      const actualTrimmed = actualSlice.trim();
+      // Reject if there is a fundamental mismatch to prevent hallucinated/shifted offsets
+      if (
+        actualTrimmed !== expected &&
+        !actualTrimmed.includes(expected) &&
+        !expected.includes(actualTrimmed)
+      ) {
+        continue;
+      }
+    }
+
+    // Filter and remap valid reference chunk indices
     const rawIndices = s.groundingChunkIndices || [];
-    const validIndices = rawIndices.filter(
-      idx => typeof idx === 'number' && idx >= 0 && idx < referencesCount
-    );
+    const validIndices: number[] = [];
+
+    for (const rawIdx of rawIndices) {
+      if (typeof rawIdx !== 'number' || rawIdx < 0) continue;
+
+      let remappedIdx = rawIdx;
+      if (indexMapping) {
+        if (indexMapping instanceof Map) {
+          const mapped = indexMapping.get(rawIdx);
+          if (mapped !== undefined) {
+            remappedIdx = mapped;
+          } else {
+            continue; // Not found in filtered mapping
+          }
+        } else if (typeof indexMapping === 'object') {
+          const mapped = (indexMapping as Record<number, number>)[rawIdx];
+          if (mapped !== undefined) {
+            remappedIdx = mapped;
+          } else {
+            continue;
+          }
+        }
+      }
+
+      if (remappedIdx >= 0 && remappedIdx < referencesCount) {
+        validIndices.push(remappedIdx);
+      }
+    }
 
     if (validIndices.length > 0) {
       validSupports.push({
@@ -319,8 +350,8 @@ export function mapGroundingSegments(
           isGrounded: false
         }
       ],
-      supportedClaimCount: 0,
-      unsupportedClaimCount: 0,
+      supportedSegmentCount: 0,
+      unsupportedSegmentCount: 1,
       totalValidSupports: 0
     };
   }
@@ -333,7 +364,6 @@ export function mapGroundingSegments(
   let currentPos = 0;
 
   for (const support of validSupports) {
-    // If there is ungrounded text before this support segment
     if (support.startIndex > currentPos) {
       const ungroundedChunk = fullText.slice(currentPos, support.startIndex);
       if (ungroundedChunk.trim()) {
@@ -347,7 +377,6 @@ export function mapGroundingSegments(
       }
     }
 
-    // Add the grounded segment (1-based citation indices)
     const effectiveStart = Math.max(currentPos, support.startIndex);
     if (support.endIndex > effectiveStart) {
       const groundedChunk = fullText.slice(effectiveStart, support.endIndex);
@@ -362,7 +391,6 @@ export function mapGroundingSegments(
     }
   }
 
-  // Add any trailing ungrounded text
   if (currentPos < textLength) {
     const trailingChunk = fullText.slice(currentPos);
     if (trailingChunk.trim()) {
@@ -377,7 +405,8 @@ export function mapGroundingSegments(
   }
 
   const groundedSegments = segments.filter(s => s.isGrounded);
-  const ungroundedSegments = segments.filter(s => !s.isGrounded && s.text.trim().length > 20);
+  // Strict Linkage Integrity: Any ungrounded text segment with non-empty trim counts as unlinked (no arbitrary >20 char threshold)
+  const ungroundedSegments = segments.filter(s => !s.isGrounded && s.text.trim().length > 0);
 
   const linkageStatus =
     groundedSegments.length > 0 && ungroundedSegments.length === 0
@@ -389,8 +418,8 @@ export function mapGroundingSegments(
   return {
     linkageStatus,
     segments,
-    supportedClaimCount: groundedSegments.length,
-    unsupportedClaimCount: ungroundedSegments.length,
+    supportedSegmentCount: groundedSegments.length,
+    unsupportedSegmentCount: ungroundedSegments.length,
     totalValidSupports: validSupports.length
   };
 }
