@@ -80,6 +80,28 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     }
   }, 35000);
 
+  // Scenario 1b: document mode + active document, but query asks about content absent from document
+  it('1b. document mode + active document but query is absent from document: strictly refuses Google Search and returns insufficient evidence', async () => {
+    const response = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'ทฤษฎีควอนตัมฟิสิกส์และการแผ่รังสีของวัตถุดำ' }],
+        searchMode: 'document',
+        documentContext: sampleDocumentContext
+      })
+    });
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+
+    expect(data.source).toBe('document_grounding');
+    expect(data.evidenceStatus).toBe('insufficient');
+    expect(data.references).toEqual([]); // Zero external or fake references
+    expect(data.text).toContain('ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)');
+    expect(data.text).toContain('ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน');
+  });
+
   // Scenario 2: web_search mode + active document present
   it('2. web_search mode + active document: performs web search and does not report web sources as document chunks', async () => {
     const response = await fetch(`${baseUrl}/api/gemini/generate`, {

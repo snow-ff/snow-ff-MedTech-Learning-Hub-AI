@@ -1031,6 +1031,32 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
 
     if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0) {
+      if (searchMode === 'document') {
+        console.log(`[Perf Backend] Document mode active and document has insufficient evidence for query "${latestPrompt}". Strictly refusing external search.`);
+        const docTitle = decodeHtmlEntities(documentContext.title || 'เอกสารการเรียนรู้');
+        const insufficientText = `*(ค้นหาจากเอกสาร: "${docTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${docTitle}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง เนื่องจากคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน หากต้องการค้นคว้าข้อมูลเพิ่มเติมจากอินเทอร์เน็ต กรุณาสลับโหมดเป็น **"ค้นหาเว็บ AI"**`;
+
+        const verification = verifyAcademicAnswer({
+          query: latestPrompt,
+          candidateAnswer: insufficientText,
+          document: {
+            title: documentContext.title,
+            hasNativePages: documentContext.hasNativePages,
+            totalPages: documentContext.totalPages,
+            chunks: activeChunksForGrounding
+          },
+          conversationHistory: validatedMessages
+        });
+
+        return res.json({
+          text: insufficientText,
+          source: "document_grounding",
+          evidenceStatus: "insufficient",
+          verification,
+          references: []
+        });
+      }
+
       console.log(`[Perf Backend] Document has insufficient evidence for query "${latestPrompt}". Attempting External Academic Research Fallback with Google Search grounding...`);
       
       let isRateLimited = false;

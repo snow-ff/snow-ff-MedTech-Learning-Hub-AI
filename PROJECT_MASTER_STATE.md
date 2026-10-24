@@ -164,10 +164,11 @@
   - ปรับปรุงการแปลง Fallback References: ให้ `evidenceLocator: null` เสมอ เพื่อไม่ให้สร้าง Chunk ID หรือเลขหน้าปลอม
   - แยก Port Collision Guard ใน `server.ts` ด้วย `!process.env.VITEST` ทำให้ชุดทดสอบ Vitest ทำงานคู่ขนานได้อย่างปลอดภัยโดยไม่เกิดข้อผิดพลาด `EADDRINUSE: 8080`
 
-### 8.2 ผลการรัน Integration Tests ครอบคลุม 6 สถานการณ์ (`src/lib/searchModeIntegration.test.ts`)
+### 8.2 ผลการรัน Integration Tests ครอบคลุมสถานการณ์ Search Mode (`src/lib/searchModeIntegration.test.ts`)
 | ลำดับการทดสอบ | สถานการณ์ที่กำหนด | ผลการทดสอบจริง |
 |---|---|---|
 | **Scenario 1** | `document` mode + มีเอกสารที่เลือกและมี chunks: ใช้หลักฐานจากเอกสารตามกฎเดิม ไม่ปะปน Google Search | **PASSED** (ใช้เฉพาะ chunks ของเอกสารที่เลือก ไม่เปิด `googleSearch`) |
+| **Scenario 1b** | `document` mode + มีเอกสาร แต่คำถามไม่มีเนื้อหาในเอกสาร: ปฏิเสธ Google Search เด็ดขาด คืน insufficient evidence | **PASSED** (Strict Document Grounding ไม่เปิด `googleSearch` คืน `references: []`) |
 | **Scenario 2** | `web_search` mode + มีเอกสารที่เลือกอยู่: ค้นหาเว็บตามที่ระบุ ไม่แสดงแหล่งเว็บเป็นชิ้นส่วนเอกสาร | **PASSED** (ไม่ส่ง chunks เข้า prompt, แสดงเป็น `web_search` reference) |
 | **Scenario 3** | `document` mode + ไม่มีเอกสาร: ไม่แสดงว่าอิงเอกสารที่ไม่มีอยู่ คืนสถานะ `insufficient` พร้อมคำแนะนำ | **PASSED** (คืน fallback แจ้งให้เลือกเอกสารก่อน, `references: []`) |
 | **Scenario 4** | คำถามระบุให้อิงเอกสารหรือเลขหน้า แต่ไม่มีเอกสาร: ไม่สร้างหลักฐานหรือเลขหน้าปลอม | **PASSED** (ไม่มีการสร้าง locator หรือหน้าที่ไม่ได้ ingest) |
@@ -178,8 +179,8 @@
 - **Vitest Suite:** `npx vitest run`
   ```
   Test Files  20 passed (20)
-  Tests       213 passed (213)
-  Duration    11.85s
+  Tests       214 passed (214)
+  Duration    40.06s
   ```
 - **Type Check & Lint:** `npm run lint` (`tsc --noEmit`)
   - **ผลลัพธ์:** Exit Code `0` (0 errors, 0 warnings)
@@ -198,7 +199,17 @@
 | **1024 × 768 px** | Tablet Landscape | Sidebar & Main Chat Content แสดงผลเต็มระนาบ ไม่เกิด Horizonal Scrollbar | **NOT TESTED** (Headless Container) |
 | **1440 × 900 px** | Desktop Large | กำหนด `max-w-4xl` สำหรับพื้นที่อ่านหนังสือ ป้องกันระยะสายตายาวเกินไปสำหรับการอ่านเชิงวิชาการ | **NOT TESTED** (Headless Container) |
 
-### 8.5 ยืนยันความปลอดภัยและการแยกสภาพแวดล้อม Git
+### 8.5 ตารางสรุปสถานะการประเมินแยกตามหมวดหมู่ (VERIFIED / REPORTED / PENDING / FAILED)
+| หมวดหมู่การประเมิน | สถานะ | หลักฐาน / คำอธิบายประกอบ |
+|---|---|---|
+| **P0 Citation & Evidence Integrity** | **VERIFIED** | ผ่านการทดสอบ Vitest 32 tests ใน `evidenceIntegrityFix.test.ts` (กฎ Prefix/Suffix dual requirement, ห้ามแต่งเลขหน้า, ห้ามยก chunk ลอย) |
+| **Search Mode End-to-End Pipeline** | **VERIFIED** | ผ่านการทดสอบจริง 7/7 tests ใน `searchModeIntegration.test.ts` ครอบคลุมทั้ง 6 Scenario ดั้งเดิม + Scenario 1b (Strict Refusal of Google Search in Document Mode) |
+| **Code Integrity & Buildability** | **VERIFIED** | `tsc --noEmit` Exit 0, `npm run build` สำเร็จ, Vitest 20 ไฟล์ 214 tests ผ่าน 100% |
+| **DOM & CSS Responsive Rules** | **VERIFIED** | ตรวจสอบผ่านโค้ดใน `src/App.tsx` และ `src/index.css` (Touch Target $\ge 44$px, Textarea max-h 160px, Header breakpoint) |
+| **Visual Browser Preview (GUI Display)** | **NOT TESTED / PENDING** | สภาพแวดล้อมเซิร์ฟเวอร์เป็น Headless Linux Container ไม่มี Chromium/GUI Browser สำหรับเรนเดอร์ภาพหน้าจอจริง |
+| **Regression หรือ Critical Flaws** | **FAILED (0)** | ไม่พบข้อผิดพลาดหรือ Regression ใด ๆ |
+
+### 8.6 ยืนยันความปลอดภัยและการแยกสภาพแวดล้อม Git
 - ยืนยันว่าการแก้ไขทั้งหมดเกิดขึ้นภายใน `/app/applet` Workspace เท่านั้น
 - ไม่มีการสั่ง `git commit`, `git push`, `git merge`, หรือ Sync ใด ๆ ไปยัง GitHub `snow-ff/snow-ff-MedTech-Learning-Hub-AI` (Read-only reference ตามกฎความปลอดภัย)
 
