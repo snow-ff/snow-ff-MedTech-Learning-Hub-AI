@@ -100,10 +100,9 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
 
     // Document mode must send isDocumentGrounding: true and no google search tool
     const lastCall = mockCalls[mockCalls.length - 1];
-    if (lastCall) {
-      expect(lastCall.isDocumentGrounding).toBe(true);
-      expect(lastCall.tools).toBeUndefined();
-    }
+    expect(lastCall).toBeDefined();
+    expect(lastCall.isDocumentGrounding).toBe(true);
+    expect(lastCall.tools).toBeUndefined();
 
     expect(['document_grounding', 'academic_fallback']).toContain(data.source);
     expect(data.references).toBeDefined();
@@ -149,10 +148,9 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
 
     // Web search mode must send isDocumentGrounding: false and configure googleSearch tool
     const lastCall = mockCalls[mockCalls.length - 1];
-    if (lastCall) {
-      expect(lastCall.isDocumentGrounding).toBe(false);
-      expect(lastCall.tools).toBeDefined();
-    }
+    expect(lastCall).toBeDefined();
+    expect(lastCall.isDocumentGrounding).toBe(false);
+    expect(lastCall.tools).toEqual([{ googleSearch: {} }]);
 
     expect(data.source).not.toBe('document_grounding');
   }, 35000);
@@ -290,7 +288,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     const data = await res.json();
     expect(capturedParams).not.toBeNull();
     expect(capturedParams.isDocumentGrounding).toBe(false);
-    expect(capturedParams.tools).toBeDefined();
+    expect(capturedParams.tools).toEqual([{ googleSearch: {} }]);
     for (const ref of data.references) {
       expect(ref.verificationStatus).toBe('unverified');
     }

@@ -271,6 +271,22 @@
 - **Type Check & Lint (`npm run lint` / `tsc --noEmit`):** Exit Code `0` (0 errors, 0 warnings)
 - **Application Build (`compile_applet` / `npm run build`):** สำเร็จสมบูรณ์ (`Build succeeded`)
 
+---
+
+## 14. Strict Test Assertions & Network Isolation / Claim Verification Audit (v1.2)
+
+### 14.1 การปรับปรุงชุดทดสอบ Search Mode (`src/lib/searchModeIntegration.test.ts`)
+1. **กำจัด Defensive `if (lastCall)` Checks:**
+   - ลบเงื่อนไขเช็ค `if (lastCall)` ที่อาจซ่อนข้อผิดพลาดเมื่อ `mockCalls` ว่างเปล่า
+   - แทนที่ด้วยการบังคับยืนยัน `expect(lastCall).toBeDefined()` พร้อมทั้งตรวจสอบโครงสร้าง `tools` ตรงตามสัญญา API จริง (`expect(lastCall.tools).toEqual([{ googleSearch: {} }])` สำหรับ Web Search mode และ `expect(lastCall.tools).toBeUndefined()` สำหรับ Document mode)
+2. **Network Isolation Boundary Analysis:**
+   - **VERIFIED:** การบล็อก `global.fetch` ป้องกันคำขอ HTTP/HTTPS ภายนอกทั้งหมดจากรหัสทดสอบ และการใช้ `setCustomGeminiMock()` ภายใต้ `process.env.VITEST` ช่วยรับประกันว่าไม่มีการเรียกใช้งาน Gemini API จริง
+   - **PENDING / LIMITATION:** การรับประกันการแยกเครือข่ายระดับสมบูรณ์ (100% Network Isolation) จำกัดอยู่ระดับ `fetch` interceptor และ SDK Mock เท่านั้น (ยังไม่สามารถตรวจสอบระดับ packet-level socket proxy ในสภาพแวดล้อม Headless Container นี้ได้โดยไม่ต้องติดตั้งเครื่องมือภายนอก)
+3. **Academic Fallback & Claim Verification Separation:**
+   - **แยกความแตกต่างระหว่าง Source/Link Existence กับ Claim Truthfulness:** การปรากฏของ URL หรือ Reference ไม่ได้แปลว่าแต่ละ Claim ในคำตอบเป็นจริง 100% ระบบจึงกำหนดให้สถานะเป็น `unverified` หรือ `external_research` อย่างเคร่งครัด
+   - **Curriculum Scope Integrity:** ข้อมูลหลักสูตร DTM 2567 เป็น Static Curriculum Fallback Knowledge โดยไม่มีการอ้างว่าตรวจสอบครบทุก 69 วิชาแบบไดนามิกในเซสชันนี้
+
+
 
 
 
