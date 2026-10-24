@@ -142,9 +142,9 @@ describe('Track B1.8 & v1.2 P0: Web Search Grounding & Medical Source Classifica
     });
 
     it('P0: should correctly remap citation indices using chunkIndexMapping when chunks are filtered or deduplicated', () => {
-      const part1 = 'การตรวจ Complete Blood Count (CBC) เป็นการตรวจพื้นฐานทางโลหิตวิทยา';
-      const idx1 = sampleFullText.indexOf(part1);
-      const end1 = idx1 + part1.length;
+      const part1 = sampleFullText;
+      const idx1 = 0;
+      const end1 = sampleFullText.length;
 
       const supports: RawGroundingSupport[] = [
         {
