@@ -1212,7 +1212,11 @@ ${formattedChunks}
     }, DEFAULT_RETRY_CONFIG.attemptTimeoutMs || 12000);
 
     try {
-      console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
+      if (process.env.VITEST) {
+        console.log(`[Req ${requestId}] [Perf Backend] Using Deterministic Offline Mock (VITEST mode) - attempt: ${attempt}/${maxAttempts}`);
+      } else {
+        console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
+      }
       // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
       let response: any;
       if (process.env.VITEST && customGeminiMock) {

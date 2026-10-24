@@ -254,10 +254,23 @@
 2. **P0-B Fallback Evidence Integrity (`server.ts`):**
    - ยืนยันความโปร่งใสของสถานะ Academic Fallback สำหรับหลักสูตร DTM โดยกำจัดข้อกล่าวอ้าง unverified และระบุชัดเจนว่าเป็น **"Static Curriculum Fallback Knowledge"**
 
-### 12.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
-- **Complete Test Suite (`npx vitest run`):** 21 test files, **226 tests passed 100%** (ผ่านทุกรายการโดยไม่มีการเรียก External API)
+---
+
+## 13. Targeted Refinement After Main-Branch Review (v1.2)
+
+### 13.1 รายการแก้ไขตามเป้าหมาย (Tasks 1–3)
+1. **Task 1 — Correct Backend Logs (`server.ts`):**
+   - แก้ไข log ใน `server.ts` ให้แยกแยะระหว่างการเรียก Gemini API จริงกับการใช้งาน Mock โดยเมื่อรันภายใต้ `process.env.VITEST` ระบบจะบันทึก log ว่า `[Perf Backend] Using Deterministic Offline Mock (VITEST mode)` อย่างชัดเจน ป้องกันความเข้าใจผิดว่ามีการเรียก API ภายนอก
+2. **Task 2 — Strengthen Integration Tests (`searchModeIntegration.test.ts`):**
+   - เพิ่ม Scenario 7 ใน `searchModeIntegration.test.ts` เพื่อตรวจสอบพารามิเตอร์ `isDocumentGrounding` ที่ส่งไปยัง mock อย่างเจาะจง (`document` vs `web_search`) และยืนยันว่า mock references ยังคงสถานะ `verificationStatus: 'unverified'` ไม่ให้สิทธิ์ผ่านอัตโนมัติ
+3. **Task 3 — Recheck Fallback Evidence Status (`server.ts`):**
+   - ยืนยันความโปร่งใสของ Academic Fallback สำหรับหลักสูตร DTM ว่าเป็น **"Static Curriculum Fallback Knowledge"** โดยไม่มีการอ้างอิงสิทธิ์ Verified เกินจริง
+
+### 13.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
+- **Complete Test Suite (`npx vitest run`):** 21 test files, **227 tests passed 100%** (ผ่านทุกรายการโดยไม่มีการเรียก External API)
 - **Type Check & Lint (`npm run lint` / `tsc --noEmit`):** Exit Code `0` (0 errors, 0 warnings)
 - **Application Build (`compile_applet` / `npm run build`):** สำเร็จสมบูรณ์ (`Build succeeded`)
+
 
 
 

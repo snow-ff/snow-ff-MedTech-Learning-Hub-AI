@@ -260,4 +260,44 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(ref.uri).toMatch(/^https?:\/\//);
     }
   });
+
+  // Scenario 7: Verify mock parameters and isolation from external network calls
+  it('7. mock parameter verification and zero external network calls: confirms mock receives expected isDocumentGrounding and references remain unverified', async () => {
+    let capturedParams: any = null;
+    setCustomGeminiMock(async (params) => {
+      capturedParams = params;
+      return {
+        text: "ผลลัพธ์จำลองตรวจสอบพารามิเตอร์",
+        candidates: [{
+          groundingMetadata: {
+            webSearchQueries: ["test query"],
+            groundingChunks: [{ web: { uri: "https://who.int/test-guideline", title: "WHO Test Guideline" } }],
+            groundingSupports: [{
+              segment: { startIndex: 0, endIndex: 14, text: "ผลลัพธ์จำลอง" },
+              groundingChunkIndices: [0]
+            }]
+          }
+        }]
+      };
+    });
+
+    const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'ทดสอบพารามิเตอร์โหมดค้นหาเว็บ' }],
+        searchMode: 'web_search',
+        documentContext: undefined
+      })
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(capturedParams).not.toBeNull();
+    expect(capturedParams.isDocumentGrounding).toBe(false);
+    for (const ref of data.references) {
+      expect(ref.verificationStatus).toBe('unverified');
+    }
+  });
 });
+
