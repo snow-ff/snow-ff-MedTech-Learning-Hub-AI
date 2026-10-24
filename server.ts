@@ -157,6 +157,99 @@ function getCleanSectionTitle(text: string, chunkIndex: number | string): string
   return cleanChunkLocator(chunkIndex);
 }
 
+function buildChunkReferences(
+  relevantChunks: Array<{ chunkIndex?: number | string; pageNumber?: number | string; text?: string }>,
+  prompt: string,
+  verification: AcademicVerificationReport,
+  documentContext: { title: string; courseCode?: string; hasNativePages?: boolean; totalPages?: number; chunks: any[] }
+) {
+  return relevantChunks.map(c => {
+    const decodedText = decodeHtmlEntities(c.text || '');
+    const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex ?? '');
+    const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt || '', 140));
+    const finalLocator = cleanChunkLocator(c.chunkIndex ?? '', c.pageNumber);
+
+    const queryLower = prompt.toLowerCase();
+    const chunkLower = decodedText.toLowerCase();
+
+    const queryTerms = queryLower.match(/-[a-z]{3,}|[a-z]{3,}-/g) || [];
+    const asksSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(queryLower);
+    const asksPrefix = /prefix|คำอุปสรรค|brady|tachy/i.test(queryLower);
+    const asksRoot = /root|รากศัพท์/i.test(queryLower);
+    const isSpecificTerminologyQuery = asksSuffix || asksPrefix || asksRoot;
+
+    let isChunkTopicRelevant = false;
+    if (isSpecificTerminologyQuery) {
+      if (queryTerms.length > 0) {
+        isChunkTopicRelevant = queryTerms.some(term => chunkLower.includes(term.toLowerCase()));
+      } else {
+        const asksDefinitionOrFunction = /(?:คืออะไร|หมายถึง|นิยาม|หน้าที่|ความหมาย|ทำหน้าที่|อธิบายหน้าที่|อธิบายความหมาย)/i.test(queryLower);
+        const clauses = chunkLower
+          .split(/(?:\r?\n+|[.;|•\u2022]+|\s{2,}|ฯ(?:ลฯ)?)/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+
+        const chunkHasPrefixDefinition = clauses.some(cl =>
+          /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
+          /\bprefix\b[^.!?;\n]*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(cl)
+        );
+        const chunkHasSuffixDefinition = clauses.some(cl =>
+          /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
+          /\bsuffix\b[^.!?;\n]*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(cl)
+        );
+        const chunkHasPrefixExamples = clauses.some(cl =>
+          /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(cl) ||
+          /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+          /\bprefix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+        );
+        const chunkHasSuffixExamples = clauses.some(cl =>
+          /(?:-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy)\b/i.test(cl) ||
+          /-[a-z]{2,}\b/i.test(cl) ||
+          /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
+          /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
+        );
+
+        const chunkHasSubstantivePrefix = asksDefinitionOrFunction ? chunkHasPrefixDefinition : (chunkHasPrefixDefinition || chunkHasPrefixExamples);
+        const chunkHasSubstantiveSuffix = asksDefinitionOrFunction ? chunkHasSuffixDefinition : (chunkHasSuffixDefinition || chunkHasSuffixExamples);
+        const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
+
+        isChunkTopicRelevant = !isNoticeOrDisclaimer && ((asksSuffix && chunkHasSubstantiveSuffix) || (asksPrefix && chunkHasSubstantivePrefix));
+      }
+    } else {
+      const isNoticeOrAdministrative = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
+      const asksNotice = /copyright|ประกาศ|ลิขสิทธิ์|disclaimer|notice|วันหยุด/i.test(queryLower);
+      const SPECIFIC_LAB_MARKERS = [
+        'cbc', 'pcr', 'edta', 'elisa', 'hba1c', 'bun', 'wbc', 'rbc', 'lft',
+        'ast', 'alt', 'alp', 'sst', 'qc', 'pt', 'inr', 'aptt', 'hiv', 'hbv',
+        'hcv', 'dna', 'rna', 'mso4', 'mgso4', 'complete blood count',
+        'flow cytometry', 'blood glucose', 'fasting blood sugar'
+      ];
+      const queriedMarkers = SPECIFIC_LAB_MARKERS.filter(marker => queryLower.includes(marker));
+      let hasSubstantiveMatch = false;
+      if (queriedMarkers.length > 0) {
+        hasSubstantiveMatch = queriedMarkers.some(marker => chunkLower.includes(marker));
+      } else {
+        hasSubstantiveMatch = true;
+      }
+      isChunkTopicRelevant = (!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch;
+    }
+
+    const isChunkUnsupported = !isChunkTopicRelevant;
+    const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
+
+    return {
+      title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
+      uri: `#chunk-${c.chunkIndex}`,
+      type: "document_chunk",
+      linkAccessStatus: "verified_local",
+      verificationStatus: isChunkUnsupported ? ("unsupported_citation" as const) : ("source_grounded" as const),
+      evidenceLocator: finalLocator,
+      excerpt,
+      contentVersion: "1.2"
+    };
+  });
+}
+
 // Academic fallback generator for robust offline / quota-exceeded handling
 export function getAcademicFallback(
   prompt: string,
@@ -232,184 +325,7 @@ export function getAcademicFallback(
         verification.stages.answerFidelity.status === 'hallucinated' ||
         verification.stages.answerFidelity.status === 'overgeneralized';
 
-      const chunkReferences = retrieval.relevantChunks.map(c => {
-        const decodedText = decodeHtmlEntities(c.text || '');
-        const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
-        const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt, 140));
-        const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
-
-        // Reference-level evidence validity:
-        // Evaluates whether THIS specific chunk genuinely supports the query topic parts
-        // or whether it was cited erroneously (e.g. disclaimer/notice or superficial mention).
-        const queryLower = prompt.toLowerCase();
-        const chunkLower = decodedText.toLowerCase();
-
-        // Extract specific technical terms from the query, e.g. "-scopy", "-gram", "-graphy", "brady-", etc.
-        const queryTerms = queryLower.match(/-[a-z]{3,}|[a-z]{3,}-/g) || [];
-
-        const asksSuffix = /suffix|ปัจจัยท้าย|-scopy|-gram|-graphy|scopy|gram|graphy/i.test(queryLower);
-        const asksPrefix = /prefix|คำอุปสรรค|brady|tachy/i.test(queryLower);
-        const asksRoot = /root|รากศัพท์/i.test(queryLower);
-        const isSpecificTerminologyQuery = asksSuffix || asksPrefix || asksRoot;
-
-        // Note: Reference evaluation uses deterministic heuristics (exact morpheme patterns,
-        // definition frames, and target entity filtering) rather than deep NLI or semantic entailment.
-        let isChunkTopicRelevant = false;
-        if (isSpecificTerminologyQuery) {
-          if (queryTerms.length > 0) {
-            // If the query asks for specific technical terms (e.g. -scopy), the chunk must contain at least one of them
-            isChunkTopicRelevant = queryTerms.some(term => chunkLower.includes(term.toLowerCase()));
-          } else {
-            // Query asks general suffix/prefix/root (without specific -term):
-            // Requires substantive morphological patterns (-itis, brady-) or definition frames (คือ, หมายถึง, เช่น, ประกอบด้วย, :)
-            // Casual mention (e.g. "กล่าวถึง prefix และ suffix ทั่วไป") is rejected as unsupported_citation.
-            const asksDefinitionOrFunction = /(?:คืออะไร|หมายถึง|นิยาม|หน้าที่|ความหมาย|ทำหน้าที่|อธิบายหน้าที่|อธิบายความหมาย)/i.test(queryLower);
-
-            // Split into clauses to ensure composition logic does not cross sentence boundaries
-            const clauses = chunkLower
-              .split(/(?:\r?\n+|[.;|•\u2022]+|\s{2,}|ฯ(?:ลฯ)?)/)
-              .map(s => s.trim())
-              .filter(s => s.length > 0);
-
-            const chunkHasWordPartsComposition = clauses.some(cl =>
-              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:word root|prefix|suffix|combining vowel|คำอุปสรรค|ปัจจัยท้าย)/i.test(cl)
-            );
-
-            const chunkHasPrefixDefinition = clauses.some(cl =>
-              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหน้า|วางไว้หน้า|อยู่ข้างหน้า|อยู่หน้า|เติมหน้า|ส่วนนำหน้า|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
-              /\bprefix\b[^.!?;\n]*?\b(?:is|means|placed before|added to the front|affix attached to the beginning)\b/i.test(cl)
-            );
-
-            const chunkHasSuffixDefinition = clauses.some(cl =>
-              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[*_#]*\s*[:\-–]?\s*(?:วางไว้ข้างหลัง|วางไว้หลัง|อยู่ข้างหลัง|อยู่หลัง|อยู่ท้าย|เติมท้าย|ส่วนลงท้าย|คือ|หมายถึง|ทำหน้าที่|เป็น))/i.test(cl) ||
-              /\bsuffix\b[^.!?;\n]*?\b(?:is|means|placed after|added to the end|affix attached to the end)\b/i.test(cl)
-            );
-
-            const chunkHasPrefixExamples = clauses.some(cl =>
-              /(?:brady|tachy|dys|sub|hyper|hypo|a|an|anti|pre|post|peri|epi)-|-(?:brady|tachy|dys|sub|hyper|hypo)\b/i.test(cl) ||
-              /(?:คำอุปสรรค|ส่วนนำหน้า|เติมหน้า|prefix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
-              /\bprefix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
-            );
-
-            const chunkHasSuffixExamples = clauses.some(cl =>
-              /(?:-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy)\b/i.test(cl) ||
-              /-[a-z]{2,}\b/i.test(cl) ||
-              /(?:ปัจจัยท้าย|คำต่อท้าย|คำปัจจัย|ส่วนลงท้าย|เติมท้าย|suffix)(?:\s*(?:\([^)]*\)\s*)?(?:เช่น|ได้แก่|ตัวอย่าง|\:|\-|\/))/i.test(cl) ||
-              /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
-            );
-
-            // Clause-specific composition to prevent intra-chunk cross-sentence match
-            const clauseHasPrefixComposition = clauses.some(cl =>
-              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:prefix|คำอุปสรรค)/i.test(cl)
-            );
-
-            const clauseHasSuffixComposition = clauses.some(cl =>
-              /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)/i.test(cl)
-            );
-
-            const asksExamples = /ตัวอย่าง|เช่น|ยกตัวอย่าง|examples?/i.test(queryLower);
-            const chunkHasSubstantivePrefix = (asksDefinitionOrFunction && !asksExamples)
-              ? (chunkHasPrefixDefinition || clauseHasPrefixComposition)
-              : (chunkHasPrefixDefinition || chunkHasPrefixExamples || clauseHasPrefixComposition);
-
-            const chunkHasSubstantiveSuffix = (asksDefinitionOrFunction && !asksExamples)
-              ? (chunkHasSuffixDefinition || clauseHasSuffixComposition)
-              : (chunkHasSuffixDefinition || chunkHasSuffixExamples || clauseHasSuffixComposition);
-
-            const chunkHasSubstantiveRoot =
-              /(?:รากศัพท์|word root|แกนหลักของคำ)(?:\s*(?:\([^)]*\)\s*)?(?:คือ|หมายถึง|ทำหน้าที่|เช่น|ประกอบด้วย|ได้แก่|\:|\-|\/))/i.test(chunkLower) ||
-              /รากศัพท์|แกนหลักของคำ/i.test(chunkLower);
-
-            const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
-
-            const matchesQueryPart = 
-              (asksSuffix && chunkHasSubstantiveSuffix) ||
-              (asksPrefix && chunkHasSubstantivePrefix) ||
-              (asksRoot && chunkHasSubstantiveRoot);
-
-            isChunkTopicRelevant = !isNoticeOrDisclaimer && matchesQueryPart;
-          }
-        } else {
-          // For general queries, do not assume relevance solely from retrieval match;
-          // 1. Guard against administrative/notice/off-topic chunks
-          const isNoticeOrAdministrative = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
-          const asksNotice = /copyright|ประกาศ|ลิขสิทธิ์|disclaimer|notice|วันหยุด/i.test(queryLower);
-
-          // 2. Guard against compromised answer fidelity
-          const isAnswerCompromised =
-            verification.stages.answerFidelity.status === 'hallucinated' ||
-            verification.stages.answerFidelity.status === 'contradictory' ||
-            verification.verdict === 'FAIL';
-
-          // 3. Clinical Entities vs General English words:
-          // Define specific clinical target markers (e.g. CBC, EDTA, PCR, ELISA, HbA1c, etc.)
-          const SPECIFIC_LAB_MARKERS = [
-            'cbc', 'pcr', 'edta', 'elisa', 'hba1c', 'bun', 'wbc', 'rbc', 'lft',
-            'ast', 'alt', 'alp', 'sst', 'qc', 'pt', 'inr', 'aptt', 'hiv', 'hbv',
-            'hcv', 'dna', 'rna', 'mso4', 'mgso4', 'complete blood count',
-            'flow cytometry', 'blood glucose', 'fasting blood sugar'
-          ];
-          const queriedMarkers = SPECIFIC_LAB_MARKERS.filter(marker => queryLower.includes(marker));
-
-          // General non-clinical English words that must NOT be treated as clinical evidence
-          const GENERAL_NON_CLINICAL_WORDS = new Set([
-            'and', 'for', 'the', 'with', 'about', 'from', 'into', 'over', 'after',
-            'guide', 'guidelines', 'note', 'notes', 'text', 'study', 'student', 'learning',
-            'unit', 'chapter', 'page', 'book', 'manual', 'general', 'overview', 'summary',
-            'system', 'method', 'methods', 'rule', 'rules', 'process', 'step', 'steps',
-            'record', 'records', 'report', 'information', 'data', 'format', 'case', 'cases',
-            'example', 'examples', 'user', 'time', 'date', 'item', 'list', 'title', 'name',
-            'code', 'class', 'course', 'level', 'score', 'paper', 'form', 'type', 'types',
-            'part', 'parts', 'standard', 'standards', 'practice', 'review', 'week', 'day',
-            'term', 'terms', 'how', 'what', 'why', 'when', 'which', 'where', 'who', 'does'
-          ]);
-
-          let hasSubstantiveMatch = false;
-
-          if (queriedMarkers.length > 0) {
-            // When query specifies clinical tests (CBC, EDTA, PCR, etc.), chunk MUST contain at least one queried marker.
-            // Matching general words (guide, note, etc.) without the queried marker is strictly rejected.
-            hasSubstantiveMatch = queriedMarkers.some(marker => chunkLower.includes(marker));
-          } else {
-            // For other clinical / laboratory queries without explicit acronyms in the marker list:
-            const clinicalEntities = queryLower
-              .match(/\b[a-z0-9]{2,}\b/g)
-              ?.filter(e => !GENERAL_NON_CLINICAL_WORDS.has(e)) || [];
-
-            if (clinicalEntities.length > 0) {
-              hasSubstantiveMatch = clinicalEntities.some(entity => chunkLower.includes(entity));
-            } else {
-              // General query without English clinical entities: check retrieval matched keywords or Thai substantive tokens
-              const hasMatchedKeywords = (retrieval.matchedKeywords || []).some(kw => chunkLower.includes(kw.toLowerCase()));
-              const queryTokens = queryLower
-                .split(/[\s,;:.!?()\/+\-]+/)
-                .map(t => t.trim())
-                .filter(t => t.length >= 3 && !ACADEMIC_STOPWORDS.has(t) && !['อธิบาย', 'คืออะไร', 'อย่างไร', 'เปรียบเทียบ', 'สรุป', 'ความหมาย', 'ข้อใด', 'ทำไม', 'เกี่ยวกับ', 'การตรวจ', 'ข้อมูล'].includes(t));
-              hasSubstantiveMatch = hasMatchedKeywords || queryTokens.length === 0 || queryTokens.some(token => chunkLower.includes(token));
-            }
-          }
-
-          if ((!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch) {
-            isChunkTopicRelevant = true;
-          }
-        }
-
-        const isChunkUnsupported = !isChunkTopicRelevant;
-
-        const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
-        return {
-          title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
-          uri: `#chunk-${c.chunkIndex}`,
-          type: "document_chunk",
-          linkAccessStatus: "verified_local",
-          verificationStatus: isChunkUnsupported
-            ? ("unsupported_citation" as const)
-            : ("source_grounded" as const),
-          evidenceLocator: finalLocator,
-          excerpt,
-          contentVersion: "1.2"
-        };
-      });
+      const chunkReferences = buildChunkReferences(retrieval.relevantChunks, prompt, verification, documentContext);
 
       const hasAnyGroundedReference = chunkReferences.some(r => r.verificationStatus === 'source_grounded');
       const isOverallEvidenceInsufficient = isFallbackInsufficient || !hasAnyGroundedReference;
@@ -1316,24 +1232,13 @@ ${formattedChunks}
           verification.isVerified = false;
         }
 
-        const docReferences = isInsufficient ? [] : preComputedRetrieval.relevantChunks.map((c: any) => {
-          const decodedText = decodeHtmlEntities(c.text || '');
-          const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex);
-          const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, latestPrompt, 140));
-          const finalLocator = cleanChunkLocator(c.chunkIndex, c.pageNumber);
-          const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
+        const docReferences = isInsufficient ? [] : buildChunkReferences(preComputedRetrieval.relevantChunks, latestPrompt, verification, documentContext);
 
-          return {
-            title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
-            uri: `#chunk-${c.chunkIndex}`,
-            type: "document_chunk",
-            linkAccessStatus: "verified_local",
-            verificationStatus: verification.stages.evidenceFidelity.passed ? "source_grounded" : "unsupported_citation",
-            evidenceLocator: finalLocator,
-            excerpt,
-            contentVersion: "1.2"
-          };
-        });
+        const hasAnyUnsupportedReference = docReferences.some(r => r.verificationStatus === 'unsupported_citation');
+        if ((hasAnyUnsupportedReference || verification.stages.answerFidelity.status === 'overgeneralized') && verification.verdict === 'PASS') {
+          verification.verdict = 'WARNING';
+          verification.isVerified = false;
+        }
 
         return res.json({
           text,
