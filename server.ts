@@ -838,9 +838,9 @@ export function getAcademicFallback(
 3. **สหกิจศึกษา (Cooperative Education):**
    - 13 หน่วยกิต (ปฏิบัติงานจริงในองค์กร/สถานพยาบาลไม่น้อยกว่า 8 เดือน)
 
-4. **สถานะการตรวจสอบรายวิชา (Verification Status):**
-   - ข้อมูลโครงสร้างภาพรวมและหมวดหมู่หน่วยกิตข้างต้น: **ยืนยันแล้ว (Verified)** อ้างอิงจากเว็บไซต์สำนักวิชาสารสนเทศศาสตร์ ม.วลัยลักษณ์
-   - รายวิชา 69 รายวิชาในทะเบียน: **ยืนยันแล้ว (Verified)** จากเล่มหลักสูตร มคอ.2 ม.วลัยลักษณ์ หน้า 4-8 ครบทุกวิชา`,
+4. **สถานะหลักฐานข้อมูลสำรอง (Academic Fallback Evidence Status):**
+   - ข้อมูลโครงสร้างภาพรวมและหมวดหมู่หน่วยกิตข้างต้น: **ข้อมูลสำรองวิชาการ (Static Curriculum Fallback Knowledge)** อ้างอิงจากโครงสร้างหลักสูตรทั่วไป
+   - รายวิชาในหลักสูตร: ข้อมูลสรุปอ้างอิงจากเล่มหลักสูตร มคอ.2 (สถานะแหล่งอ้างอิง: ยังไม่ได้ตรวจสอบเนื้อหาแบบไดนามิกในเซสชันนี้ เนื่องจากอยู่ในโหมด Academic Fallback)`,
       references: [
         { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" },
         { title: "เอกสารคู่มือนักศึกษาหลักสูตร พ.ศ. 2567 (PDF - CES)", uri: "https://ces.wu.ac.th/registrar/StudentHandbook/2567/22_IMI_01.pdf" }
