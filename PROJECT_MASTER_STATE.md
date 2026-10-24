@@ -228,11 +228,23 @@
 4. **Test Suite & Quota Conservation:**
    - ใช้ deterministic fixtures สำหรับการทดสอบ Web Search Grounding โดยไม่มีการเรียก Live API เพิ่มเติมระหว่างรัน Unit Tests ป้องกันปัญหา Rate Limit (HTTP 429)
 
-### 9.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
-- **Vitest Suite:** `npx vitest run`
-  - ทดสอบผ่านทุกไฟล์ รวมทั้ง `src/lib/webSearchGrounding.test.ts` และ `src/lib/searchModeIntegration.test.ts` (ผ่านครบทุก Test Cases)
-- **Type Check & Lint:** `npm run lint` (`tsc --noEmit`)
-  - **ผลลัพธ์:** Exit Code `0` (0 errors, 0 warnings)
-- **Application Build:** `compile_applet` (`npm run build`)
-  - **ผลลัพธ์:** `Build succeeded - the applet is compiled`
+---
+
+## 10. Targeted P0 Fixes & Verification Report (v1.2)
+
+### 10.1 รายละเอียดการแก้ไขข้อบกพร่องตามเป้าหมาย (Targeted P0 Fixes)
+1. **Strict Segment Text Validation (Step 2.A):**
+   - อัปเดต `mapGroundingSegments()` ให้ใช้การตรวจสอบความเท่ากันแบบแม่นยำ (Exact Normalized NFC Match) ระหว่าง `segment.text` กับ `fullText.slice(start, end)` โดยยกเลิกการใช้ Containment Matches (substring หรือ contains) เพื่อป้องกันการยอมรับข้อความที่ไม่ตรงกันหรือบางส่วนอย่างไม่ถูกต้อง
+   - เพิ่ม Unit Tests ครอบคลุม Exact Match, Shorter Substring, Longer Containment, Unrelated Text, Invalid Offsets และ Thai/Unicode Text
+2. **Citation Index Mapping & Filtering Contracts (Step 2.B):**
+   - ตรวจสอบและทดสอบสัญญาการแปลงดัชนี (Transformation Contract) ระหว่าง `server.ts` และ `mapGroundingSegments()` ด้วย Chunk fixtures ที่มี URL ไม่ถูกต้อง, URL ซ้ำ, URL ขาด Title และแหล่งข้อมูลหลากหลาย
+3. **Linkage Status & Segment Counting (Step 2.D):**
+   - ยืนยันการนับจำนวน `supportedSegmentCount` และ `unsupportedSegmentCount` อย่างแม่นยำ พร้อมทั้งรักษาเกณฑ์การแสดงสถานะ `verified_linked` เฉพาะกรณีที่มีครอบคลุมสมบูรณ์ 100% ไม่มีช่วงข้อความ ungrounded
+
+### 10.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
+- **Focused Grounding Tests (`webSearchGrounding.test.ts`):** ผ่าน 12/12 tests สมบูรณ์ (0 API calls)
+- **Complete Test Suite (`npx vitest run`):** 21 test files, **226 tests passed 100%**
+- **Type Check & Lint (`npm run lint` / `tsc --noEmit`):** Exit Code `0` (0 errors, 0 warnings)
+- **Application Build (`compile_applet` / `npm run build`):** สำเร็จสมบูรณ์ (`Build succeeded`)
+
 

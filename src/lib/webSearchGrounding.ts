@@ -3,9 +3,9 @@
  *
  * Implements Phase 1 (Grounding Evidence Integrity) & Phase 2 (Source Classification)
  * - Pure functions with strict domain boundary checks against spoofing
- * - Segment-level mapping from Gemini groundingSupports and groundingChunks
+ * - Segment-level mapping from groundingSupports and groundingChunks
  * - Separation of source credibility, claim support, and link accessibility
- * - P0 Citation Index Mapping, Segment Text Integrity, and Linkage Status Integrity
+ * - P0 Citation Index Mapping, Strict Segment Text Integrity (Exact match), and Linkage Status Integrity
  */
 
 export type SourceTier =
@@ -229,7 +229,7 @@ export function classifyMedicalSource(rawUrl: string): SourceClassificationResul
 
 /**
  * Maps raw grounding supports and grounding chunks from Gemini to full response text.
- * Strictly verifies offsets, bounds, text consistency (segment.text vs slice), and index remapping.
+ * Strictly verifies offsets, bounds, strict exact segment text consistency (NFC normalized), and index remapping.
  */
 export function mapGroundingSegments(
   fullText: string,
@@ -283,17 +283,12 @@ export function mapGroundingSegments(
     if (typeof start !== 'number' || typeof end !== 'number') continue;
     if (start < 0 || end > textLength || start >= end) continue;
 
-    // Segment Text Integrity Check: Verify that actual text slice matches provided segment.text (if any)
+    // Segment Text Integrity Check: Strict exact match (normalized NFC) rejecting loose containment or partial matches
     const actualSlice = fullText.slice(start, end);
     if (s.segment.text && typeof s.segment.text === 'string' && s.segment.text.trim()) {
-      const expected = s.segment.text.trim();
-      const actualTrimmed = actualSlice.trim();
-      // Reject if there is a fundamental mismatch to prevent hallucinated/shifted offsets
-      if (
-        actualTrimmed !== expected &&
-        !actualTrimmed.includes(expected) &&
-        !expected.includes(actualTrimmed)
-      ) {
+      const expected = s.segment.text.trim().normalize('NFC');
+      const actualTrimmed = actualSlice.trim().normalize('NFC');
+      if (actualTrimmed !== expected) {
         continue;
       }
     }
@@ -312,7 +307,7 @@ export function mapGroundingSegments(
           if (mapped !== undefined) {
             remappedIdx = mapped;
           } else {
-            continue; // Not found in filtered mapping
+            continue;
           }
         } else if (typeof indexMapping === 'object') {
           const mapped = (indexMapping as Record<number, number>)[rawIdx];
@@ -405,7 +400,6 @@ export function mapGroundingSegments(
   }
 
   const groundedSegments = segments.filter(s => s.isGrounded);
-  // Strict Linkage Integrity: Any ungrounded text segment with non-empty trim counts as unlinked (no arbitrary >20 char threshold)
   const ungroundedSegments = segments.filter(s => !s.isGrounded && s.text.trim().length > 0);
 
   const linkageStatus =
