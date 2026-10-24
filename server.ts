@@ -14,6 +14,7 @@ import {
   DEFAULT_RETRY_CONFIG,
   formatRetryLog
 } from "./src/lib/geminiRetryPolicy";
+import { classifyMedicalSource, mapGroundingSegments } from "./src/lib/webSearchGrounding";
 
 dotenv.config();
 
@@ -1305,16 +1306,33 @@ ${formattedChunks}
 
       // Safely extract grounding metadata references for general search mode
       const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-      const references: Array<{ title: string; uri: string }> = [];
+      const references: Array<{
+        title: string;
+        uri: string;
+        sourceTier?: string;
+        sourceTierLabel?: string;
+        domain?: string;
+        trustLevel?: string;
+        warningNotice?: string;
+        isAllowlistedAuthority?: boolean;
+      }> = [];
+
       if (groundingMetadata && groundingMetadata.groundingChunks) {
         for (const chunk of groundingMetadata.groundingChunks) {
           if (chunk.web && chunk.web.uri && chunk.web.title) {
             const uri = chunk.web.uri;
             if (uri.startsWith("http://") || uri.startsWith("https://")) {
               if (!references.some(r => r.uri === uri)) {
+                const classification = classifyMedicalSource(uri);
                 references.push({
                   title: chunk.web.title,
                   uri: uri,
+                  sourceTier: classification.tier,
+                  sourceTierLabel: classification.tierLabel,
+                  domain: classification.domain,
+                  trustLevel: classification.trustLevel,
+                  warningNotice: classification.warningNotice,
+                  isAllowlistedAuthority: classification.isAllowlistedAuthority
                 });
               }
             }
@@ -1323,9 +1341,21 @@ ${formattedChunks}
       }
 
       const hasGrounding = references.length > 0;
+      const mappingResult = hasGrounding
+        ? mapGroundingSegments(text, groundingMetadata?.groundingSupports, references.length)
+        : undefined;
+
       return res.json({
         text,
         source: hasGrounding ? "gemini_grounding" : "gemini_standard",
+        webGrounding: hasGrounding ? {
+          webSearchQueries: groundingMetadata?.webSearchQueries || [],
+          searchEntryPointHtml: groundingMetadata?.searchEntryPoint?.renderedContent || undefined,
+          linkageStatus: mappingResult?.linkageStatus || 'missing_metadata',
+          segments: mappingResult?.segments || [],
+          supportedClaimCount: mappingResult?.supportedClaimCount || 0,
+          unsupportedClaimCount: mappingResult?.unsupportedClaimCount || 0
+        } : undefined,
         references: hasGrounding ? references.map(r => ({ 
           ...r, 
           type: "web_search",

@@ -67,6 +67,20 @@ export interface Message {
   groundedDocumentTitle?: string;
   evidenceStatus?: EvidenceStatus;
   verification?: AcademicVerificationReport;
+  webGrounding?: {
+    webSearchQueries?: string[];
+    searchEntryPointHtml?: string;
+    linkageStatus: 'verified_linked' | 'partial_linked' | 'unlinked' | 'missing_metadata';
+    segments?: Array<{
+      text: string;
+      startIndex: number;
+      endIndex: number;
+      citationIndices: number[];
+      isGrounded: boolean;
+    }>;
+    supportedClaimCount?: number;
+    unsupportedClaimCount?: number;
+  };
   references?: Array<{
     title: string;
     uri: string;
@@ -75,6 +89,13 @@ export interface Message {
     verificationStatus?: string;
     evidenceLocator?: string;
     contentVersion?: string;
+    sourceTier?: string;
+    sourceTierLabel?: string;
+    domain?: string;
+    trustLevel?: string;
+    warningNotice?: string;
+    isAllowlistedAuthority?: boolean;
+    excerpt?: string;
   }>;
 }
 
@@ -495,6 +516,7 @@ export default function App() {
         groundedDocumentTitle: (searchMode !== 'web_search' && activeDocument) ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
         verification: verificationReport,
+        webGrounding: data.webGrounding,
         references: Array.isArray(data.references) ? data.references.map((r: any) => ({
           ...r,
           title: r.title ? decodeHtmlEntities(r.title) : r.title,
@@ -922,7 +944,74 @@ export default function App() {
                         : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none shadow-sm'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap medical-text-wrap">{msg.content}</div>
+                    {msg.webGrounding?.segments && msg.webGrounding.segments.length > 0 ? (
+                      <div className="whitespace-pre-wrap medical-text-wrap">
+                        {msg.webGrounding.segments.map((seg, sIdx) => (
+                          <span key={sIdx}>
+                            {seg.text}
+                            {seg.citationIndices && seg.citationIndices.length > 0 && (
+                              <span className="inline-flex gap-0.5 mx-0.5 align-super text-[10px] font-mono select-none">
+                                {seg.citationIndices.map((cIdx) => (
+                                  <a
+                                    key={cIdx}
+                                    href={`#ref-${msg.id}-${cIdx}`}
+                                    className="px-1 py-0.5 rounded bg-cyan-950 text-cyan-300 hover:bg-cyan-800 hover:text-white border border-cyan-800 transition-colors"
+                                    title={`ดูแหล่งอ้างอิงลำดับที่ [${cIdx}]`}
+                                  >
+                                    [{cIdx}]
+                                  </a>
+                                ))}
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap medical-text-wrap">{msg.content}</div>
+                    )}
+
+                    {/* Google Search Grounding: Search Suggestions / Queries */}
+                    {msg.webGrounding?.webSearchQueries && msg.webGrounding.webSearchQueries.length > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center gap-1.5 flex-wrap text-xs text-slate-400">
+                        <Search className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="font-medium text-slate-300">คำค้นหาที่เกี่ยวข้อง:</span>
+                        {msg.webGrounding.webSearchQueries.map((q, qIdx) => (
+                          <span key={qIdx} className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-[11px] text-cyan-300">
+                            {q}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Web Grounding: Linkage Status Badge */}
+                    {msg.webGrounding && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+                        <span className={`px-2 py-0.5 rounded border text-[11px] flex items-center gap-1.5 ${
+                          msg.webGrounding.linkageStatus === 'verified_linked'
+                            ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                            : msg.webGrounding.linkageStatus === 'partial_linked'
+                            ? 'bg-cyan-950/40 text-cyan-300 border-cyan-800/60'
+                            : 'bg-slate-900 text-slate-400 border-slate-800'
+                        }`}>
+                          {msg.webGrounding.linkageStatus === 'verified_linked' ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>เชื่อมโยงข้อความกับแหล่งอ้างอิงครบถ้วน ({msg.webGrounding.supportedClaimCount} ส่วน)</span>
+                            </>
+                          ) : msg.webGrounding.linkageStatus === 'partial_linked' ? (
+                            <>
+                              <AlertCircle className="w-3 h-3 text-cyan-400" />
+                              <span>เชื่อมโยงข้อความบางส่วน ({msg.webGrounding.supportedClaimCount} ส่วนระบุแหล่งที่มา)</span>
+                            </>
+                          ) : (
+                            <>
+                              <HelpCircle className="w-3 h-3 text-slate-400" />
+                              <span>ไม่มีการยืนยัน claim-to-source linkage ระดับประโยค (แสดงเฉพาะแหล่งอ้างอิงรวม)</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
 
                     {msg.groundedDocumentTitle && (
                       <div className={`mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs font-medium ${
@@ -1149,26 +1238,35 @@ export default function App() {
                         </p>
                         <div className="space-y-1.5">
                           {msg.references.map((ref, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-xs p-2 rounded-xl bg-slate-950/60 border border-slate-800/60">
-                              <ExternalLink className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+                            <div
+                              key={idx}
+                              id={`ref-${msg.id}-${idx + 1}`}
+                              className="flex items-start gap-2 text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 transition-colors"
+                            >
+                              <span className="text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 shrink-0 mt-0.5">
+                                [{idx + 1}]
+                              </span>
                               <div className="flex-1 min-w-0">
                                 {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (
                                   <a
                                     href={ref.uri}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-cyan-400 hover:underline font-medium break-words block"
+                                    className="text-cyan-400 hover:underline font-medium break-words block flex items-center gap-1.5"
                                   >
-                                    {ref.title || ref.uri}
+                                    <span>{ref.title || ref.uri}</span>
+                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
                                   </a>
                                 ) : (
                                   <span className="text-slate-200 font-semibold block">{ref.title}</span>
                                 )}
-                                {(ref as any).excerpt && (
+
+                                {ref.excerpt && (
                                   <p className="text-xs sm:text-[13px] text-slate-200 italic mt-1.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-lg border border-slate-800/80 leading-relaxed font-sans">
-                                    "{(ref as any).excerpt}"
+                                    "{ref.excerpt}"
                                   </p>
                                 )}
+
                                 {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
                                   <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
                                     <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
@@ -1191,13 +1289,46 @@ export default function App() {
                                     </span>
                                   </div>
                                 ) : (
-                                  <div className="text-xs text-slate-400 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 font-semibold">
-                                      🌐 Web Search Source
-                                    </span>
-                                    <span className="text-slate-400">
-                                      • แหล่งอ้างอิงภายนอกจาก Google Search Grounding
-                                    </span>
+                                  <div className="text-xs mt-1.5 space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {ref.sourceTier === 'official_authority' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-sans font-medium text-[11px]">
+                                          🏛️ องค์กรมาตรฐานทางการ
+                                        </span>
+                                      ) : ref.sourceTier === 'academic_database' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-sans font-medium text-[11px]">
+                                          📄 ฐานข้อมูลวิชาการ/วิจัย
+                                        </span>
+                                      ) : ref.sourceTier === 'university' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800 font-sans font-medium text-[11px]">
+                                          🎓 มหาวิทยาลัย / สถาบันการศึกษา
+                                        </span>
+                                      ) : ref.sourceTier === 'commercial_risk' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-sans font-medium text-[11px]">
+                                          ⚠️ แหล่งพาณิชย์/ความเสี่ยงสูง
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 font-sans font-medium text-[11px]">
+                                          🌐 เว็บไซต์ทั่วไป
+                                        </span>
+                                      )}
+
+                                      {ref.domain && (
+                                        <span className="text-slate-400 font-mono text-[11px]">
+                                          ({ref.domain})
+                                        </span>
+                                      )}
+
+                                      <span className="text-slate-500 font-mono text-[10px]">
+                                        • แหล่งภายนอก Google Search
+                                      </span>
+                                    </div>
+
+                                    {ref.warningNotice && (
+                                      <p className="text-[11px] text-amber-300/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/50 mt-1 font-sans">
+                                        {ref.warningNotice}
+                                      </p>
+                                    )}
                                   </div>
                                 )}
                               </div>
