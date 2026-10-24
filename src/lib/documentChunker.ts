@@ -586,9 +586,15 @@ export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: numb
       return `หน้า ${cleanPage}`;
     }
   }
-  const rawStr = chunkIndex !== undefined && chunkIndex !== null ? String(chunkIndex) : '1';
+  if (chunkIndex === undefined || chunkIndex === null || String(chunkIndex).trim() === '') {
+    return '';
+  }
+  const rawStr = String(chunkIndex);
   const decoded = decodeHtmlEntities(rawStr);
-  const cleanNumber = decoded.replace(/\D/g, '') || '1';
+  const cleanNumber = decoded.replace(/\D/g, '');
+  if (!cleanNumber) {
+    return '';
+  }
   return `ชิ้นส่วนที่ ${cleanNumber}`;
 }
 

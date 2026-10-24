@@ -133,9 +133,9 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(cleanChunkLocator('&amp;#x33;')).toBe('ชิ้นส่วนที่ 3');
 
     // 4. Null, undefined, and non-numeric values
-    expect(cleanChunkLocator(undefined as any)).toBe('ชิ้นส่วนที่ 1');
-    expect(cleanChunkLocator(null as any)).toBe('ชิ้นส่วนที่ 1');
-    expect(cleanChunkLocator('abc')).toBe('ชิ้นส่วนที่ 1');
+    expect(cleanChunkLocator(undefined as any)).toBe('');
+    expect(cleanChunkLocator(null as any)).toBe('');
+    expect(cleanChunkLocator('abc')).toBe('');
 
     // 5. Valid page number
     expect(cleanChunkLocator(13, 12)).toBe('หน้า 12');
