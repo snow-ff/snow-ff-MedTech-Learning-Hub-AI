@@ -203,8 +203,44 @@ function splitStringWithOverlap(text: string, maxChars: number, overlapChars: nu
       result.push(chunk);
     }
 
-    // Slide window with overlap, ensuring strictly moving forward
-    startIndex = Math.max(startIndex + 1, endIndex - overlapChars);
+    // Slide window with overlap, ensuring strictly moving forward and aligning to clean boundary
+    let nextStart = Math.max(startIndex + 1, endIndex - overlapChars);
+    if (overlapChars > 0 && nextStart < text.length) {
+      // 1. Prefer newline within 40 chars
+      const nextNewline = text.indexOf('\n', nextStart);
+      if (nextNewline !== -1 && nextNewline - nextStart <= 40) {
+        nextStart = nextNewline + 1;
+      } else {
+        const prevNewline = text.lastIndexOf('\n', nextStart);
+        if (prevNewline !== -1 && nextStart - prevNewline <= 40 && prevNewline > startIndex) {
+          nextStart = prevNewline + 1;
+        } else {
+          // 2. Prefer space
+          const nextSpace = text.indexOf(' ', nextStart);
+          if (nextSpace !== -1 && nextSpace - nextStart <= 25) {
+            nextStart = nextSpace + 1;
+          } else {
+            // 3. Move backward to word boundary
+            const wordChar = /[a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]/;
+            while (nextStart > startIndex + 1 && wordChar.test(text[nextStart - 1]) && wordChar.test(text[nextStart])) {
+              nextStart--;
+            }
+          }
+        }
+      }
+      // Include preceding Thai leading vowel if present
+      if (nextStart > startIndex && /[\u0E40-\u0E44]/.test(text[nextStart - 1])) {
+        nextStart--;
+      }
+      // Never start on a Thai dependent vowel or tone mark
+      while (nextStart > startIndex && /[\u0E30-\u0E39\u0E33\u0E47-\u0E4E]/.test(text[nextStart])) {
+        nextStart--;
+      }
+      if (nextStart > startIndex && /[\u0E40-\u0E44]/.test(text[nextStart - 1])) {
+        nextStart--;
+      }
+    }
+    startIndex = Math.max(startIndex + 1, nextStart);
   }
 
   return result;
@@ -493,6 +529,19 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
     start--;
   }
 
+  // Include Thai leading vowel (เ, แ, โ, ใ, ไ) if it immediately precedes the base consonant
+  if (start > 0 && /[\u0E40-\u0E44]/.test(cleanText[start - 1])) {
+    start--;
+  }
+
+  // If start landed on a Thai dependent vowel or tone mark, move back to base consonant
+  while (start > 0 && /[\u0E30-\u0E39\u0E33\u0E47-\u0E4E]/.test(cleanText[start])) {
+    start--;
+  }
+  if (start > 0 && /[\u0E40-\u0E44]/.test(cleanText[start - 1])) {
+    start--;
+  }
+
   // Ensure start does not begin with orphaned punctuation or space
   while (start < cleanText.length && /^[^a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]/.test(cleanText[start])) {
     start++;
@@ -508,8 +557,9 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
   }
 
   let excerpt = cleanText.slice(start, end).trim();
-  // Strip any leading non-word characters
-  excerpt = excerpt.replace(/^[^a-zA-Z0-9\u0E01-\u0E3A\u0E40-\u0E4E]+/, '').trim();
+  // Strip any leading non-word characters and orphaned dependent vowels/tone marks
+  excerpt = excerpt.replace(/^[^\w\u0E01-\u0E2E\u0E40-\u0E44]+/, '').trim();
+  excerpt = excerpt.replace(/^[\u0E30-\u0E39\u0E33\u0E47-\u0E4E]+/, '').trim();
 
   if (start > 10) excerpt = '...' + excerpt;
   if (end < cleanText.length) excerpt = excerpt + '...';

@@ -298,7 +298,8 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
           /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
         );
 
-        if (asksDefinitionOrFunction) {
+        const asksExamples = /ตัวอย่าง|เช่น|ยกตัวอย่าง|examples?/i.test(query);
+        if (asksDefinitionOrFunction && !asksExamples) {
           if (hasPrefixDef) hasValidPrefixEvidence = true;
           if (hasSuffixDef) hasValidSuffixEvidence = true;
         } else {

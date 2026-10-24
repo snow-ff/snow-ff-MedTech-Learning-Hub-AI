@@ -848,28 +848,63 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(hasSourceSuffixDef).toBe(true);
     expect(hasSourceSuffixEx).toBe(true);
 
-    // Part 2: System Retrieval & Reference Evidence Check (Strictly excluding res.text)
+    // Part 2: System Retrieval & Reference Evidence Check (Strictly excluding res.text and ref.title)
     expect(res.references.length).toBeGreaterThan(0);
     for (const ref of res.references) {
       expect(ref.evidenceLocator).not.toContain('&#');
       expect(ref.evidenceLocator).not.toContain('&amp;');
-      expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
+      expect(ref.evidenceLocator).toMatch(/^ชิ้นส่วนที่ \d+$/);
       expect(ref.evidenceLocator).not.toContain('หน้า');
     }
 
-    const referenceEvidenceText = res.references.map(r => (r.excerpt || '') + ' ' + (r.title || '')).join(' ');
-    const matchedChunkTexts = chunks.filter(c => res.references.some(r => r.evidenceLocator?.includes(String(c.chunkIndex)))).map(c => c.text).join(' ');
-    const combinedRetrievalEvidence = referenceEvidenceText + ' ' + matchedChunkTexts;
+    // Exact locator-to-chunk index matching (strictly avoiding loose .includes(String(chunkIndex)))
+    const parseLocatorChunkIndex = (locator?: string): number | null => {
+      if (!locator) return null;
+      const match = locator.match(/^ชิ้นส่วนที่\s*(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    };
 
-    const hasRetrievedPrefixDef = /คำอุปสรรค|เติมหน้า/i.test(combinedRetrievalEvidence);
-    const hasRetrievedPrefixEx = /brady-|tachy-/i.test(combinedRetrievalEvidence);
-    const hasRetrievedSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(combinedRetrievalEvidence);
-    const hasRetrievedSuffixEx = /-itis|-ectomy|-scopy/i.test(combinedRetrievalEvidence);
+    const referencedChunkIndices = res.references
+      .map(r => parseLocatorChunkIndex(r.evidenceLocator))
+      .filter((n): n is number => n !== null);
+
+    // Verify all referenced chunks exist in source chunks
+    expect(referencedChunkIndices.length).toBe(res.references.length);
+    for (const ref of res.references) {
+      const chunkIdx = parseLocatorChunkIndex(ref.evidenceLocator);
+      expect(chunkIdx).not.toBeNull();
+      const matchedChunk = chunks.find(c => (c.chunkIndex || 0) === chunkIdx);
+      expect(matchedChunk).toBeDefined();
+
+      // Verify source-to-reference traceability: excerpt must be derived from matched source chunk
+      const cleanExcerpt = (ref.excerpt || '').replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim();
+      expect(cleanExcerpt.length).toBeGreaterThan(0);
+      const normalizedChunkText = (matchedChunk?.text || '').replace(/[*_#]+/g, '').replace(/\s+/g, ' ');
+      expect(normalizedChunkText).toContain(cleanExcerpt);
+    }
+
+    const matchedSourceChunks = chunks.filter(c => referencedChunkIndices.includes(c.chunkIndex || 0));
+    const matchedSourceChunkTexts = matchedSourceChunks.map(c => c.text).join(' ');
+    const referenceExcerptsOnly = res.references.map(r => r.excerpt || '').join(' ');
+    // Strictly combine reference excerpts and matched source chunks WITHOUT res.text and WITHOUT ref.title
+    const strictSourceEvidence = referenceExcerptsOnly + ' ' + matchedSourceChunkTexts;
+
+    // Check 4 criteria independently on strict source evidence
+    const hasRetrievedPrefixDef = /คำอุปสรรค|เติมหน้า/i.test(strictSourceEvidence);
+    const hasRetrievedPrefixEx = /brady-|tachy-/i.test(strictSourceEvidence);
+    const hasRetrievedSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(strictSourceEvidence);
+    const hasRetrievedSuffixEx = /-itis|-ectomy|-scopy/i.test(strictSourceEvidence);
 
     expect(hasRetrievedPrefixDef).toBe(true);
     expect(hasRetrievedPrefixEx).toBe(true);
     expect(hasRetrievedSuffixDef).toBe(true);
     expect(hasRetrievedSuffixEx).toBe(true);
+
+    // Verify reference distribution: both Prefix and Suffix are covered in references
+    const hasPrefixInReferences = res.references.some(r => /brady-|tachy-|คำอุปสรรค|เติมหน้า/i.test(r.excerpt || ''));
+    const hasSuffixInReferences = res.references.some(r => /-itis|-ectomy|-scopy|ปัจจัยท้าย|เติมท้าย/i.test(r.excerpt || ''));
+    expect(hasPrefixInReferences).toBe(true);
+    expect(hasSuffixInReferences).toBe(true);
 
     // Part 3: Answer Completeness & Verification Verdict Check
     expect(res.evidenceStatus).toBe('sufficient');
@@ -933,20 +968,28 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Traceability Test Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)' },
-        { id: '5', documentId: 'doc1', chunkIndex: 5, text: '=== ส่วนที่ 5: ข้อความทั่วไปที่ไม่มีเนื้อหาอ้างอิงทางการแพทย์ ===' }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 110 },
+        { id: '5', documentId: 'doc1', chunkIndex: 5, text: '=== ส่วนที่ 5: ข้อความทั่วไปที่ไม่มีเนื้อหาอ้างอิงทางการแพทย์ ===', charCount: 60 }
       ]
     };
 
-    const report = verifyAcademicAnswer({
+    // Case 1: Malformed bracket citation with inline claim injection
+    const reportMalformed = verifyAcademicAnswer({
       query: 'อธิบาย Prefix ในเอกสาร',
       candidateAnswer: 'Prefix คือคำอุปสรรค [ชิ้นส่วนที่ 5 อ้างอิงข้อความปลอมว่า -itis คือการอักเสบ]',
       document: { title: docTraceability.title, chunks: docTraceability.chunks }
     });
+    expect(reportMalformed.verdict).not.toBe('PASS');
+    expect(reportMalformed.stages.evidenceFidelity.unsupportedCitations.length).toBeGreaterThan(0);
 
-    // Chunk 5 has no medical suffix/prefix definition matching the cited claim -> must be flagged as unsupported / not verified
-    expect(report.verdict).not.toBe('PASS');
-    expect(report.stages.evidenceFidelity.unsupportedCitations.length).toBeGreaterThan(0);
+    // Case 2: Standard bracket citation pointing to chunk 5 which does not support the medical claim
+    const reportMismatch = verifyAcademicAnswer({
+      query: 'อธิบาย Prefix และ Suffix ในเอกสาร',
+      candidateAnswer: 'Prefix คือคำอุปสรรค [ชิ้นส่วนที่ 1] ส่วน Suffix คือคำต่อท้าย เช่น -itis [ชิ้นส่วนที่ 5]',
+      document: { title: docTraceability.title, chunks: docTraceability.chunks }
+    });
+    expect(reportMismatch.verdict).not.toBe('PASS');
+    expect(reportMismatch.isVerified).toBe(false);
   });
 });
 

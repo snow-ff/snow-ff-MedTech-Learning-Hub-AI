@@ -301,11 +301,12 @@ export function getAcademicFallback(
               /(?:คำศัพท์|ศัพท์เทคนิค|คำ|องค์ประกอบของคำ|โครงสร้างของคำ)(?:\s*ทางการแพทย์)?\s*(?:ประกอบด้วย|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)[^.!?;\n]*?(?:suffix|ปัจจัยท้าย)/i.test(cl)
             );
 
-            const chunkHasSubstantivePrefix = asksDefinitionOrFunction
+            const asksExamples = /ตัวอย่าง|เช่น|ยกตัวอย่าง|examples?/i.test(queryLower);
+            const chunkHasSubstantivePrefix = (asksDefinitionOrFunction && !asksExamples)
               ? (chunkHasPrefixDefinition || clauseHasPrefixComposition)
               : (chunkHasPrefixDefinition || chunkHasPrefixExamples || clauseHasPrefixComposition);
 
-            const chunkHasSubstantiveSuffix = asksDefinitionOrFunction
+            const chunkHasSubstantiveSuffix = (asksDefinitionOrFunction && !asksExamples)
               ? (chunkHasSuffixDefinition || clauseHasSuffixComposition)
               : (chunkHasSuffixDefinition || chunkHasSuffixExamples || clauseHasSuffixComposition);
 
@@ -1392,7 +1393,7 @@ ${formattedChunks}
         : "unverified",
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
-      evidenceLocator: (r as any).evidenceLocator || (r.uri ? (isDocumentGrounding ? "Local Document Chunk" : "Direct Academic Source") : null),
+      evidenceLocator: (r as any).evidenceLocator || (r.uri ? (isDocumentGrounding ? (documentContext?.title ? `เอกสาร: ${decodeHtmlEntities(documentContext.title)}` : "ชิ้นส่วนเอกสารต้นทาง") : "Direct Academic Source") : null),
       contentVersion: "1.2"
     })),
   });
