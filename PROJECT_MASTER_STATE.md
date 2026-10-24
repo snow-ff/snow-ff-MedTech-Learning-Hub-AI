@@ -292,9 +292,17 @@
    - **VERIFIED:** ชุดทดสอบ Test I และ Test A-L ยืนยันว่า Prefix และ Suffix queries ต้องมีหลักฐานเฉพาะเจาะจงรายอนุประโยค (Clause-level) หากมีหลักฐานไม่ครบถ้วน (เช่น มีเฉพาะ Prefix แต่ถามหา Prefix และ Suffix) ระบบจะคืนสถานะ `insufficient` / `overgeneralized` ทันทีโดยไม่ปล่อยให้ผ่านเป็น PASS
 3. **Academic Verification Pipeline:**
    - **VERIFIED:** `verifyAcademicAnswer()` ตรวจสอบ 4 ขั้นตอน (Retrieval, Evidence Fidelity, Answer Fidelity, Reasoning Fidelity) อย่างเข้มงวด
-4. **API Response & Frontend App.tsx Preview Rendering:**
-   - **VERIFIED (Code & State Level):** ตรวจสอบ `src/App.tsx` ว่ารองรับการแสดงผล Verification Report, Evidence Status, และ References อย่างถูกต้อง ทั้งในกรณีที่มีค่าและกรณีเป็น null/undefined
-   - **PENDING (Visual GUI Rendering):** การเรนเดอร์ภาพหน้าจอจริง (Visual Browser Rendering) คงสถานะเป็น **PENDING** เนื่องจากรันใน Headless Linux Container (แนะนำให้ผู้ใช้เปิดทดสอบใน Browser จริงผ่าน Development URL ที่กำหนด)
+4. **API Response & Frontend State Mapping (`src/App.tsx`):**
+   - **VERIFIED (Code & State Level):** ตรวจสอบโค้ดใน `src/App.tsx` ว่ารองรับการประมวลผล response payload, verification report, evidence status และ references อย่างถูกต้อง ทั้งในกรณีที่มีข้อมูลครบถ้วนและกรณีไม่มีข้อมูล (null / undefined)
+5. **Visual GUI Rendering Preview (Browser GUI):**
+   - **PENDING (Manual Verification Required):** สภาพแวดล้อมเซิร์ฟเวอร์เป็น Headless Linux Container ไม่สามารถเรนเดอร์ GUI ในเบราว์เซอร์ได้โดยตรง ห้ามอ้างว่า Visual Preview ผ่านจาก Unit Tests
+   - **ขั้นตอนการทดสอบด้วยตนเอง (Manual Test Instructions):**
+     1. เปิดแอปพลิเคชันผ่าน Development URL (เช่น `https://ais-dev-...run.app`)
+     2. ไปที่แท็บ **"คลังเอกสารการเรียน" (Document Library)** เลือกอัปโหลดหรือเลือกเอกสาร `dtm67-111-source.md`
+     3. ตั้งค่าโหมดเป็น **"โหมดติวอิงเอกสาร" (Document Grounding)**
+     4. ทดสอบถามคำถามเกี่ยวกับ Prefix และ Suffix หรือคำถามที่หลักฐานไม่ครบถ้วน
+     5. ตรวจสอบว่าระบบแสดงข้อความแจ้งเตือนสถานะ `insufficient` / `overgeneralized` อย่างถูกต้อง, ไม่มี locator ซ้ำหรือผิดรูป, และไม่มีการให้สถานะ PASS เมื่อหลักฐานไม่เพียงพอ
+
 
 
 
