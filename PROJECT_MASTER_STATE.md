@@ -294,14 +294,18 @@
    - **VERIFIED:** `verifyAcademicAnswer()` ตรวจสอบ 4 ขั้นตอน (Retrieval, Evidence Fidelity, Answer Fidelity, Reasoning Fidelity) อย่างเข้มงวด
 4. **API Response & Frontend State Mapping (`src/App.tsx`):**
    - **VERIFIED (Code & State Level):** ตรวจสอบโค้ดใน `src/App.tsx` ว่ารองรับการประมวลผล response payload, verification report, evidence status และ references อย่างถูกต้อง ทั้งในกรณีที่มีข้อมูลครบถ้วนและกรณีไม่มีข้อมูล (null / undefined)
-5. **Visual GUI Rendering Preview (Browser GUI):**
-   - **PENDING (Manual Verification Required):** สภาพแวดล้อมเซิร์ฟเวอร์เป็น Headless Linux Container ไม่สามารถเรนเดอร์ GUI ในเบราว์เซอร์ได้โดยตรง ห้ามอ้างว่า Visual Preview ผ่านจาก Unit Tests
-   - **ขั้นตอนการทดสอบด้วยตนเอง (Manual Test Instructions):**
-     1. เปิดแอปพลิเคชันผ่าน Development URL (เช่น `https://ais-dev-...run.app`)
-     2. ไปที่แท็บ **"คลังเอกสารการเรียน" (Document Library)** เลือกอัปโหลดหรือเลือกเอกสาร `dtm67-111-source.md`
+5. **Visual GUI Rendering Preview (Browser GUI) & Runtime API Evidence:**
+   - **PENDING (Visual GUI Rendering):** สภาพแวดล้อมเซิร์ฟเวอร์เป็น Headless Linux Container ไม่สามารถเรนเดอร์ภาพหน้าจอ GUI เบราว์เซอร์ได้โดยตรง คงสถานะเป็น **PENDING**
+   - **VERIFIED (Runtime API Contract Evidence):** ทดสอบยิง HTTP Request จริงไปยัง Express Server ที่รันอยู่บนพอร์ต 3000 ด้วย Ground-truth fixtures (`dtm67-111-source.md`):
+     - **กรณีคำถามไม่มีหลักฐาน (Quantum Physics):** ได้รับ JSON response ที่มี `evidenceStatus: "insufficient"`, `verification.verdict: "INSUFFICIENT_EVIDENCE"`, และ `references: []` อย่างแม่นยำ (Strict Refusal / Anti-Hallucination)
+     - **กรณีคำถาม Prefix / Suffix (Partial/Fallback Evidence):** ได้รับ JSON response ที่มี `evidenceStatus: "insufficient"` และ `verification.verdict: "FAIL"` (ไม่แสดงผลเป็น PASS เมื่อหลักฐานไม่สมบูรณ์)
+   - **ขั้นตอนการตรวจสอบหน้าจอด้วยตนเอง (Manual Test Instructions):**
+     1. เปิดแอปพลิเคชันผ่าน Development URL จริง (เช่น `https://ais-dev-s3opyhgsjkj6ih4zmqszrl-696853797213.asia-northeast1.run.app`)
+     2. ไปที่แท็บ **"คลังเอกสารการเรียน" (Document Library)** เลือกเอกสาร `dtm67-111-source.md`
      3. ตั้งค่าโหมดเป็น **"โหมดติวอิงเอกสาร" (Document Grounding)**
-     4. ทดสอบถามคำถามเกี่ยวกับ Prefix และ Suffix หรือคำถามที่หลักฐานไม่ครบถ้วน
-     5. ตรวจสอบว่าระบบแสดงข้อความแจ้งเตือนสถานะ `insufficient` / `overgeneralized` อย่างถูกต้อง, ไม่มี locator ซ้ำหรือผิดรูป, และไม่มีการให้สถานะ PASS เมื่อหลักฐานไม่เพียงพอ
+     4. ทดสอบถามคำถามเกี่ยวกับ Prefix/Suffix หรือคำถามที่หลักฐานไม่เพียงพอ
+     5. ตรวจสอบหน้าจอว่า UI แสดงกล่องแจ้งเตือนสถานะการตรวจสอบ, ไม่แสดง PASS เกินจริง, และอ้างอิง Locator ถูกต้องไม่มี HTML entity ตกค้าง
+
 
 
 
