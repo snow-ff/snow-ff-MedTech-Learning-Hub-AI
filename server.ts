@@ -1220,7 +1220,8 @@ ${formattedChunks}
       // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
       let response: any;
       if (process.env.VITEST && customGeminiMock) {
-        response = await customGeminiMock({ model: "gemini-3.8-flash", contents, systemInstruction, isDocumentGrounding });
+        const tools = isDocumentGrounding ? undefined : [{ googleSearch: {} }];
+        response = await customGeminiMock({ model: "gemini-3.8-flash", contents, systemInstruction, isDocumentGrounding, tools });
       } else if (process.env.VITEST) {
         response = {
           text: "ผลลัพธ์จำลองออฟไลน์จาก Mock Gemini สำหรับการทดสอบ (Offline Mock Response)",
