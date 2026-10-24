@@ -304,7 +304,24 @@
      2. ไปที่แท็บ **"คลังเอกสารการเรียน" (Document Library)** เลือกเอกสาร `dtm67-111-source.md`
      3. ตั้งค่าโหมดเป็น **"โหมดติวอิงเอกสาร" (Document Grounding)**
      4. ทดสอบถามคำถามเกี่ยวกับ Prefix/Suffix หรือคำถามที่หลักฐานไม่เพียงพอ
-     5. ตรวจสอบหน้าจอว่า UI แสดงกล่องแจ้งเตือนสถานะการตรวจสอบ, ไม่แสดง PASS เกินจริง, และอ้างอิง Locator ถูกต้องไม่มี HTML entity ตกค้าง
+## 16. New Regression Audit & Investigation (Chat UI Observations)
+
+### 16.1 รายงานอาการและหลักฐานใหม่ 4 กรณี (REPORTED / PENDING)
+1. **อาการ 1 (Prefix/Suffix Academic Verification PASS with Unsupported Chunks):**
+   - **หลักฐาน:** คำถาม Prefix/Suffix อาจคืนค่า verdict เป็น `PASS` ที่ระดับภาพรวมคำตอบ แม้ว่าบาง References ใน `chunkReferences` จะถูกจัดเป็น `unsupported_citation` เนื่องจากความไม่สอดคล้องระหว่างประเมินภาพรวม (Answer-level) และการประเมินราย Chunk (Reference-level)
+2. **อาการ 2 (Quantum Physics Query Showing Unrelated Content & PASS):**
+   - **หลักฐาน:** หากคำค้นหาข้ามหัวข้อมีคำศัพท์ทั่วไปที่ตรงกับบาง Chunk (เช่น "physics" หรือคำทับศัพท์) ระบบ Retrieval อาจให้คะแนน score >= 4 และนำ Chunk นั้นมาแสดงผลเป็นคำตอบ
+3. **อาการ 3 (HTML Entity Encoding in Locators like `&#x33;`):**
+   - **หลักฐาน:** Locator แสดงผลเป็น `&#x33;`, `&#x35;`, `&#x31;&#x30;` เนื่องจากสตริงที่ส่งมาจาก backend บางจุดผ่านการ encode มาก่อนแต่ยังไม่ถูก decode ด้วย `decodeHtmlEntities()` ก่อนแสดงผลใน UI หรือ Locator builder
+4. **อาการ 4 (Cross-Section Chunk Mixing in References):**
+   - **หลักฐาน:** `retrieveGroundedChunks()` ดึง chunks จากหลายส่วน (Section 1 และ Section 3) ปะปนกันเนื่องจากคะแนน keyword matching เกินเกณฑ์ขั้นต่ำ พร้อมกัน
+
+### 16.2 Acceptance Criteria (เกณฑ์การยอมรับสำหรับการแก้ไขในอนาคต)
+- **AC-1:** หากมี References ใด ๆ ในคำตอบถูกจัดเป็น `unsupported_citation`, verdict ภาพรวมต้องไม่แสดงเป็น `PASS` (ต้องแสดงเป็น `WARNING` หรือ `INSUFFICIENT_EVIDENCE`)
+- **AC-2:** คำถามที่ไม่มีหลักฐานในเอกสาร (เช่น Quantum Physics) ต้องส่งคืน `evidenceStatus: "insufficient"` และ verdict `"INSUFFICIENT_EVIDENCE"` โดยไม่มีการนำ Chunk ที่ไม่เกี่ยวข้องกันมาแสดงเป็นคำตอบที่ยืนยันแล้ว
+- **AC-3:** Locator และ Title ทุกรายการต้องผ่าน `decodeHtmlEntities()` อย่างสมบูรณ์ ห้ามปรากฏรหัส HTML entity เช่น `&#x33;`
+- **AC-4:** การดึง References ต้องจำกัดเฉพาะ Chunk ที่เกี่ยวข้องจริง และป้องกันการปะปนข้าม Section ที่ไม่มีความเกี่ยวข้องทางความหมาย
+
 
 
 
