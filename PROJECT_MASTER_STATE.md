@@ -243,19 +243,22 @@
 
 ---
 
-## 11. Targeted P0 Audit: Fallback Evidence Integrity (v1.2)
+---
 
-### 11.1 ผลการตรวจสอบและสาเหตุหลัก (Root Cause Analysis)
-1. **DTM Static Fallback Overclaiming:**
-   - **ปัญหา:** เมื่อระบบเข้าสู่ Academic Fallback Mode (เช่น กรณี HTTP 429 Rate Limit หรือโควตา API เต็ม) ข้อความสำรองสำหรับหัวข้อ `dtm` เคยระบุว่า *"รายวิชา 69 รายวิชาในทะเบียน: ยืนยันแล้ว (Verified) จากเล่มหลักสูตร มคอ.2 ม.วลัยลักษณ์ หน้า 4-8 ครบทุกวิชา"* ซึ่งทำให้ผู้ใช้เข้าใจผิดว่ามีการตรวจสอบเนื้อหาแบบไดนามิกจากเอกสาร ทั้งที่อยู่ในโหมดออฟไลน์
-   - **การแก้ไข:** ปรับปรุงข้อความใน `server.ts` (`matchedTopic === 'dtm'`) ให้แสดงสถานะอย่างโปร่งใสว่าเป็น **"ข้อมูลสำรองวิชาการ (Static Curriculum Fallback Knowledge)"** พร้อมระบุสถานะแหล่งอ้างอิงว่ายังไม่ได้ตรวจสอบเนื้อหาแบบไดนามิกในเซสชันนี้
-2. **Test Suite Discrepancy & Verification:**
-   - ตรวจสอบจำนวน Test Cases ใน `webSearchGrounding.test.ts` (12 tests) และยืนยันว่าไม่มีการเพิ่ม Test ปลอม ทุก Unit และ Integration Tests ทำงานออฟไลน์ด้วย Deterministic Fixtures โดยไม่มีการเรียก Live API หรือเว็บสด
+## 12. P0-A Integration Test Offline Isolation & P0-B Fallback Audit (v1.2)
 
-### 11.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
-- **Complete Test Suite (`npx vitest run`):** 21 test files, **226 tests passed 100%**
+### 12.1 รายการแก้ไขตามเกณฑ์ P0-A และ P0-B
+1. **P0-A Integration Test Offline Isolation (`server.ts`, `searchModeIntegration.test.ts`):**
+   - เพิ่มฟังก์ชัน `setCustomGeminiMock()` และตรรกะตรวจสอบ `process.env.VITEST` ใน `server.ts` เพื่อดักจับและส่งคืนผลลัพธ์จำลอง (Deterministic Offline Mock Response) แทนการเรียกออกภายนอกไปยัง Gemini API จริง
+   - อัปเดต `src/lib/searchModeIntegration.test.ts` ให้กำหนด Mock ผ่าน `setCustomGeminiMock()` ใน `beforeAll` และเคลียร์ใน `afterAll` ส่งผลให้ชุดทดสอบ Integration Tests ทำงานออฟไลน์ 100% โดยไม่มีการส่ง Network Requests หรือติดปัญหา Rate Limit (HTTP 429)
+2. **P0-B Fallback Evidence Integrity (`server.ts`):**
+   - ยืนยันความโปร่งใสของสถานะ Academic Fallback สำหรับหลักสูตร DTM โดยกำจัดข้อกล่าวอ้าง unverified และระบุชัดเจนว่าเป็น **"Static Curriculum Fallback Knowledge"**
+
+### 12.2 บันทึกผลการรันชุดทดสอบจริงล่าสุด (VERIFIED Execution Records)
+- **Complete Test Suite (`npx vitest run`):** 21 test files, **226 tests passed 100%** (ผ่านทุกรายการโดยไม่มีการเรียก External API)
 - **Type Check & Lint (`npm run lint` / `tsc --noEmit`):** Exit Code `0` (0 errors, 0 warnings)
 - **Application Build (`compile_applet` / `npm run build`):** สำเร็จสมบูรณ์ (`Build succeeded`)
+
 
 
 

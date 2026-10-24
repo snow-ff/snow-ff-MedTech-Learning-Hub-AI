@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, Server } from 'node:http';
-import { app, getAcademicFallback } from '../../server';
+import { app, getAcademicFallback, setCustomGeminiMock } from '../../server';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -36,6 +36,21 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
   };
 
   beforeAll(async () => {
+    setCustomGeminiMock(async () => {
+      return {
+        text: "ผลลัพธ์จำลองจากการทดสอบ Integration Test ออฟไลน์",
+        candidates: [{
+          groundingMetadata: {
+            webSearchQueries: ["integration test query"],
+            groundingChunks: [{ web: { uri: "https://who.int/test", title: "WHO Test Guideline" } }],
+            groundingSupports: [{
+              segment: { startIndex: 0, endIndex: 14, text: "ผลลัพธ์จำลอง" },
+              groundingChunkIndices: [0]
+            }]
+          }
+        }]
+      };
+    });
     server = createServer(app);
     await new Promise<void>((resolve) => {
       server.listen(0, '127.0.0.1', () => {
@@ -47,6 +62,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
   });
 
   afterAll(async () => {
+    setCustomGeminiMock(null);
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 

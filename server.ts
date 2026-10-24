@@ -44,6 +44,11 @@ const ai = new GoogleGenAI({
   }
 });
 
+let customGeminiMock: ((params: any) => Promise<any>) | null = null;
+export function setCustomGeminiMock(mockFn: ((params: any) => Promise<any>) | null) {
+  customGeminiMock = mockFn;
+}
+
 function getDirectTopic(text: string): string | null {
   const t = text.toLowerCase();
   if (t.includes("serum") || t.includes("plasma") || t.includes("ซีรั่ม") || t.includes("พลาสมา")) {
@@ -1209,20 +1214,39 @@ ${formattedChunks}
     try {
       console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
       // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents,
-        config: {
-          systemInstruction,
-          temperature: isDocumentGrounding ? 0.1 : 0.3,
-          maxOutputTokens: 2048,
-          tools: isDocumentGrounding ? undefined : [{ googleSearch: {} }],
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.LOW
+      let response: any;
+      if (process.env.VITEST && customGeminiMock) {
+        response = await customGeminiMock({ model: "gemini-3.8-flash", contents, systemInstruction, isDocumentGrounding });
+      } else if (process.env.VITEST) {
+        response = {
+          text: "ผลลัพธ์จำลองออฟไลน์จาก Mock Gemini สำหรับการทดสอบ (Offline Mock Response)",
+          candidates: [{
+            groundingMetadata: {
+              webSearchQueries: ["mock search query"],
+              groundingChunks: [{ web: { uri: "https://who.int/guideline", title: "WHO Guideline" } }],
+              groundingSupports: [{
+                segment: { startIndex: 0, endIndex: 11, text: "ผลลัพธ์จำลอง" },
+                groundingChunkIndices: [0]
+              }]
+            }
+          }]
+        };
+      } else {
+        response = await ai.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents,
+          config: {
+            systemInstruction,
+            temperature: isDocumentGrounding ? 0.1 : 0.3,
+            maxOutputTokens: 2048,
+            tools: isDocumentGrounding ? undefined : [{ googleSearch: {} }],
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.LOW
+            },
+            abortSignal: attemptAbortController.signal
           },
-          abortSignal: attemptAbortController.signal
-        },
-      });
+        });
+      }
 
       clearTimeout(attemptTimeoutTimer);
       const attemptDuration = Date.now() - attemptStartTime;
