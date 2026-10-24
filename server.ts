@@ -859,8 +859,8 @@ export function getAcademicFallback(
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
   const requestId = (req.headers['x-request-id'] as string) || `req-${Date.now()}`;
-  const { messages, prompt, documentContext, courseContext } = req.body;
-  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
+  const { messages, prompt, documentContext, courseContext, searchMode } = req.body;
+  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -941,20 +941,23 @@ app.post("/api/gemini/generate", async (req, res) => {
   }
 
   const isDocumentGrounding = Boolean(
+    searchMode !== 'web_search' &&
     documentContext &&
     typeof documentContext === 'object' &&
     Array.isArray(documentContext.chunks) &&
     documentContext.chunks.length > 0
   );
 
-  const explicitDocRequest = latestPrompt.toLowerCase().includes('จากเอกสาร') ||
+  const explicitDocRequest = searchMode !== 'web_search' && (
+    latestPrompt.toLowerCase().includes('จากเอกสาร') ||
     latestPrompt.toLowerCase().includes('ในเอกสาร') ||
     latestPrompt.toLowerCase().includes('เอกสารนี้') ||
     latestPrompt.toLowerCase().includes('ตามเอกสาร') ||
     latestPrompt.toLowerCase().includes('อ้างอิงจาก') ||
-    (/หน้า|page/i.test(latestPrompt) && !isDocumentGrounding);
+    (/หน้า|page/i.test(latestPrompt) && !isDocumentGrounding)
+  );
 
-  if (!isDocumentGrounding && explicitDocRequest) {
+  if (!isDocumentGrounding && explicitDocRequest && searchMode !== 'web_search') {
     return res.json({
       text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Offline Document Grounding อย่างแม่นยำ`,
       source: "academic_fallback",
@@ -1354,8 +1357,8 @@ ${formattedChunks}
     totalBackendDurationMs: totalBackendDuration
   }));
 
-  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and documentContext)
-  const fallback = getAcademicFallback(latestPrompt, validatedMessages, documentContext);
+  // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and guarded documentContext)
+  const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null);
 
   let serviceNoticeText = "";
   if (lastError) {

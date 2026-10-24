@@ -28,7 +28,8 @@ import {
   ChevronDown,
   ChevronUp,
   Layers,
-  Check
+  Check,
+  Globe
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
@@ -178,6 +179,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
+  const [searchMode, setSearchMode] = useState<'document' | 'web_search'>('document');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg-1',
@@ -324,6 +327,21 @@ export default function App() {
     setSelectedLearningCourse(null);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputQuery(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const queryText = inputQuery.trim();
@@ -341,6 +359,9 @@ export default function App() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInputQuery('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setIsGenerating(true);
 
     try {
@@ -384,9 +405,9 @@ export default function App() {
         }
       }
 
-      // If activeDocument is selected, send all document chunks to server for server-side grounding retrieval
+      // If activeDocument is selected and searchMode is document, send all document chunks
       let documentContextPayload: any = undefined;
-      if (activeDocument && activeDocument.chunks && activeDocument.chunks.length > 0) {
+      if (searchMode !== 'web_search' && activeDocument && activeDocument.chunks && activeDocument.chunks.length > 0) {
         documentContextPayload = {
           title: activeDocument.title,
           courseCode: activeDocument.courseCode,
@@ -405,7 +426,7 @@ export default function App() {
 
       const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const clientStartTime = Date.now();
-      console.log(`[Req ${requestId}] [Perf Frontend] Sending request to /api/gemini/generate at ${new Date().toISOString()}`);
+      console.log(`[Req ${requestId}] [Perf Frontend] Sending request to /api/gemini/generate at ${new Date().toISOString()} (searchMode: ${searchMode})`);
       const response = await fetch('/api/gemini/generate', {
         method: 'POST',
         headers: {
@@ -414,6 +435,7 @@ export default function App() {
         },
         body: JSON.stringify({
           messages: validSlice,
+          searchMode,
           documentContext: documentContextPayload,
           courseContext: selectedLearningCourse ? {
             code: selectedLearningCourse.code,
@@ -448,7 +470,7 @@ export default function App() {
       // Verify academic answer using backend report or client-side evaluation guardrail
       const verificationReport: AcademicVerificationReport | undefined =
         data.verification ||
-        (activeDocument
+        (searchMode !== 'web_search' && activeDocument
           ? verifyAcademicAnswer({
               query: queryText,
               candidateAnswer: data.text || '',
@@ -468,7 +490,7 @@ export default function App() {
         content: data.text || 'ไม่พบข้อมูลคำตอบจากระบบ',
         timestamp: new Date(),
         source: data.source || (documentContextPayload ? 'document_grounding' : 'academic_fallback'),
-        groundedDocumentTitle: activeDocument ? activeDocument.title : undefined,
+        groundedDocumentTitle: (searchMode !== 'web_search' && activeDocument) ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
         verification: verificationReport,
         references: Array.isArray(data.references) ? data.references.map((r: any) => ({
@@ -538,7 +560,7 @@ export default function App() {
         </div>
 
         {/* Zone 2: Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+        <nav className="hidden lg:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setActiveTab('chat')}
             className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
@@ -703,47 +725,47 @@ export default function App() {
         </div>
       )}
 
-      {/* MOBILE NAV */}
-      <div className="flex md:hidden border-b border-slate-800 bg-slate-900 px-4 py-2 gap-1.5 overflow-x-auto">
+      {/* MOBILE & TABLET NAV */}
+      <div className="flex lg:hidden border-b border-slate-800 bg-slate-900/95 backdrop-blur px-2.5 sm:px-4 py-2 gap-1.5 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('chat')}
-          className={`py-1.5 px-2.5 rounded-lg text-xs font-medium text-center shrink-0 ${
-            activeTab === 'chat' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 min-h-[40px] flex items-center justify-center transition-all ${
+            activeTab === 'chat' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
           }`}
         >
           AI แชท
         </button>
         <button
           onClick={() => setActiveTab('documents')}
-          className={`py-1.5 px-2.5 rounded-lg text-xs font-medium text-center shrink-0 relative ${
-            activeTab === 'documents' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 min-h-[40px] flex items-center justify-center relative transition-all ${
+            activeTab === 'documents' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
           }`}
         >
           คลังเอกสาร
           {activeDocument && (
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1 align-middle animate-pulse" />
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1.5 align-middle animate-pulse" />
           )}
         </button>
         <button
           onClick={() => setActiveTab('vocabulary')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
-            activeTab === 'vocabulary' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 sm:flex-1 min-h-[40px] flex items-center justify-center transition-all ${
+            activeTab === 'vocabulary' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
           }`}
         >
           คลังศัพท์
         </button>
         <button
           onClick={() => setActiveTab('references')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
-            activeTab === 'references' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 sm:flex-1 min-h-[40px] flex items-center justify-center transition-all ${
+            activeTab === 'references' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
           }`}
         >
           อ้างอิง
         </button>
         <button
           onClick={() => setActiveTab('curriculum')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
-            activeTab === 'curriculum' ? 'bg-cyan-600 text-white' : 'text-slate-400 bg-slate-950'
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 sm:flex-1 min-h-[40px] flex items-center justify-center transition-all ${
+            activeTab === 'curriculum' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
           }`}
         >
           หลักสูตร
@@ -777,12 +799,12 @@ export default function App() {
 
             {/* Selected Learning Course Status Bar */}
             {selectedLearningCourse && (
-              <div className="bg-indigo-950/50 border-b border-indigo-800/50 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+              <div className="bg-indigo-950/60 border-b border-indigo-800/50 px-3.5 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                     <GraduationCap className="w-3.5 h-3.5" />
                   </div>
-                  <div className="truncate">
+                  <div className="min-w-0 break-words">
                     <span className="font-semibold text-white">บริบทการเรียนรู้วิชา: </span>
                     <span className="text-indigo-300 font-mono font-bold">{selectedLearningCourse.code}</span>{' '}
                     <span className="text-slate-200 font-medium">{selectedLearningCourse.titleThai}</span>
@@ -794,24 +816,24 @@ export default function App() {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <button
                     onClick={() => setActiveLearningGuideCourse(selectedLearningCourse)}
-                    className="px-2.5 py-1 rounded-md bg-indigo-900 hover:bg-indigo-800 text-indigo-200 text-[11px] font-medium flex items-center gap-1 transition-colors border border-indigo-700/60"
+                    className="px-2.5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-800 text-indigo-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-indigo-700/60 min-h-[36px]"
                     title="เปิดดูคู่มือปูพื้นฐานและคำถามทบทวนสำหรับวิชานี้"
                   >
-                    <BookOpen className="w-3 h-3 text-indigo-300" />
+                    <BookOpen className="w-3.5 h-3.5 text-indigo-300" />
                     <span>คู่มือปูพื้นฐาน</span>
                   </button>
                   <button
                     onClick={() => setActiveTab('curriculum')}
-                    className="text-indigo-400 hover:text-indigo-300 underline text-[11px]"
+                    className="px-2 py-1.5 text-indigo-400 hover:text-indigo-300 underline text-xs min-h-[36px] flex items-center"
                   >
                     เปลี่ยนวิชา
                   </button>
                   <button
                     onClick={handleClearCourseContext}
-                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs transition-colors min-h-[36px] flex items-center"
                     title="ยกเลิกบริบทวิชา (กลับสู่แชททั่วไป)"
                   >
                     ✕ ล้างบริบทวิชา
@@ -822,34 +844,34 @@ export default function App() {
 
             {/* Active Document Grounding Status Bar */}
             {activeDocument ? (
-              <div className="bg-cyan-950/40 border-b border-cyan-800/40 px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+              <div className="bg-cyan-950/50 border-b border-cyan-800/40 px-3.5 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
                     <BookOpen className="w-3.5 h-3.5" />
                   </div>
-                  <div className="truncate">
+                  <div className="min-w-0 break-words">
                     <span className="font-semibold text-white">โหมดติวอิงเอกสาร: </span>
                     <span className="text-cyan-300 font-medium">{activeDocument.title}</span>
                     {activeDocument.courseCode && (
-                      <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300">
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-mono">
                         {activeDocument.courseCode}
                       </span>
                     )}
-                    <span className="ml-2 text-slate-400 text-[11px] hidden sm:inline">
+                    <span className="ml-2 text-slate-400 text-xs hidden sm:inline">
                       ({activeDocument.chunks.length} Chunks • Strict Anti-Hallucination)
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <button
                     onClick={() => setActiveTab('documents')}
-                    className="text-cyan-400 hover:text-cyan-300 underline text-[11px]"
+                    className="px-2 py-1.5 text-cyan-400 hover:text-cyan-300 underline text-xs min-h-[36px] flex items-center"
                   >
                     เปลี่ยนเอกสาร
                   </button>
                   <button
                     onClick={() => setActiveDocument(null)}
-                    className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs min-h-[36px] flex items-center transition-colors"
                     title="ปลดเอกสารออก เพื่อกลับสู่โหมด AI ทั่วไป"
                   >
                     ปลดออก
@@ -891,13 +913,13 @@ export default function App() {
                     {msg.role === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                   </div>
                   <div
-                    className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                    className={`p-4 sm:p-5 rounded-2xl text-[15px] sm:text-base leading-[1.75] ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white rounded-tr-none'
-                        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none shadow-sm'
+                        : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none shadow-sm'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <div className="whitespace-pre-wrap medical-text-wrap">{msg.content}</div>
 
                     {msg.groundedDocumentTitle && (
                       <div className={`mt-2 pt-2 border-t border-slate-800/80 flex items-center gap-1.5 text-xs font-medium ${
@@ -1140,12 +1162,14 @@ export default function App() {
                                   <span className="text-slate-200 font-semibold block">{ref.title}</span>
                                 )}
                                 {(ref as any).excerpt && (
-                                  <p className="text-[11px] text-slate-300 italic mt-1 bg-slate-900/90 p-1.5 rounded border border-slate-800/80">
+                                  <p className="text-xs sm:text-[13px] text-slate-200 italic mt-1.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-lg border border-slate-800/80 leading-relaxed font-sans">
                                     "{(ref as any).excerpt}"
                                   </p>
                                 )}
-                                <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
-                                  <span>Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `Chunk #${idx + 1}`}</span>
+                                <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                                    Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `Chunk #${idx + 1}`}
+                                  </span>
                                   <span className={
                                     ref.verificationStatus === 'source_grounded'
                                       ? 'text-emerald-400 font-medium'
@@ -1192,23 +1216,97 @@ export default function App() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Chat Input form */}
-            <form onSubmit={handleSendMessage} className="p-4 bg-slate-900 border-t border-slate-800 flex gap-3">
-              <input
-                type="text"
-                value={inputQuery}
-                onChange={(e) => setInputQuery(e.target.value)}
-                placeholder="สอบถามเกี่ยวกับระบบสารสนเทศสุขภาพ (EHR/EMR), มาตรฐาน HL7/FHIR, DICOM, AI ทางการแพทย์ หรือเลือกวิชาจากแท็บหลักสูตรเพื่อเริ่มเรียน..."
-                className="flex-1 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-all"
-              />
-              <button
-                type="submit"
-                disabled={!inputQuery.trim() || isGenerating}
-                className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white font-medium text-sm flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all shrink-0"
-              >
-                <span>ส่งคำถาม</span>
-                <Send className="w-4 h-4" />
-              </button>
+            {/* Responsive Chat Input Form */}
+            <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900 border-t border-slate-800 flex flex-col gap-2.5">
+              {/* Mode & Action Control Toolbar */}
+              <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* AI Search Mode Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSearchMode(prev => prev === 'document' ? 'web_search' : 'document')}
+                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition-all min-h-[38px] sm:min-h-[34px] border ${
+                      searchMode === 'document'
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/80 hover:bg-emerald-900/60 shadow-sm'
+                        : 'bg-cyan-950/80 text-cyan-300 border-cyan-700/80 hover:bg-cyan-900/60 shadow-sm'
+                    }`}
+                    title={
+                      searchMode === 'document'
+                        ? 'คลิกเพื่อสลับเป็นโหมดค้นหาเว็บด้วย AI (Google Search Grounding)'
+                        : 'คลิกเพื่อสลับเป็นโหมดติวอิงเอกสาร (Document Grounding)'
+                    }
+                    aria-label="สลับโหมดการตอบของ AI"
+                  >
+                    {searchMode === 'document' ? (
+                      <>
+                        <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="font-semibold">โหมดติวอิงเอกสาร</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-200 font-mono hidden sm:inline">
+                          Anti-Hallucination
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="font-semibold">ค้นหาเว็บ AI</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-900/80 text-cyan-200 font-mono hidden sm:inline">
+                          Google Search Grounding
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  <span className="text-[11px] text-slate-400 hidden md:inline">
+                    {searchMode === 'document'
+                      ? (activeDocument ? `(อิงจาก: ${activeDocument.title})` : '(เลือกเอกสารในคลังเพื่อตรวจสอบหลักฐาน)')
+                      : '(สืบค้นข้อมูลวิชาการสดภายนอกด้วย Google Search Grounding)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={handleClearChat}
+                    title="ล้างประวัติการสนทนา"
+                    aria-label="ล้างประวัติการสนทนา"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs flex items-center gap-1 border border-slate-800 transition-colors min-h-[38px] sm:min-h-[34px]"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="hidden sm:inline">ล้างแชท</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Multi-line Textarea and Action Button Row */}
+              <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-end">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={textareaRef}
+                    rows={2}
+                    value={inputQuery}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={
+                      searchMode === 'document'
+                        ? activeDocument
+                          ? `ถามคำถามจาก "${activeDocument.title}" (กด Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัดใหม่)...`
+                          : "ถามคำถามวิชาการ หรือเลือกเอกสารเพื่อเริ่มโหมดติวอิงเอกสาร..."
+                        : "ถามคำถามหรือสืบค้นข้อมูลวิชาการด้วย Google Search Grounding..."
+                    }
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-all resize-none min-h-[56px] max-h-[160px] leading-relaxed"
+                    aria-label="ช่องพิมพ์ข้อความถามคำถามวิชาการ"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!inputQuery.trim() || isGenerating}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition-all shrink-0 min-h-[44px]"
+                  aria-label="ส่งคำถาม"
+                >
+                  <span>ส่งคำถาม</span>
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </form>
           </div>
         )}

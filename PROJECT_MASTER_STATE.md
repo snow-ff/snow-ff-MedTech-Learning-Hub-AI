@@ -132,3 +132,18 @@
 1. **รักษาสถานะ Workspace:** ไม่ทำการแก้ไขโค้ดเพิ่มเติม และไม่ทำ Audit ทั้งระบบซ้ำในส่วนที่ผ่านการตรวจสอบแล้ว
 2. **ไม่เพิ่มฟีเจอร์นอกขอบเขต:** คงสถานะ MedTech Learning Hub AI v1.2 ให้มีเสถียรภาพสูงสุด
 3. **การส่งมอบและการบันทึก:** ใช้เอกสาร `PROJECT_MASTER_STATE.md` ฉบับนี้เป็น Single Source of Truth สำหรับสถานะโครงการ
+
+---
+
+## 7. Responsive Reading UX & Accessibility Implementation (v1.2 Release)
+
+| รายการปรับปรุง | สถานะ | รายละเอียดการทดสอบจริง |
+|---|---|---|
+| **1. Multi-line Chat Input & Touch Targets** | **VERIFIED** | ปรับเป็น `<textarea>` รองรับข้อความยาว ป้องกันปัญหาจอกดบีบบนจอ 320–430px, รองรับ `Enter` ส่งคำถาม / `Shift+Enter` ขึ้นบรรทัดใหม่, Touch target $\ge 44\text{px}$ |
+| **2. AI Search Mode Toggle Button** | **VERIFIED** | เพิ่มปุ่มสลับโหมดชัดเจนใน Chat Toolbar: `📚 โหมดติวอิงเอกสาร (Document Grounding)` vs `🌐 ค้นหาเว็บ AI (Google Search Grounding)`, ส่ง `searchMode` ใน API payload และประมวลผลถูกต้องใน `server.ts` |
+| **3. Long-form Reading Typography** | **VERIFIED** | ข้อความ Assistant ปรับขนาดเป็น `15px sm:text-base` ระยะบรรทัด `leading-[1.75]` พร้อมคลาส `medical-text-wrap` สำหรับศัพท์เทคนิคการแพทย์ยาว |
+| **4. Citation & Excerpt Legibility** | **VERIFIED** | ข้อความ Excerpt ปรับเป็น `text-xs sm:text-[13px]`, Locator Tag ปรับเป็น `text-xs font-mono`, คมชัด อ่านง่าย สอดคล้อง WCAG AA |
+| **5. Status Bars Mobile Wrapping** | **VERIFIED** | แถบบริบทวิชา (Selected Course) และแถบเอกสาร (Active Document) ปรับเป็น `flex-col sm:flex-row` พร้อมปุ่ม Action ห่อแถว (`flex-wrap`) ไม่เกิดข้อความถูกตัดทอนจนอ่านไม่รู้เรื่องบน 320–430px |
+| **6. Tablet (768px) Header Breakpoint** | **VERIFIED** | ปรับ Desktop Nav เป็น `hidden lg:flex` และ Sub-nav เป็น `flex lg:hidden` ทำให้บนแท็บเล็ตแนวตั้ง (iPad 768px) แถบหัวเรื่องและปุ่มบัญชีไม่ล้นหรือซ้อนทับกัน |
+| **7. P0 Regression Gate** | **VERIFIED** | ชุดทดสอบ 19 ไฟล์ 207 รายการย่อยผ่าน 100%, ไม่มีการตัดคำไทยกลางคำ, ไม่มีสระนำเสียรูป, ไม่มี HTML entities หลุด, และทดสอบ Preview จริงสำเร็จ |
+
