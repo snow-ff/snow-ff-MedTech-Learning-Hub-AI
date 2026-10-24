@@ -948,6 +948,16 @@ app.post("/api/gemini/generate", async (req, res) => {
     documentContext.chunks.length > 0
   );
 
+  // 1. If user explicitly selected 'document' mode, but no active document is provided or active document has no chunks
+  if (searchMode === 'document' && !isDocumentGrounding) {
+    return res.json({
+      text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"** หรือสลับเป็น **"ค้นหาเว็บ AI"** เพื่อค้นคว้าข้อมูลทั่วไป`,
+      source: "academic_fallback",
+      evidenceStatus: "insufficient",
+      references: []
+    });
+  }
+
   const explicitDocRequest = searchMode !== 'web_search' && (
     latestPrompt.toLowerCase().includes('จากเอกสาร') ||
     latestPrompt.toLowerCase().includes('ในเอกสาร') ||
@@ -1366,10 +1376,14 @@ ${formattedChunks}
       lastError.message?.includes("503") ||
       lastError.message?.includes("UNAVAILABLE") ||
       lastError.message?.includes("overloaded");
-    if (is503OrUnavailable) {
-      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 UNAVAILABLE) — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากคลังเอกสาร MedTech Hub ให้โดยอัตโนมัติ)*\n\n`;
+    if (isDocumentGrounding) {
+      serviceNoticeText = is503OrUnavailable
+        ? `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503) — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ)*\n\n`
+        : `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ)*\n\n`;
     } else {
-      serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากคลังเอกสาร MedTech Hub ให้โดยอัตโนมัติ)*\n\n`;
+      serviceNoticeText = is503OrUnavailable
+        ? `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503) — ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ)*\n\n`
+        : `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ)*\n\n`;
     }
   }
 
@@ -1389,14 +1403,14 @@ ${formattedChunks}
     },
     references: fallback.references.map(r => ({
       ...r,
-      type: r.uri ? (isDocumentGrounding ? "document_chunk" : "external_academic_link") : "simulated_reference",
+      type: isDocumentGrounding ? "document_chunk" : "external_academic_link",
       linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
       verificationStatus: isDocumentGrounding
         ? (r.verificationStatus || ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation"))
         : "unverified",
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
-      evidenceLocator: (r as any).evidenceLocator || (r.uri ? (isDocumentGrounding ? (documentContext?.title ? `เอกสาร: ${decodeHtmlEntities(documentContext.title)}` : "ชิ้นส่วนเอกสารต้นทาง") : "Direct Academic Source") : null),
+      evidenceLocator: isDocumentGrounding ? ((r as any).evidenceLocator || (documentContext?.title ? `เอกสาร: ${decodeHtmlEntities(documentContext.title)}` : "ชิ้นส่วนเอกสารต้นทาง")) : null,
       contentVersion: "1.2"
     })),
   });
@@ -1425,4 +1439,8 @@ async function startServer() {
   server.headersTimeout = 330000;
 }
 
-startServer();
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  startServer();
+}
+
+export { app };

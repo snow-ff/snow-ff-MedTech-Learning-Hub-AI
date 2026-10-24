@@ -331,14 +331,16 @@ export default function App() {
     setInputQuery(e.target.value);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if (inputQuery.trim() && !isGenerating) {
+        handleSendMessage();
+      }
     }
   };
 
@@ -789,7 +791,8 @@ export default function App() {
                 <button
                   onClick={handleClearChat}
                   title="ล้างประวัติแชท"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all border border-slate-700 shadow-sm"
+                  aria-label="ล้างประวัติแชท"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all border border-slate-700 shadow-sm min-h-[44px] sm:min-h-[38px]"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-red-400" />
                   <span>ล้างแชท</span>
@@ -1166,26 +1169,37 @@ export default function App() {
                                     "{(ref as any).excerpt}"
                                   </p>
                                 )}
-                                <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                    Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `Chunk #${idx + 1}`}
-                                  </span>
-                                  <span className={
-                                    ref.verificationStatus === 'source_grounded'
-                                      ? 'text-emerald-400 font-medium'
-                                      : ref.verificationStatus === 'unsupported_citation'
-                                      ? 'text-rose-400 font-medium'
-                                      : 'text-slate-400'
-                                  }>
-                                    • ชิ้นส่วนอ้างอิง (Chunk Status): {
+                                {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
+                                  <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                                      Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `ชิ้นส่วนที่ ${idx + 1}`}
+                                    </span>
+                                    <span className={
                                       ref.verificationStatus === 'source_grounded'
-                                        ? 'พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)'
+                                        ? 'text-emerald-400 font-medium'
                                         : ref.verificationStatus === 'unsupported_citation'
-                                        ? '⚠️ ชิ้นส่วนไม่สนับสนุนคำถาม (Unsupported Chunk)'
-                                        : 'แหล่งภายนอกยังไม่รับรอง (Unverified External)'
-                                    }
-                                  </span>
-                                </div>
+                                        ? 'text-rose-400 font-medium'
+                                        : 'text-slate-400'
+                                    }>
+                                      • ชิ้นส่วนอ้างอิง: {
+                                        ref.verificationStatus === 'source_grounded'
+                                          ? 'พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)'
+                                          : ref.verificationStatus === 'unsupported_citation'
+                                          ? '⚠️ ชิ้นส่วนไม่สนับสนุนคำถาม (Unsupported Chunk)'
+                                          : 'แหล่งภายนอกยังไม่รับรอง (Unverified External)'
+                                      }
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-slate-400 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 font-semibold">
+                                      🌐 Web Search Source
+                                    </span>
+                                    <span className="text-slate-400">
+                                      • แหล่งอ้างอิงภายนอกจาก Google Search Grounding
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1225,7 +1239,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setSearchMode(prev => prev === 'document' ? 'web_search' : 'document')}
-                    className={`px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition-all min-h-[38px] sm:min-h-[34px] border ${
+                    className={`px-3.5 py-2 sm:py-1.5 sm:px-3 rounded-xl font-medium flex items-center gap-1.5 transition-all min-h-[44px] sm:min-h-[38px] border ${
                       searchMode === 'document'
                         ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/80 hover:bg-emerald-900/60 shadow-sm'
                         : 'bg-cyan-950/80 text-cyan-300 border-cyan-700/80 hover:bg-cyan-900/60 shadow-sm'
@@ -1269,7 +1283,7 @@ export default function App() {
                     onClick={handleClearChat}
                     title="ล้างประวัติการสนทนา"
                     aria-label="ล้างประวัติการสนทนา"
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs flex items-center gap-1 border border-slate-800 transition-colors min-h-[38px] sm:min-h-[34px]"
+                    className="px-3 py-2 sm:py-1.5 sm:px-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs flex items-center justify-center gap-1.5 border border-slate-800 transition-colors min-h-[44px] sm:min-h-[38px]"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                     <span className="hidden sm:inline">ล้างแชท</span>
@@ -1315,6 +1329,7 @@ export default function App() {
           <DocumentLibrary
             onSelectForChat={(doc) => {
               setActiveDocument(doc);
+              setSearchMode('document');
               setActiveTab('chat');
             }}
             activeChatDocumentId={activeDocument?.id}

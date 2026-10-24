@@ -147,3 +147,58 @@
 | **6. Tablet (768px) Header Breakpoint** | **VERIFIED** | ปรับ Desktop Nav เป็น `hidden lg:flex` และ Sub-nav เป็น `flex lg:hidden` ทำให้บนแท็บเล็ตแนวตั้ง (iPad 768px) แถบหัวเรื่องและปุ่มบัญชีไม่ล้นหรือซ้อนทับกัน |
 | **7. P0 Regression Gate** | **VERIFIED** | ชุดทดสอบ 19 ไฟล์ 207 รายการย่อยผ่าน 100%, ไม่มีการตัดคำไทยกลางคำ, ไม่มีสระนำเสียรูป, ไม่มี HTML entities หลุด, และทดสอบ Preview จริงสำเร็จ |
 
+---
+
+## 8. Search Mode End-to-End Integration & Viewport Accessibility Verification (v1.2)
+
+### 8.1 สรุปการตรวจสอบและปรับปรุงพฤติกรรม Search Mode (End-to-End)
+- **UI & Client Payload (`src/App.tsx`):**
+  - เพิ่มปุ่มสลับ `searchMode` ใน Chat Toolbar (`document` vs `web_search`) พร้อมสถานะ Active/Inactive ที่ชัดเจน
+  - เมื่อเลือกเอกสารในคลังเอกสาร ระบบจะตั้งค่า `searchMode` เป็น `'document'` โดยอัตโนมัติ
+  - เพิ่มการตรวจสอบ Input ก่อนส่ง: ป้องกันการส่งคำถามว่าง (Whitespace-only) ทั้งจากการคลิกปุ่มและกดปุ่ม Enter
+  - ขยายเพดานความสูงของ `<textarea>` อัตโนมัติเป็นสูงสุด 160px (`Math.min(scrollHeight, 160)`) พร้อม Scrollbar เมื่อเกิน
+  - แยกการแสดงผล Citation Card ระหว่าง `🌐 Web Search Source` และ `📄 Document Chunk Reference` เพื่อป้องกันไม่ให้แหล่งค้นเว็บถูกแสดงเป็น "Locator: Chunk #1" หรืออ้างอิงเอกสารโดยมิชอบ
+- **Backend Grounding Pipeline (`server.ts`):**
+  - กรณี `searchMode: 'document'` แต่ไม่มีเอกสารที่ Active (`isDocumentGrounding === false`): ตอบกลับด้วยสถานะ `academic_fallback`, `evidenceStatus: 'insufficient'`, `references: []` พร้อมข้อความแจ้งเตือนที่ชัดเจน ไม่ดึงผลค้นเว็บมาสวมรอยเป็นเอกสาร
+  - กรณี `searchMode: 'web_search'`: บังคับปิด `isDocumentGrounding = false` แม้จะมีเอกสารค้างอยู่ในเซสชัน และส่งต่อเฉพาะ `googleSearch` tools
+  - ปรับปรุงการแปลง Fallback References: ให้ `evidenceLocator: null` เสมอ เพื่อไม่ให้สร้าง Chunk ID หรือเลขหน้าปลอม
+  - แยก Port Collision Guard ใน `server.ts` ด้วย `!process.env.VITEST` ทำให้ชุดทดสอบ Vitest ทำงานคู่ขนานได้อย่างปลอดภัยโดยไม่เกิดข้อผิดพลาด `EADDRINUSE: 8080`
+
+### 8.2 ผลการรัน Integration Tests ครอบคลุม 6 สถานการณ์ (`src/lib/searchModeIntegration.test.ts`)
+| ลำดับการทดสอบ | สถานการณ์ที่กำหนด | ผลการทดสอบจริง |
+|---|---|---|
+| **Scenario 1** | `document` mode + มีเอกสารที่เลือกและมี chunks: ใช้หลักฐานจากเอกสารตามกฎเดิม ไม่ปะปน Google Search | **PASSED** (ใช้เฉพาะ chunks ของเอกสารที่เลือก ไม่เปิด `googleSearch`) |
+| **Scenario 2** | `web_search` mode + มีเอกสารที่เลือกอยู่: ค้นหาเว็บตามที่ระบุ ไม่แสดงแหล่งเว็บเป็นชิ้นส่วนเอกสาร | **PASSED** (ไม่ส่ง chunks เข้า prompt, แสดงเป็น `web_search` reference) |
+| **Scenario 3** | `document` mode + ไม่มีเอกสาร: ไม่แสดงว่าอิงเอกสารที่ไม่มีอยู่ คืนสถานะ `insufficient` พร้อมคำแนะนำ | **PASSED** (คืน fallback แจ้งให้เลือกเอกสารก่อน, `references: []`) |
+| **Scenario 4** | คำถามระบุให้อิงเอกสารหรือเลขหน้า แต่ไม่มีเอกสาร: ไม่สร้างหลักฐานหรือเลขหน้าปลอม | **PASSED** (ไม่มีการสร้าง locator หรือหน้าที่ไม่ได้ ingest) |
+| **Scenario 5** | สลับโหมดต่อเนื่อง (document -> web_search -> document): ใช้โหมดล่าสุดของแต่ละ request ไม่ค้างค่า | **PASSED** (แต่ละคำขอประมวลผลแยกอิสระตาม payload ปัจจุบัน) |
+| **Scenario 6** | Gemini API ขัดข้องในแต่ละโหมด: Fallback ปลอดภัย ไม่กล่าวอ้างว่าค้นเว็บหรืออิงเอกสารสำเร็จ | **PASSED** (คืน Fallback ที่ปลอดภัย ไม่ประดิษฐ์ citation) |
+
+### 8.3 บันทึกผลการรันคำสั่งทดสอบจริงล่าสุด (VERIFIED Execution Records)
+- **Vitest Suite:** `npx vitest run`
+  ```
+  Test Files  20 passed (20)
+  Tests       213 passed (213)
+  Duration    11.85s
+  ```
+- **Type Check & Lint:** `npm run lint` (`tsc --noEmit`)
+  - **ผลลัพธ์:** Exit Code `0` (0 errors, 0 warnings)
+- **Application Build:** `compile_applet` (`npm run build`)
+  - **ผลลัพธ์:** `Build succeeded - the applet is compiled`
+
+### 8.4 สถานะการตรวจสอบ Responsive & Accessibility ตามขนาด Viewport
+*(หมายเหตุ: เนื่องจากสภาพแวดล้อมเซิร์ฟเวอร์รันเป็น Linux Container แบบ Headless ไม่มี Browser GUI สำหรับเปิดเรนเดอร์ภาพหน้าจอจริง จึงบันทึกผล Visual Browser Rendering เป็น `NOT TESTED` อย่างตรงไปตรงมา โดยแสดงผลการตรวจสอบผ่าน DOM Structure, Tailwind CSS Breakpoints และ CSS Constraints)*
+
+| Viewport Resolution | ประเภทอุปกรณ์ | DOM / CSS Layout Verification | Visual Browser Preview |
+|---|---|---|---|
+| **320 × 640 px** | Mobile Small | `overflow-x: hidden`, Input Textarea Auto-grow (เพดาน 160px), Touch Target $\ge 44$px, Context Bar แบบ Wrap | **NOT TESTED** (Headless Container) |
+| **375 × 812 px** | Mobile Standard | ปุ่มสลับโหมดและปุ่มล้างแชท $\ge 44 \times 44$px, Font ขนาด 15px `leading-[1.75]`, ไม่มีการบีบอัดข้อความ | **NOT TESTED** (Headless Container) |
+| **430 × 932 px** | Mobile Large | การจัดเรียง Card และ Citation Tag มีระยะ Padding และ Gap เหมาะสม ไม่เกิดการซ้อนทับ | **NOT TESTED** (Headless Container) |
+| **768 × 1024 px** | Tablet Portrait | Header Responsive Breakpoint (`hidden lg:flex` / `flex lg:hidden`) แยกแถบเมนูหลักกับ Action ชัดเจน | **NOT TESTED** (Headless Container) |
+| **1024 × 768 px** | Tablet Landscape | Sidebar & Main Chat Content แสดงผลเต็มระนาบ ไม่เกิด Horizonal Scrollbar | **NOT TESTED** (Headless Container) |
+| **1440 × 900 px** | Desktop Large | กำหนด `max-w-4xl` สำหรับพื้นที่อ่านหนังสือ ป้องกันระยะสายตายาวเกินไปสำหรับการอ่านเชิงวิชาการ | **NOT TESTED** (Headless Container) |
+
+### 8.5 ยืนยันความปลอดภัยและการแยกสภาพแวดล้อม Git
+- ยืนยันว่าการแก้ไขทั้งหมดเกิดขึ้นภายใน `/app/applet` Workspace เท่านั้น
+- ไม่มีการสั่ง `git commit`, `git push`, `git merge`, หรือ Sync ใด ๆ ไปยัง GitHub `snow-ff/snow-ff-MedTech-Learning-Hub-AI` (Read-only reference ตามกฎความปลอดภัย)
+
