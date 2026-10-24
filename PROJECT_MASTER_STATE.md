@@ -282,9 +282,20 @@
 2. **Network Isolation Boundary Analysis:**
    - **VERIFIED:** การบล็อก `global.fetch` ป้องกันคำขอ HTTP/HTTPS ภายนอกทั้งหมดจากรหัสทดสอบ และการใช้ `setCustomGeminiMock()` ภายใต้ `process.env.VITEST` ช่วยรับประกันว่าไม่มีการเรียกใช้งาน Gemini API จริง
    - **PENDING / LIMITATION:** การรับประกันการแยกเครือข่ายระดับสมบูรณ์ (100% Network Isolation) จำกัดอยู่ระดับ `fetch` interceptor และ SDK Mock เท่านั้น (ยังไม่สามารถตรวจสอบระดับ packet-level socket proxy ในสภาพแวดล้อม Headless Container นี้ได้โดยไม่ต้องติดตั้งเครื่องมือภายนอก)
-3. **Academic Fallback & Claim Verification Separation:**
-   - **แยกความแตกต่างระหว่าง Source/Link Existence กับ Claim Truthfulness:** การปรากฏของ URL หรือ Reference ไม่ได้แปลว่าแต่ละ Claim ในคำตอบเป็นจริง 100% ระบบจึงกำหนดให้สถานะเป็น `unverified` หรือ `external_research` อย่างเคร่งครัด
-   - **Curriculum Scope Integrity:** ข้อมูลหลักสูตร DTM 2567 เป็น Static Curriculum Fallback Knowledge โดยไม่มีการอ้างว่าตรวจสอบครบทุก 69 วิชาแบบไดนามิกในเซสชันนี้
+## 15. End-to-End P0 Evidence-to-Preview Audit (`dtm67-111-source.md`)
+
+### 15.1 ผลการตรวจสอบเส้นทางข้อมูลแบบครบวงจร (End-to-End Pipeline Verification)
+1. **Document Ingestion (`dtm67-111-source.md` & Manifest):**
+   - **VERIFIED:** ตรวจสอบขนาดไฟล์ (33,296 bytes) และ SHA-256 hash (`bcd17b8f10d11fb1b470b3a4f5377ad1449066b64ab1e60f090a6f6cc593deeb`) ตรงกับ Manifest 100%
+   - ตรวจสอบโครงสร้างว่าใช้ Section dividers (`ส่วนที่ 1–7`) อย่างถูกต้องโดยไม่มีการอ้างอิงหน้าหนังสือปลอม (`hasNativePages: false`)
+2. **Chunk Retrieval & Dual-Requirement Prefix/Suffix Validation:**
+   - **VERIFIED:** ชุดทดสอบ Test I และ Test A-L ยืนยันว่า Prefix และ Suffix queries ต้องมีหลักฐานเฉพาะเจาะจงรายอนุประโยค (Clause-level) หากมีหลักฐานไม่ครบถ้วน (เช่น มีเฉพาะ Prefix แต่ถามหา Prefix และ Suffix) ระบบจะคืนสถานะ `insufficient` / `overgeneralized` ทันทีโดยไม่ปล่อยให้ผ่านเป็น PASS
+3. **Academic Verification Pipeline:**
+   - **VERIFIED:** `verifyAcademicAnswer()` ตรวจสอบ 4 ขั้นตอน (Retrieval, Evidence Fidelity, Answer Fidelity, Reasoning Fidelity) อย่างเข้มงวด
+4. **API Response & Frontend App.tsx Preview Rendering:**
+   - **VERIFIED (Code & State Level):** ตรวจสอบ `src/App.tsx` ว่ารองรับการแสดงผล Verification Report, Evidence Status, และ References อย่างถูกต้อง ทั้งในกรณีที่มีค่าและกรณีเป็น null/undefined
+   - **PENDING (Visual GUI Rendering):** การเรนเดอร์ภาพหน้าจอจริง (Visual Browser Rendering) คงสถานะเป็น **PENDING** เนื่องจากรันใน Headless Linux Container (แนะนำให้ผู้ใช้เปิดทดสอบใน Browser จริงผ่าน Development URL ที่กำหนด)
+
 
 
 
