@@ -124,12 +124,11 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
 
   const textBlocks = splitStringWithOverlap(cleanText, maxChars, overlap);
   textBlocks.forEach((blockText, idx) => {
-    // Note: Do NOT invent a synthetic page number when none exists in the source!
-    // pageNumber is left undefined to guarantee strict anti-hallucination.
+    // Note: Do NOT invent a synthetic chunkIndex or page number from array index when none exists in the source!
     chunks.push({
       id: `${docId}-chunk-${idx + 1}`,
       documentId: docId,
-      chunkIndex: idx + 1,
+      chunkIndex: undefined,
       pageNumber: undefined,
       hasNativePage: false,
       text: blockText,

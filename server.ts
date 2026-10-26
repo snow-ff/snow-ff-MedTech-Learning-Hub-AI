@@ -234,7 +234,17 @@ function buildChunkReferences(
     const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex ?? '');
     const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt || '', 140));
     const safePage = !isDocUnpaged ? c.pageNumber : undefined;
-    const finalLocator = cleanChunkLocator(c.chunkIndex ?? '', safePage);
+    const hasNative = (c as any).hasNativePage === true || (safePage !== undefined && safePage !== null);
+
+    let finalLocator = '';
+    if (hasNative && safePage) {
+      finalLocator = `หน้า ${safePage}`;
+    } else if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
+      finalLocator = cleanChunkLocator(c.chunkIndex);
+    }
+    if (!finalLocator) {
+      finalLocator = 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
+    }
 
     const queryLower = prompt.toLowerCase();
     const chunkLower = decodedText.toLowerCase();
@@ -378,36 +388,42 @@ export function getAcademicFallback(
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
     const isDocUnpaged = documentContext.hasNativePages === false;
-    const chunksForRetrieval = documentContext.chunks.map((c, idx) => {
-      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : '';
-      const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
-      const parsedIdx = parseInt(cleanIdxStr, 10);
-      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : undefined;
+    const chunksForRetrieval = documentContext.chunks.map((c: any, idx) => {
+      const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
+      let validIdx: number | undefined = undefined;
+      if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
+        const rawIdxStr = String(c.chunkIndex);
+        const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
+        const parsedIdx = parseInt(cleanIdxStr, 10);
+        if (!isNaN(parsedIdx) && parsedIdx > 0) {
+          validIdx = parsedIdx;
+        }
+      }
 
       let validPage: number | undefined = undefined;
-      let hasNativePage = false;
-      if (!isDocUnpaged) {
+      let hasPage = hasNativePage;
+      if (!isDocUnpaged && c.pageNumber !== undefined && c.pageNumber !== null) {
         if (typeof c.pageNumber === 'number' && !isNaN(c.pageNumber) && c.pageNumber > 0 && c.pageNumber <= 1899) {
           validPage = c.pageNumber;
-          hasNativePage = true;
+          hasPage = true;
         } else if (typeof c.pageNumber === 'string') {
           const cleanedPageStr = cleanChunkLocator('', c.pageNumber);
           if (cleanedPageStr.startsWith('หน้า ')) {
             const parsedPage = parseInt(cleanedPageStr.replace(/^หน้า\s*/, ''), 10);
             if (!isNaN(parsedPage) && parsedPage > 0 && parsedPage <= 1899) {
               validPage = parsedPage;
-              hasNativePage = true;
+              hasPage = true;
             }
           }
         }
       }
 
       return {
-        id: `ctx-chunk-${idx + 1}`,
-        documentId: 'doc-ctx',
+        id: c.id || `ctx-chunk-${idx + 1}`,
+        documentId: c.documentId || 'doc-ctx',
         chunkIndex: validIdx,
         pageNumber: validPage,
-        hasNativePage: hasNativePage,
+        hasNativePage: hasPage,
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
       };
@@ -1056,35 +1072,41 @@ app.post("/api/gemini/generate", async (req, res) => {
   if (isDocumentGrounding) {
     const isDocUnpaged = documentContext.hasNativePages === false;
     activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => {
-      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : '';
-      const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
-      const parsedIdx = parseInt(cleanIdxStr, 10);
-      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : undefined;
+      const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
+      let validIdx: number | undefined = undefined;
+      if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
+        const rawIdxStr = String(c.chunkIndex);
+        const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
+        const parsedIdx = parseInt(cleanIdxStr, 10);
+        if (!isNaN(parsedIdx) && parsedIdx > 0) {
+          validIdx = parsedIdx;
+        }
+      }
 
       let validPage: number | undefined = undefined;
-      let hasNativePage = false;
-      if (!isDocUnpaged) {
+      let hasPage = hasNativePage;
+      if (!isDocUnpaged && c.pageNumber !== undefined && c.pageNumber !== null) {
         if (typeof c.pageNumber === 'number' && !isNaN(c.pageNumber) && c.pageNumber > 0 && c.pageNumber <= 1899) {
           validPage = c.pageNumber;
-          hasNativePage = true;
+          hasPage = true;
         } else if (typeof c.pageNumber === 'string') {
           const cleanedPageStr = cleanChunkLocator('', c.pageNumber);
           if (cleanedPageStr.startsWith('หน้า ')) {
             const parsedPage = parseInt(cleanedPageStr.replace(/^หน้า\s*/, ''), 10);
             if (!isNaN(parsedPage) && parsedPage > 0 && parsedPage <= 1899) {
               validPage = parsedPage;
-              hasNativePage = true;
+              hasPage = true;
             }
           }
         }
       }
 
       return {
-        id: `ctx-chunk-${idx + 1}`,
-        documentId: 'doc-ctx',
+        id: c.id || `ctx-chunk-${idx + 1}`,
+        documentId: c.documentId || 'doc-ctx',
         chunkIndex: validIdx,
         pageNumber: validPage,
-        hasNativePage: hasNativePage,
+        hasNativePage: hasPage,
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
       };
@@ -1262,19 +1284,17 @@ app.post("/api/gemini/generate", async (req, res) => {
 
     const formattedChunks = preComputedRetrieval.relevantChunks
       .map((c: any) => {
-        const cleanedLocator = cleanChunkLocator(c.chunkIndex ?? '');
-        const cleanIdx = cleanedLocator ? cleanedLocator.replace(/^ชิ้นส่วนที่\s*/, '') : '';
-        const cleanPage = (!isDocUnpaged && c.pageNumber) ? `หน้า ${c.pageNumber}` : '';
-        
+        const hasNative = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
         let locatorLabel = '';
-        if (cleanIdx && cleanPage) {
-          locatorLabel = `ชิ้นส่วนที่ ${cleanIdx} | ${cleanPage}`;
-        } else if (cleanIdx) {
-          locatorLabel = `ชิ้นส่วนที่ ${cleanIdx}`;
-        } else if (cleanPage) {
-          locatorLabel = cleanPage;
-        } else {
-          locatorLabel = 'ไม่ระบุหมายเลข';
+        if (hasNative && c.pageNumber) {
+          locatorLabel = `หน้า ${c.pageNumber}`;
+        } else if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
+          const cleaned = cleanChunkLocator(c.chunkIndex);
+          const cleanIdx = cleaned.replace(/^ชิ้นส่วนที่\s*/, '');
+          if (cleanIdx) locatorLabel = `ชิ้นส่วนที่ ${cleanIdx}`;
+        }
+        if (!locatorLabel) {
+          locatorLabel = 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
         }
 
         const filteredText = filterRelevantChunkContent(c.text || '', latestPrompt);
