@@ -45,7 +45,7 @@ import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationRepor
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
-import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities, cleanChunkLocator } from './lib/documentChunker';
+import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities, cleanChunkLocator, filterDisplayedReferences } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
 import { getAllDocuments, seedSampleDocumentsIfEmpty } from './lib/documentStorage';
 
@@ -1234,12 +1234,7 @@ export default function App() {
                     {msg.references && (
                       (() => {
                         const isDocGrounding = msg.source === 'document_grounding' || msg.references.some(r => (r as any).type === 'document_chunk');
-                        const displayedReferences = msg.references.filter(r => {
-                          if (isDocGrounding || (r as any).type === 'document_chunk') {
-                            return r.verificationStatus === 'source_grounded';
-                          }
-                          return r.verificationStatus !== 'unsupported_citation' && r.verificationStatus !== 'unverified' && !!r.verificationStatus;
-                        });
+                        const displayedReferences = filterDisplayedReferences(msg.references, isDocGrounding);
                         const unsupportedCount = msg.references.length - displayedReferences.length;
                         return (
                           <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
@@ -1284,8 +1279,11 @@ export default function App() {
                                             <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
                                               Locator: {(ref as any).evidenceLocator ? (cleanChunkLocator((ref as any).evidenceLocator) || 'ไม่ระบุหมายเลข') : 'ไม่ระบุหมายเลข'}
                                             </span>
-                                            <span className="text-emerald-400 font-medium">
-                                              • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)
+                                            <span
+                                              className="text-emerald-400 font-medium"
+                                              title="ยืนยันความสอดคล้องระดับชิ้นส่วนเอกสาร (Chunk-Level Grounded) โดยไม่ได้ครอบคลุมข้อความภายนอกบริบทที่อ้างอิง"
+                                            >
+                                              • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk-Level Grounded)
                                             </span>
                                           </div>
                                         ) : (
@@ -1341,7 +1339,7 @@ export default function App() {
                             {unsupportedCount > 0 && (
                               <div className="text-[11px] text-amber-300/90 bg-amber-950/40 p-2 rounded-lg border border-amber-900/50 flex items-center gap-1.5 mt-2">
                                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                                <span>ระบบตรวจพบชิ้นส่วนเอกสารที่ไม่สนับสนุนคำถามหรือยังไม่ผ่านการยืนยัน ({unsupportedCount} ชิ้นส่วน) และได้ตัดออกจากการแสดงผลเพื่อความถูกต้องทางวิชาการ (คำตอบครอบคลุมเฉพาะประเด็นที่มีหลักฐานยืนยันได้)</span>
+                                <span>ระบบตรวจพบชิ้นส่วนเอกสารที่ไม่สนับสนุนคำถามหรือยังไม่ผ่านการยืนยัน ({unsupportedCount} ชิ้นส่วน) และได้ตัดออกจากการแสดงผลเพื่อความถูกต้องทางวิชาการ (คำตอบครอบคลุมเฉพาะประเด็นที่มีหลักฐานยืนยันในระดับชิ้นส่วนเอกสาร)</span>
                               </div>
                             )}
                           </div>

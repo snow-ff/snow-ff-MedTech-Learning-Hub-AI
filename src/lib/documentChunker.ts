@@ -578,8 +578,9 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
 /**
  * Clean and normalize chunk locator or page number, ensuring robust decoding
  * of HTML entities (numeric, hex, double-encoded) and safe digit extraction.
+ * Strictly avoids extracting numbers from non-locator text or array indices.
  */
-export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: number | string): string {
+export function cleanChunkLocator(chunkIndex?: number | string | null, pageNumber?: number | string | null): string {
   if (pageNumber !== undefined && pageNumber !== null && String(pageNumber).trim() !== '') {
     const rawPageStr = String(pageNumber);
     const decodedPage = decodeHtmlEntities(rawPageStr);
@@ -599,30 +600,52 @@ export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: numb
     if (decoded === prev) break;
   }
 
-  // If the locator string already contains "หน้า", preserve "หน้า <digits>"
-  const pageMatch = decoded.match(/หน้า\s*(\d+)/i);
-  if (pageMatch) {
-    return `หน้า ${parseInt(pageMatch[1], 10)}`;
+  const trimmed = decoded.trim();
+
+  // If the locator string explicitly is or starts with "หน้า <digits>" or "page <digits>"
+  const pageMatch = trimmed.match(/^(?:หน้า|page)\s*(\d+)$/i) || trimmed.match(/^(?:(?:ส่วนอ้างอิง|ชิ้นส่วนที่)\s*\d+\s*[|,]\s*)?(?:หน้า|page)\s*(\d+)$/i);
+  if (pageMatch && pageMatch[1]) {
+    const pNum = parseInt(pageMatch[1], 10);
+    if (!isNaN(pNum) && pNum > 0) {
+      return `หน้า ${pNum}`;
+    }
   }
 
-  // Extract explicit digits from chunk locator
-  const chunkMatch = decoded.match(/(?:ชิ้นส่วนที่|chunk|ส่วนที่|ส่วนอ้างอิง)?\s*(\d+)/i);
-  if (chunkMatch && chunkMatch[1]) {
-    const num = parseInt(chunkMatch[1], 10);
+  // Pure digits: e.g. 4, "4", "13"
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
     if (!isNaN(num) && num > 0) {
       return `ชิ้นส่วนที่ ${num}`;
     }
   }
 
-  // Fallback: search for any standalone digit sequence
-  const anyDigits = decoded.replace(/\D/g, '');
-  if (anyDigits) {
-    const num = parseInt(anyDigits, 10);
+  // Explicit chunk prefix: e.g. "ชิ้นส่วนที่ 4", "chunk 4", "#chunk-4", "ส่วนอ้างอิง 4", "ส่วนที่ 4"
+  const chunkPrefixMatch = trimmed.match(/^(?:#?chunk[\s\-:]*|ชิ้นส่วนที่[\s:]*|ส่วนอ้างอิง[\s:]*|ส่วนที่[\s:]*)(\d+)$/i);
+  if (chunkPrefixMatch && chunkPrefixMatch[1]) {
+    const num = parseInt(chunkPrefixMatch[1], 10);
     if (!isNaN(num) && num > 0) {
       return `ชิ้นส่วนที่ ${num}`;
     }
   }
 
+  // Strictly avoid extracting numbers from non-locator arbitrary text (e.g. "DTM67-111", "ประกาศ 2568")
   return '';
+}
+
+/**
+ * Filter reference items for display in the UI.
+ * In document grounding mode or for document chunks, strictly whitelists 'source_grounded'.
+ * Excludes 'unsupported_citation', 'unverified', undefined, and null.
+ */
+export function filterDisplayedReferences<T extends { verificationStatus?: string | null; type?: string }>(
+  references: T[],
+  isDocGrounding: boolean
+): T[] {
+  return references.filter(r => {
+    if (isDocGrounding || (r as any).type === 'document_chunk') {
+      return r.verificationStatus === 'source_grounded';
+    }
+    return r.verificationStatus !== 'unsupported_citation' && r.verificationStatus !== 'unverified' && !!r.verificationStatus;
+  });
 }
 

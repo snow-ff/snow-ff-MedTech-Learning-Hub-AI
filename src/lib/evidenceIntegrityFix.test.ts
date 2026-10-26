@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt } from './documentChunker';
+import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
 import { getAcademicFallback } from '../../server';
 
@@ -1039,7 +1039,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(cleanChunkLocator('no_digits')).not.toBe('ชิ้นส่วนที่ 1');
   });
 
-  it('Test AH — Reference Card filtering logic: strictly whitelists source_grounded and excludes unverified, unsupported_citation, undefined, null', () => {
+  it('Test AH — Reference Card filtering logic: strictly whitelists source_grounded and excludes unverified, unsupported_citation, undefined, null using production filterDisplayedReferences', () => {
     const rawReferences = [
       { id: '1', title: 'Grounded Prefix', verificationStatus: 'source_grounded', excerpt: 'Prefix definition' },
       { id: '2', title: 'Grounded Suffix', verificationStatus: 'source_grounded', excerpt: 'Suffix definition' },
@@ -1049,22 +1049,19 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       { id: '6', title: 'Null status', verificationStatus: null as any, excerpt: 'Null status' }
     ];
 
-    const filterFunction = (refs: typeof rawReferences, isDocGrounding: boolean) => {
-      return refs.filter(r => {
-        if (isDocGrounding || (r as any).type === 'document_chunk') {
-          return r.verificationStatus === 'source_grounded';
-        }
-        return r.verificationStatus !== 'unsupported_citation' && r.verificationStatus !== 'unverified' && !!r.verificationStatus;
-      });
-    };
+    // Test Document Grounding mode: strictly whitelist 'source_grounded'
+    const displayedDoc = filterDisplayedReferences(rawReferences, true);
+    expect(displayedDoc).toHaveLength(2);
+    expect(displayedDoc.every(r => r.verificationStatus === 'source_grounded')).toBe(true);
+    expect(displayedDoc.some(r => r.id === '3')).toBe(false);
+    expect(displayedDoc.some(r => r.id === '4')).toBe(false);
+    expect(displayedDoc.some(r => r.id === '5')).toBe(false);
+    expect(displayedDoc.some(r => r.id === '6')).toBe(false);
 
-    const displayed = filterFunction(rawReferences, true);
-    expect(displayed).toHaveLength(2);
-    expect(displayed.every(r => r.verificationStatus === 'source_grounded')).toBe(true);
-    expect(displayed.some(r => r.id === '3')).toBe(false);
-    expect(displayed.some(r => r.id === '4')).toBe(false);
-    expect(displayed.some(r => r.id === '5')).toBe(false);
-    expect(displayed.some(r => r.id === '6')).toBe(false);
+    // Test non-document mode: excludes unsupported_citation, unverified, and missing status
+    const displayedNonDoc = filterDisplayedReferences(rawReferences, false);
+    expect(displayedNonDoc).toHaveLength(2);
+    expect(displayedNonDoc.every(r => r.verificationStatus === 'source_grounded')).toBe(true);
   });
 
   it('Test AI — Unsupported chunks exclusion from fallbackText: citations never leak text from unsupported chunks', () => {
@@ -1109,9 +1106,79 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // Must NOT state -itis or -ectomy as confirmed facts from document
     expect(res.text).not.toContain('-itis');
     expect(res.text).not.toContain('-ectomy');
-    // Reference cards must only have source_grounded Prefix
+
+    // 1. Explicitly confirm groundedRefs is NOT empty (preventing vacuous every() pass)
     const groundedRefs = res.references.filter(r => r.verificationStatus === 'source_grounded');
-    expect(groundedRefs.every(r => !r.excerpt || !/-itis|-ectomy/i.test(r.excerpt))).toBe(true);
+    expect(groundedRefs.length).toBeGreaterThan(0);
+
+    // 2. Explicitly confirm genuine expected Prefix evidence exists in groundedRefs
+    const hasExpectedPrefixEvidence = groundedRefs.some(r =>
+      /brady-|tachy-|คำอุปสรรค|prefix/i.test(r.excerpt || '')
+    );
+    expect(hasExpectedPrefixEvidence).toBe(true);
+
+    // 3. Explicitly confirm NO reference contains Suffix evidence
+    const hasAnySuffixEvidence = res.references.some(r =>
+      /-itis|-ectomy|-scopy|ปัจจัยท้าย|คำต่อท้าย|suffix/i.test(r.excerpt || '')
+    );
+    expect(hasAnySuffixEvidence).toBe(false);
+
+    // 4. Also assert every groundedRef does NOT contain suffix morphemes
+    expect(groundedRefs.every(r => !r.excerpt || !/-itis|-ectomy|-scopy/i.test(r.excerpt))).toBe(true);
+  });
+
+  it('Test AK — Non-locator arbitrary text containing digits must NOT be extracted into fake chunk locators', () => {
+    // Non-locator inputs that previously were falsely parsed by .replace(/\D/g, '') or loose regex
+    expect(cleanChunkLocator('DTM67-111')).toBe('');
+    expect(cleanChunkLocator('ประกาศ 2568')).toBe('');
+    expect(cleanChunkLocator('CBC-12')).toBe('');
+    expect(cleanChunkLocator('รหัสวิชา 101')).toBe('');
+    expect(cleanChunkLocator('sample_99')).toBe('');
+    expect(cleanChunkLocator('หมวดที่ 2')).toBe('');
+
+    // Valid locator inputs must still parse correctly
+    expect(cleanChunkLocator(4)).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('4')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('ชิ้นส่วนที่ 4')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('chunk 4')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('#chunk-4')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('ส่วนอ้างอิง 4')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('&#x34;')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('หน้า 3')).toBe('หน้า 3');
+  });
+
+  it('Test AL — Chunks without chunkIndex do NOT manufacture idx + 1 from array index', () => {
+    const docWithoutChunkIndex = {
+      title: 'เอกสารไม่มีการระบุ chunkIndex',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        { text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- และ tachy-' }
+      ]
+    };
+
+    const res = getAcademicFallback('Prefix', [], docWithoutChunkIndex);
+    // References should NOT have an invented 'ชิ้นส่วนที่ 1'
+    for (const ref of res.references) {
+      expect(ref.evidenceLocator).not.toBe('ชิ้นส่วนที่ 1');
+    }
+  });
+
+  it('Test AM — Reference card filtering handles mixed document chunks and external research links safely', () => {
+    const mixedRefs = [
+      { id: '1', type: 'document_chunk', verificationStatus: 'source_grounded', title: 'Doc Chunk' },
+      { id: '2', type: 'document_chunk', verificationStatus: 'unsupported_citation', title: 'Unsupported Doc Chunk' },
+      { id: '3', type: 'external_academic_link', verificationStatus: 'verified_authority', title: 'External Authority' },
+      { id: '4', type: 'external_academic_link', verificationStatus: 'unverified', title: 'Unverified External' }
+    ];
+
+    // In web_search / non-document grounding mode:
+    const filtered = filterDisplayedReferences(mixedRefs, false);
+    // Document chunk 1 is source_grounded -> kept
+    // Document chunk 2 is unsupported_citation -> excluded
+    // External link 3 is verified_authority -> kept
+    // External link 4 is unverified -> excluded
+    expect(filtered.map(r => r.id)).toEqual(['1', '3']);
   });
 });
 

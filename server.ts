@@ -374,15 +374,15 @@ export function getAcademicFallback(
   // If documentContext is present, perform grounded retrieval on document chunks
   if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
     const chunksForRetrieval = documentContext.chunks.map((c, idx) => {
-      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : String(idx + 1);
+      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : '';
       const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
       const parsedIdx = parseInt(cleanIdxStr, 10);
-      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : (idx + 1);
+      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : undefined;
       return {
         id: `ctx-chunk-${idx + 1}`,
         documentId: 'doc-ctx',
         chunkIndex: validIdx,
-        pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : (typeof c.pageNumber === 'string' ? parseInt(cleanChunkLocator(1, c.pageNumber).replace(/^หน้า\s*/, ''), 10) || undefined : undefined),
+        pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : (typeof c.pageNumber === 'string' ? parseInt(cleanChunkLocator('', c.pageNumber).replace(/^หน้า\s*/, ''), 10) || undefined : undefined),
         hasNativePage: typeof c.pageNumber === 'number',
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
@@ -396,14 +396,14 @@ export function getAcademicFallback(
       const chunkReferences = buildChunkReferences(retrieval.relevantChunks, prompt, {} as any, documentContext);
 
       const groundedChunks = retrieval.relevantChunks.filter(c => {
-        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-        const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
+        const cleanIdx = c.chunkIndex !== undefined ? cleanChunkLocator(c.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '') : '';
+        const ref = chunkReferences.find(r => (cleanIdx && r.uri === `#chunk-${cleanIdx}`) || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
         return ref && ref.verificationStatus === 'source_grounded';
       });
 
       const unsupportedChunks = retrieval.relevantChunks.filter(c => {
-        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-        const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
+        const cleanIdx = c.chunkIndex !== undefined ? cleanChunkLocator(c.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '') : '';
+        const ref = chunkReferences.find(r => (cleanIdx && r.uri === `#chunk-${cleanIdx}`) || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
         return !ref || ref.verificationStatus !== 'source_grounded';
       });
 
@@ -428,19 +428,30 @@ export function getAcademicFallback(
       if (groundedChunks.length > 0) {
         const groundedCitations = groundedChunks
           .map(c => {
-            const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+            const cleanIdx = c.chunkIndex !== undefined ? cleanChunkLocator(c.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '') : '';
+            const cleanPage = c.pageNumber ? `หน้า ${c.pageNumber}` : '';
+            let locatorLabel = '';
+            if (cleanIdx && cleanPage) {
+              locatorLabel = `ส่วนอ้างอิง ${cleanIdx} | ${cleanPage}`;
+            } else if (cleanIdx) {
+              locatorLabel = `ส่วนอ้างอิง ${cleanIdx}`;
+            } else if (cleanPage) {
+              locatorLabel = `ส่วนอ้างอิง: ${cleanPage}`;
+            } else {
+              locatorLabel = 'ส่วนอ้างอิง: ไม่ระบุหมายเลข';
+            }
             const filtered = filterRelevantChunkContent(c.text || '', prompt);
-            return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
+            return `• **[${locatorLabel}]**: ${filtered}`;
           })
           .join('\n\n');
 
         if (missingParts.length > 0) {
           const missingClause = `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วน โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`;
-          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานระดับชิ้นส่วนเอกสารตามมาตรฐานทางวิชาการ)*`;
         } else if (unsupportedChunks.length > 0) {
-          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องและมีหลักฐานรองรับ ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากชิ้นส่วนเอกสารที่มีหลักฐานยืนยันในคลังการเรียนรู้ โดยตัดชิ้นส่วนที่ไม่เกี่ยวข้องออกเพื่อความถูกต้องทางวิชาการ*`;
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องและมีหลักฐานรองรับ ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากชิ้นส่วนเอกสารที่มีหลักฐานยืนยันในคลังการเรียนรู้ (Chunk Grounded) โดยตัดชิ้นส่วนที่ไม่เกี่ยวข้องออกเพื่อความถูกต้องทางวิชาการ*`;
         } else {
-          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากชิ้นส่วนเอกสารในคลังการเรียนรู้ของผู้ใช้ (Chunk Grounded) โดยไม่แต่งเติมข้อมูลภายนอก*`;
         }
       } else {
         finalFallbackText = `*(ค้นหาจากเอกสาร: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;

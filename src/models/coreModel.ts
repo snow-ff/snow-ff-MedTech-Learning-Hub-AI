@@ -63,7 +63,7 @@ export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable' | 'ext
 export interface DocumentChunk {
   id: string;
   documentId: string;
-  chunkIndex: number;
+  chunkIndex?: number;
   pageNumber?: number; // Only present if document has genuine native pages (e.g. PDF)
   hasNativePage?: boolean;
   text: string;
@@ -97,7 +97,7 @@ export interface DocumentGroundingContext {
   evidenceStatus?: EvidenceStatus;
   matchedKeywords?: string[];
   chunks: Array<{
-    chunkIndex: number;
+    chunkIndex?: number | string;
     pageNumber?: number | string;
     text: string;
   }>;
