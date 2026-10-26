@@ -581,14 +581,41 @@ export function extractRelevantExcerpt(text: string, query: string, maxLength: n
  * Strictly avoids extracting numbers from non-locator text or array indices.
  */
 export function cleanChunkLocator(chunkIndex?: number | string | null, pageNumber?: number | string | null): string {
+  // 1. Process pageNumber if provided
   if (pageNumber !== undefined && pageNumber !== null && String(pageNumber).trim() !== '') {
     const rawPageStr = String(pageNumber);
-    const decodedPage = decodeHtmlEntities(rawPageStr);
-    const cleanPage = decodedPage.replace(/\D/g, '');
-    if (cleanPage) {
-      return `หน้า ${parseInt(cleanPage, 10)}`;
+    let decodedPage = decodeHtmlEntities(rawPageStr);
+    while (/&#[xX]?[0-9a-fA-F]+;?/i.test(decodedPage) || /&amp;/i.test(decodedPage)) {
+      const prev = decodedPage;
+      decodedPage = decodeHtmlEntities(decodedPage);
+      if (decodedPage === prev) break;
+    }
+    const trimmedPage = decodedPage.trim();
+
+    // Strictly reject non-page strings containing administrative text, course codes, or dates/years
+    const isObviousNonPageText = /(?:ประกาศ|รหัส|วิชา|dtm|ปี|พ\.?ศ\.?|ค\.?ศ\.?|semester|b\.?e\.?|a\.?d\.?)/i.test(trimmedPage);
+    if (!isObviousNonPageText) {
+      // Explicit page prefix: e.g. "หน้า 3", "page 4", "p. 5", "p.5"
+      const explicitPageMatch = trimmedPage.match(/^(?:หน้า|page|p\.)\s*(\d+)$/i);
+      if (explicitPageMatch && explicitPageMatch[1]) {
+        const pNum = parseInt(explicitPageMatch[1], 10);
+        if (!isNaN(pNum) && pNum > 0) {
+          return `หน้า ${pNum}`;
+        }
+      }
+
+      // Pure digits (1-3 digits, e.g. 1 to 999; 4-digit years like 2568 or 2024 are rejected unless explicitly prefixed with 'หน้า')
+      if (/^\d+$/.test(trimmedPage)) {
+        const pNum = parseInt(trimmedPage, 10);
+        const isLikelyYear = pNum >= 1900 && pNum <= 2600;
+        if (!isNaN(pNum) && pNum > 0 && !isLikelyYear) {
+          return `หน้า ${pNum}`;
+        }
+      }
     }
   }
+
+  // 2. Process chunkIndex if pageNumber is absent or unconfirmed
   if (chunkIndex === undefined || chunkIndex === null || String(chunkIndex).trim() === '') {
     return '';
   }
@@ -603,28 +630,32 @@ export function cleanChunkLocator(chunkIndex?: number | string | null, pageNumbe
   const trimmed = decoded.trim();
 
   // If the locator string explicitly is or starts with "หน้า <digits>" or "page <digits>"
-  const pageMatch = trimmed.match(/^(?:หน้า|page)\s*(\d+)$/i) || trimmed.match(/^(?:(?:ส่วนอ้างอิง|ชิ้นส่วนที่)\s*\d+\s*[|,]\s*)?(?:หน้า|page)\s*(\d+)$/i);
-  if (pageMatch && pageMatch[1]) {
-    const pNum = parseInt(pageMatch[1], 10);
-    if (!isNaN(pNum) && pNum > 0) {
-      return `หน้า ${pNum}`;
+  const isObviousNonLocatorText = /(?:ประกาศ|รหัส|วิชา|dtm|ปี|พ\.?ศ\.?|ค\.?ศ\.?|semester|b\.?e\.?|a\.?d\.?)/i.test(trimmed);
+  if (!isObviousNonLocatorText) {
+    const pageMatch = trimmed.match(/^(?:หน้า|page|p\.)\s*(\d+)$/i) || trimmed.match(/^(?:(?:ส่วนอ้างอิง|ชิ้นส่วนที่)\s*\d+\s*[|,]\s*)?(?:หน้า|page)\s*(\d+)$/i);
+    if (pageMatch && pageMatch[1]) {
+      const pNum = parseInt(pageMatch[1], 10);
+      if (!isNaN(pNum) && pNum > 0) {
+        return `หน้า ${pNum}`;
+      }
     }
-  }
 
-  // Pure digits: e.g. 4, "4", "13"
-  if (/^\d+$/.test(trimmed)) {
-    const num = parseInt(trimmed, 10);
-    if (!isNaN(num) && num > 0) {
-      return `ชิ้นส่วนที่ ${num}`;
+    // Pure digits: e.g. 4, "4", "13"
+    if (/^\d+$/.test(trimmed)) {
+      const num = parseInt(trimmed, 10);
+      const isLikelyYear = num >= 1900 && num <= 2600;
+      if (!isNaN(num) && num > 0 && !isLikelyYear) {
+        return `ชิ้นส่วนที่ ${num}`;
+      }
     }
-  }
 
-  // Explicit chunk prefix: e.g. "ชิ้นส่วนที่ 4", "chunk 4", "#chunk-4", "ส่วนอ้างอิง 4", "ส่วนที่ 4"
-  const chunkPrefixMatch = trimmed.match(/^(?:#?chunk[\s\-:]*|ชิ้นส่วนที่[\s:]*|ส่วนอ้างอิง[\s:]*|ส่วนที่[\s:]*)(\d+)$/i);
-  if (chunkPrefixMatch && chunkPrefixMatch[1]) {
-    const num = parseInt(chunkPrefixMatch[1], 10);
-    if (!isNaN(num) && num > 0) {
-      return `ชิ้นส่วนที่ ${num}`;
+    // Explicit chunk prefix: e.g. "ชิ้นส่วนที่ 4", "chunk 4", "#chunk-4", "ส่วนอ้างอิง 4", "ส่วนที่ 4"
+    const chunkPrefixMatch = trimmed.match(/^(?:#?chunk[\s\-:]*|ชิ้นส่วนที่[\s:]*|ส่วนอ้างอิง[\s:]*|ส่วนที่[\s:]*)(\d+)$/i);
+    if (chunkPrefixMatch && chunkPrefixMatch[1]) {
+      const num = parseInt(chunkPrefixMatch[1], 10);
+      if (!isNaN(num) && num > 0) {
+        return `ชิ้นส่วนที่ ${num}`;
+      }
     }
   }
 

@@ -1180,5 +1180,114 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // External link 4 is unverified -> excluded
     expect(filtered.map(r => r.id)).toEqual(['1', '3']);
   });
+
+  it('Test AN — cleanChunkLocator strictly rejects non-page texts (course codes, Buddhist era years) and handles valid page numbers', () => {
+    // 1. Rejection of course code / administrative strings in pageNumber
+    expect(cleanChunkLocator(13, 'DTM67-111')).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator('', 'DTM67-111')).toBe('');
+    expect(cleanChunkLocator(null, 'DTM67-111')).toBe('');
+    expect(cleanChunkLocator(undefined, 'DTM67-111')).toBe('');
+
+    // 2. Rejection of Buddhist era / Gregorian calendar years in pageNumber
+    expect(cleanChunkLocator(13, 'ประกาศ 2568')).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator('', 'ประกาศ 2568')).toBe('');
+    expect(cleanChunkLocator(13, '2568')).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator('', '2568')).toBe('');
+    expect(cleanChunkLocator(13, 'พ.ศ. 2568')).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator('', 'ปี 2568')).toBe('');
+
+    // 3. Acceptance of genuine valid page representations
+    expect(cleanChunkLocator(13, 'หน้า 12')).toBe('หน้า 12');
+    expect(cleanChunkLocator(13, 12)).toBe('หน้า 12');
+    expect(cleanChunkLocator(13, 'page 4')).toBe('หน้า 4');
+    expect(cleanChunkLocator(13, 'p. 5')).toBe('หน้า 5');
+    expect(cleanChunkLocator(13, 'p.5')).toBe('หน้า 5');
+
+    // 4. Fallback to chunkIndex when pageNumber is empty or absent
+    expect(cleanChunkLocator(13, '')).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator(13, null)).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator(13, undefined)).toBe('ชิ้นส่วนที่ 13');
+    expect(cleanChunkLocator('', '')).toBe('');
+    expect(cleanChunkLocator(null, null)).toBe('');
+  });
+
+  it('Test AO — getAcademicFallback with unpaged document (hasNativePages: false) must NOT manufacture page numbers', () => {
+    const unpagedDoc = {
+      title: 'ใบความรู้รายวิชา DTM67-111',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '1',
+          chunkIndex: 1,
+          pageNumber: 'DTM67-111', // Malformed/misassigned course code as pageNumber
+          text: 'Prefix (คำอุปสรรค) เช่น brady- (ช้า) และ tachy- (เร็ว) ในศัพท์วิทยาศาสตร์การแพทย์'
+        }
+      ]
+    };
+
+    const res = getAcademicFallback('คำอุปสรรค Prefix มีอะไรบ้าง', [], unpagedDoc);
+
+    // References must use chunk locator 'ชิ้นส่วนที่ 1', never 'หน้า 67111' or any page reference
+    expect(res.references.length).toBeGreaterThan(0);
+    for (const ref of res.references) {
+      expect(ref.evidenceLocator).not.toContain('หน้า');
+      expect(ref.evidenceLocator).not.toContain('67111');
+      expect(ref.evidenceLocator).toBe('ชิ้นส่วนที่ 1');
+    }
+
+    // Fallback text citations must not contain 'หน้า'
+    expect(res.text).not.toContain('หน้า 67111');
+    expect(res.text).not.toContain('| หน้า');
+  });
+
+  it('Test AP — getAcademicFallback with paged document (hasNativePages: true) preserves genuine page numbers', () => {
+    const pagedDoc = {
+      title: 'เอกสารคำสอนโลหิตวิทยาคลินิก',
+      courseCode: 'DTM67-202',
+      hasNativePages: true,
+      totalPages: 15,
+      chunks: [
+        {
+          id: '2',
+          chunkIndex: 2,
+          pageNumber: 3,
+          text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น micro- (เล็ก) และ macro- (ใหญ่) ในทางโลหิตวิทยา'
+        }
+      ]
+    };
+
+    const res = getAcademicFallback('อธิบาย Prefix ทางโลหิตวิทยา', [], pagedDoc);
+
+    expect(res.references.length).toBeGreaterThan(0);
+    const ref = res.references[0];
+    expect(ref.evidenceLocator).toBe('หน้า 3');
+    expect(ref.pageNumber).toBe(3);
+    expect(res.text).toContain('หน้า 3');
+  });
+
+  it('Test AQ — Arbitrary non-page strings in pageNumber do not pollute fallback text citations', () => {
+    const docWithAnnouncements = {
+      title: 'เอกสารข้อกำหนดการศึกษา',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: '5',
+          chunkIndex: 5,
+          pageNumber: 'ประกาศ 2568',
+          text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) เพื่อเปลี่ยนความหมาย'
+        }
+      ]
+    };
+
+    const res = getAcademicFallback('Prefix คืออะไร', [], docWithAnnouncements);
+
+    expect(res.references.length).toBeGreaterThan(0);
+    expect(res.references[0].evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+    expect(res.references[0].evidenceLocator).not.toContain('2568');
+    expect(res.text).not.toContain('หน้า 2568');
+    expect(res.text).not.toContain('2568');
+  });
 });
 
