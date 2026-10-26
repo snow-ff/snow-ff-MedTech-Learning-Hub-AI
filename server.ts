@@ -1120,12 +1120,28 @@ app.post("/api/gemini/generate", async (req, res) => {
         }
       }
 
+      let sourceProv = c.sourceLocatorProvenance;
+      let sourceLoc = c.sourceLocator;
+
+      if (!sourceProv || sourceProv === 'unconfirmed') {
+        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+        if (headingMatch && headingMatch[1]) {
+          const num = parseInt(headingMatch[1], 10);
+          if (!isNaN(num)) {
+            sourceLoc = `ชิ้นส่วนที่ ${num}`;
+            sourceProv = 'source_heading';
+          }
+        }
+      }
+
       return {
         id: c.id || `ctx-chunk-${idx + 1}`,
         documentId: c.documentId || 'doc-ctx',
         chunkIndex: validIdx,
         pageNumber: validPage,
         hasNativePage: hasPage,
+        sourceLocator: sourceLoc,
+        sourceLocatorProvenance: sourceProv,
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
       };

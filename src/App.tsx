@@ -442,6 +442,8 @@ export default function App() {
             chunkIndex: c.chunkIndex,
             pageNumber: c.pageNumber,
             hasNativePage: c.hasNativePage,
+            sourceLocator: c.sourceLocator,
+            sourceLocatorProvenance: c.sourceLocatorProvenance,
             text: c.text
           }))
         };
