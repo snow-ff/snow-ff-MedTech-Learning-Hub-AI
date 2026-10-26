@@ -128,7 +128,7 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
     chunks.push({
       id: `${docId}-chunk-${idx + 1}`,
       documentId: docId,
-      chunkIndex: undefined,
+      chunkIndex: idx + 1,
       pageNumber: undefined,
       hasNativePage: false,
       text: blockText,

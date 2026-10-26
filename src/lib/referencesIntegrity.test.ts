@@ -95,7 +95,7 @@ describe('References Integrity Regression Test Suite (v1.2)', () => {
     const pagedChunks = [
       { chunkIndex: 1, pageNumber: 12, hasNativePage: true, text: '=== ส่วนที่ 1 ===\nเนื้อหาหน้า 12' }
     ];
-    const fallback = getAcademicFallback('เนื้อหา', [], {
+    const fallback = getAcademicFallback('ส่วนที่ 1', [], {
       title: 'เอกสารมีเลขหน้า',
       hasNativePages: true,
       totalPages: 20,

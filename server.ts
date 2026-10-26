@@ -1074,8 +1074,9 @@ app.post("/api/gemini/generate", async (req, res) => {
     const isDocUnpaged = documentContext.hasNativePages === false;
     activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => {
       const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
+      const isLegacyArrayFallback = isDocUnpaged && !hasNativePage && c.chunkIndex !== undefined && c.chunkIndex !== null && Number(c.chunkIndex) === (idx + 1);
       let validIdx: number | undefined = undefined;
-      if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
+      if (!isLegacyArrayFallback && c.chunkIndex !== undefined && c.chunkIndex !== null) {
         const rawIdxStr = String(c.chunkIndex);
         const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
         const parsedIdx = parseInt(cleanIdxStr, 10);

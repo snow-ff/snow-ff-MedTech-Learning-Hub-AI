@@ -833,7 +833,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   it('Test AB — Locator Entity Normalization: Chunk index with HTML entities (e.g. &#x35;, &#x33;) decodes cleanly to normal numbers without entity remnants', () => {
     const docWithEntities = {
       title: 'Entity Locator Guide',
-      hasNativePages: false,
+      hasNativePages: true,
       chunks: [
         { chunkIndex: '&#x33;' as any, text: '=== ส่วนที่ 3: Prefix ===' },
         { chunkIndex: '&#x35;' as any, text: '=== ส่วนที่ 5: Suffix ===' },
@@ -931,7 +931,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const docPrefixOnly = {
       title: 'เอกสารตัวอย่างเฉพาะ Prefix',
       courseCode: 'DTM67-111',
-      hasNativePages: false,
+      hasNativePages: true,
       chunks: [
         { chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)' }
       ]
@@ -1048,7 +1048,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const docWithMixedChunks = {
       title: 'เอกสารคำศัพท์และการจัดการ',
       courseCode: 'DTM67-111',
-      hasNativePages: false,
+      hasNativePages: true,
       chunks: [
         { chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือคำที่เติมข้างหน้าคำหลัก เช่น brady- (ช้า)' },
         { chunkIndex: 2, text: '=== ส่วนที่ 2: Suffix (ปัจจัยท้าย) ===\nSuffix คือคำต่อท้าย เช่น -itis (การอักเสบ)' },
@@ -1274,7 +1274,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   it('P0-C Case 1 — Valid locator (chunkIndex: 5) preserves locator and matches citation', () => {
     const doc = {
       title: 'Valid Locator Doc',
-      hasNativePages: false,
+      hasNativePages: true,
       chunks: [
         { chunkIndex: 5, text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
       ]
@@ -1337,6 +1337,19 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const filtered = filterDisplayedReferences(mixedRefs, true);
     expect(filtered).toHaveLength(1);
     expect((filtered[0] as any).evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+  });
+
+  it('P0-C Case 6 — Unindexed chunk on unpaged document without chunkIndex does not become a Source Locator', () => {
+    const doc = {
+      title: 'Unindexed Unpaged Doc',
+      hasNativePages: false,
+      chunks: [
+        { text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+      ]
+    };
+    const res = getAcademicFallback('Prefix คืออะไร', [], doc);
+    expect(res.references).toHaveLength(1);
+    expect(res.references[0].evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
   });
 });
 
