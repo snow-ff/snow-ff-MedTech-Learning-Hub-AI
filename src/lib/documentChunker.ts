@@ -55,6 +55,8 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
           chunkIndex,
           pageNumber,
           hasNativePage: true,
+          sourceLocator: `หน้า ${pageNumber}`,
+          sourceLocatorProvenance: 'native_page',
           text: cleanPageText,
           charCount: cleanPageText.length
         });
@@ -69,6 +71,8 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
             chunkIndex,
             pageNumber,
             hasNativePage: true,
+            sourceLocator: `หน้า ${pageNumber}`,
+            sourceLocatorProvenance: 'native_page',
             text: subText,
             charCount: subText.length
           });
@@ -104,6 +108,8 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
           chunkIndex,
           pageNumber: currentPage,
           hasNativePage: true,
+          sourceLocator: `หน้า ${currentPage}`,
+          sourceLocatorProvenance: 'native_page',
           text: subText,
           charCount: subText.length
         });
@@ -124,13 +130,26 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
 
   const textBlocks = splitStringWithOverlap(cleanText, maxChars, overlap);
   textBlocks.forEach((blockText, idx) => {
-    // Note: Do NOT invent a synthetic chunkIndex or page number from array index when none exists in the source!
+    let explicitLocator: string | undefined = undefined;
+    let explicitProvenance: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' = 'unconfirmed';
+
+    const headingMatch = blockText.match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+    if (headingMatch && headingMatch[1]) {
+      const headingNum = parseInt(headingMatch[1], 10);
+      if (!isNaN(headingNum)) {
+        explicitLocator = `ชิ้นส่วนที่ ${headingNum}`;
+        explicitProvenance = 'source_heading';
+      }
+    }
+
     chunks.push({
       id: `${docId}-chunk-${idx + 1}`,
       documentId: docId,
-      chunkIndex: idx + 1,
+      chunkIndex: idx + 1, // Internal ordering ordinal
       pageNumber: undefined,
       hasNativePage: false,
+      sourceLocator: explicitLocator,
+      sourceLocatorProvenance: explicitProvenance,
       text: blockText,
       charCount: blockText.length
     });

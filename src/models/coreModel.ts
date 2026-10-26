@@ -63,9 +63,11 @@ export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable' | 'ext
 export interface DocumentChunk {
   id: string;
   documentId: string;
-  chunkIndex?: number;
+  chunkIndex?: number; // Internal ordering ordinal
   pageNumber?: number; // Only present if document has genuine native pages (e.g. PDF)
   hasNativePage?: boolean;
+  sourceLocator?: string; // Verified source locator from source document
+  sourceLocatorProvenance?: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' | string;
   text: string;
   charCount: number;
   heading?: string;

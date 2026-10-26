@@ -216,7 +216,7 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
   it('Case I: Excerpt Readability and Clean Locator Verification - excerpts must start at clean word boundaries around matching terms and locators must be clean without raw entities or escape artifacts', () => {
     const prompt = 'Prefix คืออะไร';
     const sampleChunks = [
-      { chunkIndex: 3, text: 'เนื้อหาสำคัญ: Prefix (คำอุปสรรค) คือส่วนของคำที่เติมข้างหน้า Root เพื่อขยายความหมาย' }
+      { chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'เนื้อหาสำคัญ: Prefix (คำอุปสรรค) คือส่วนของคำที่เติมข้างหน้า Root เพื่อขยายความหมาย' }
     ];
 
     const fallback = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
@@ -237,8 +237,8 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
   it('Case J: Word Parts query must exclude Notice of Adaptation / Non-Endorsement chunks', () => {
     const prompt = 'Root Prefix Suffix Combining Vowel';
     const mixedChunks = [
-      { chunkIndex: 1, text: 'เนื้อหาหลัก: Root, Prefix, Suffix และ Combining Vowel' },
-      { chunkIndex: 2, text: 'Notice of Adaptation / Non-Endorsement: This document has been adapted for educational use.' }
+      { chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'เนื้อหาหลัก: Root, Prefix, Suffix และ Combining Vowel' },
+      { chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: 'Notice of Adaptation / Non-Endorsement: This document has been adapted for educational use.' }
     ];
 
     const fallback = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
@@ -256,7 +256,7 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
     const prompt = 'Root Prefix Suffix Combining Vowel';
     const sampleChunkText = 'Word Root คือแกนกลางของคำ Prefix คือคำอุปสรรค Suffix คือคำปัจจัย Combining Vowel คือสระเชื่อม';
     const sampleChunks = [
-      { chunkIndex: 1, text: sampleChunkText }
+      { chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: sampleChunkText }
     ];
 
     const fallback = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {
@@ -285,7 +285,10 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
       courseCode: 'DTM67-111',
       hasNativePages: false,
       chunks: testChunks.map((c, idx) => ({
+        ...c,
         chunkIndex: c.chunkIndex || idx + 1,
+        sourceLocator: `ชิ้นส่วนที่ ${c.chunkIndex || idx + 1}`,
+        sourceLocatorProvenance: 'source_heading',
         pageNumber: c.pageNumber,
         text: c.text
       }))

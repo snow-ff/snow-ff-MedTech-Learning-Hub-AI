@@ -79,14 +79,17 @@ describe('References Integrity Regression Test Suite (v1.2)', () => {
     expect(fallback.references[0].title).toBe('เอกสาร: เอกสารทดสอบ — ชิ้นส่วนที่ 1');
   });
 
-  it('5. An unpaged document displays an internal chunk locator and never invents a page number', () => {
+  it('5. An unpaged document without native page numbers or headings reports unconfirmed source provenance and never invents a page number', () => {
+    const unpagedPlainChunks = [
+      { id: 'up-1', documentId: 'updoc-1', text: 'Prefix และ Suffix เป็นส่วนประกอบสำคัญของคำศัพท์ทางการแพทย์', charCount: 60 }
+    ];
     const fallback = getAcademicFallback('Prefix Suffix', [], {
-      title: 'เอกสารไร้เลขหน้า',
+      title: 'เอกสารไร้เลขหน้าและไร้หัวข้อ',
       hasNativePages: false,
-      chunks: testChunks
+      chunks: unpagedPlainChunks
     });
     for (const ref of fallback.references) {
-      expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
+      expect(ref.evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
       expect(ref.evidenceLocator).not.toMatch(/หน้า \d+/);
     }
   });

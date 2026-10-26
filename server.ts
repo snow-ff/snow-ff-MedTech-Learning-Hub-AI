@@ -235,14 +235,15 @@ function buildChunkReferences(
     const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt || '', 140));
     const safePage = !isDocUnpaged ? c.pageNumber : undefined;
     const hasNative = (c as any).hasNativePage === true || (safePage !== undefined && safePage !== null);
+    const sourceProv = c.sourceLocatorProvenance;
+    const hasVerifiedProvenance = sourceProv && sourceProv !== 'unconfirmed';
 
     let finalLocator = '';
-    if (hasNative && safePage) {
+    if (hasNative && safePage !== undefined && safePage !== null) {
       finalLocator = `หน้า ${safePage}`;
-    } else if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
-      finalLocator = cleanChunkLocator(c.chunkIndex);
-    }
-    if (!finalLocator) {
+    } else if (hasVerifiedProvenance && c.sourceLocator) {
+      finalLocator = c.sourceLocator;
+    } else {
       finalLocator = 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
     }
 
@@ -391,6 +392,20 @@ export function getAcademicFallback(
     const isDocUnpaged = documentContext.hasNativePages === false;
     const chunksForRetrieval = documentContext.chunks.map((c: any, idx) => {
       const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
+      let sourceProv = c.sourceLocatorProvenance;
+      let sourceLoc = c.sourceLocator;
+
+      if (!sourceProv || sourceProv === 'unconfirmed') {
+        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+        if (headingMatch && headingMatch[1]) {
+          const num = parseInt(headingMatch[1], 10);
+          if (!isNaN(num)) {
+            sourceLoc = `ชิ้นส่วนที่ ${num}`;
+            sourceProv = 'source_heading';
+          }
+        }
+      }
+
       let validIdx: number | undefined = undefined;
       if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
         const rawIdxStr = String(c.chunkIndex);
@@ -425,6 +440,8 @@ export function getAcademicFallback(
         chunkIndex: validIdx,
         pageNumber: validPage,
         hasNativePage: hasPage,
+        sourceLocator: sourceLoc,
+        sourceLocatorProvenance: sourceProv,
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
       };
