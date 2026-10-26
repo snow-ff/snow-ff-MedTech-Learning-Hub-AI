@@ -1054,17 +1054,37 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   // If document grounding context is attached, switch instruction to strict document grounding
   if (isDocumentGrounding) {
+    const isDocUnpaged = documentContext.hasNativePages === false;
     activeChunksForGrounding = (documentContext.chunks || []).map((c: any, idx: number) => {
-      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : String(idx + 1);
+      const rawIdxStr = c.chunkIndex !== undefined && c.chunkIndex !== null ? String(c.chunkIndex) : '';
       const cleanIdxStr = cleanChunkLocator(rawIdxStr).replace(/^ชิ้นส่วนที่\s*/, '');
       const parsedIdx = parseInt(cleanIdxStr, 10);
-      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : (idx + 1);
+      const validIdx = !isNaN(parsedIdx) && parsedIdx > 0 ? parsedIdx : undefined;
+
+      let validPage: number | undefined = undefined;
+      let hasNativePage = false;
+      if (!isDocUnpaged) {
+        if (typeof c.pageNumber === 'number' && !isNaN(c.pageNumber) && c.pageNumber > 0 && c.pageNumber <= 1899) {
+          validPage = c.pageNumber;
+          hasNativePage = true;
+        } else if (typeof c.pageNumber === 'string') {
+          const cleanedPageStr = cleanChunkLocator('', c.pageNumber);
+          if (cleanedPageStr.startsWith('หน้า ')) {
+            const parsedPage = parseInt(cleanedPageStr.replace(/^หน้า\s*/, ''), 10);
+            if (!isNaN(parsedPage) && parsedPage > 0 && parsedPage <= 1899) {
+              validPage = parsedPage;
+              hasNativePage = true;
+            }
+          }
+        }
+      }
+
       return {
         id: `ctx-chunk-${idx + 1}`,
         documentId: 'doc-ctx',
         chunkIndex: validIdx,
-        pageNumber: typeof c.pageNumber === 'number' ? c.pageNumber : (typeof c.pageNumber === 'string' ? parseInt(cleanChunkLocator(1, c.pageNumber).replace(/^หน้า\s*/, ''), 10) || undefined : undefined),
-        hasNativePage: typeof c.pageNumber === 'number',
+        pageNumber: validPage,
+        hasNativePage: hasNativePage,
         text: decodeHtmlEntities(c.text || ''),
         charCount: (c.text || '').length
       };

@@ -1250,8 +1250,8 @@ export default function App() {
                                       id={`ref-${msg.id}-${idx + 1}`}
                                       className="flex items-start gap-2 text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 transition-colors"
                                     >
-                                      <span className="text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 shrink-0 mt-0.5">
-                                        [{idx + 1}]
+                                      <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 shrink-0 mt-0.5" title={`รายการที่ ${idx + 1}`}>
+                                        รายการที่ {idx + 1}
                                       </span>
                                       <div className="flex-1 min-w-0">
                                         {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (

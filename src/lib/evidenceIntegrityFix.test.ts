@@ -1289,5 +1289,74 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.text).not.toContain('หน้า 2568');
     expect(res.text).not.toContain('2568');
   });
+
+  // --- P0-C Regression Tests (Cases 1 - 5) ---
+  it('P0-C Case 1 — Valid locator (chunkIndex: 5) preserves locator and matches citation', () => {
+    const doc = {
+      title: 'Valid Locator Doc',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: 5, text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+      ]
+    };
+    const res = getAcademicFallback('Prefix คืออะไร', [], doc);
+    expect(res.references).toHaveLength(1);
+    expect(res.references[0].evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+    expect(res.text).toContain('ส่วนอ้างอิง 5');
+  });
+
+  it('P0-C Case 2 — Missing locator (no chunkIndex, no page) does NOT fabricate "ชิ้นส่วนที่ 1" from array index', () => {
+    const doc = {
+      title: 'Missing Locator Doc',
+      hasNativePages: false,
+      chunks: [
+        { text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+      ]
+    };
+    const res = getAcademicFallback('Prefix คืออะไร', [], doc);
+    expect(res.references).toHaveLength(1);
+    expect(res.references[0].evidenceLocator).toBeFalsy();
+    expect(res.text).not.toContain('ชิ้นส่วนที่ 1');
+  });
+
+  it('P0-C Case 3 — Invalid locator ("DTM67-111") is not converted to fake locator or page', () => {
+    const doc = {
+      title: 'Invalid Locator Doc',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: 'DTM67-111', text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+      ]
+    };
+    const res = getAcademicFallback('Prefix คืออะไร', [], doc);
+    expect(res.references).toHaveLength(1);
+    expect(res.references[0].evidenceLocator).toBeFalsy();
+    expect(res.text).not.toContain('ชิ้นส่วนที่ 1');
+    expect(res.text).not.toContain('67111');
+  });
+
+  it('P0-C Case 4 — Mixed chunks (valid locator mixed with missing locator) do not corrupt other chunk locators', () => {
+    const doc = {
+      title: 'Mixed Chunks Doc',
+      hasNativePages: false,
+      chunks: [
+        { text: 'Unindexed chunk text about prefix.' },
+        { chunkIndex: 4, text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+      ]
+    };
+    const res = getAcademicFallback('Prefix คืออะไร', [], doc);
+    const ref4 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 4');
+    expect(ref4).toBeDefined();
+    expect(res.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(false);
+  });
+
+  it('P0-C Case 5 — UI filter and card mapping correctly filters unsupported citations and unverified items', () => {
+    const mixedRefs = [
+      { id: '1', type: 'document_chunk', verificationStatus: 'source_grounded', evidenceLocator: 'ชิ้นส่วนที่ 5', title: 'Grounded Card' },
+      { id: '2', type: 'document_chunk', verificationStatus: 'unsupported_citation', evidenceLocator: 'ชิ้นส่วนที่ 3', title: 'Unsupported Card' }
+    ];
+    const filtered = filterDisplayedReferences(mixedRefs, true);
+    expect(filtered).toHaveLength(1);
+    expect((filtered[0] as any).evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+  });
 });
 
