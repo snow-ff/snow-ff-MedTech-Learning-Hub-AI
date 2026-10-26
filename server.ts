@@ -1259,12 +1259,26 @@ app.post("/api/gemini/generate", async (req, res) => {
       });
     }
 
+
     const formattedChunks = preComputedRetrieval.relevantChunks
       .map((c: any) => {
-        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-        const pageClause = c.pageNumber ? ` | หน้า ${c.pageNumber}` : '';
+        const cleanedLocator = cleanChunkLocator(c.chunkIndex ?? '');
+        const cleanIdx = cleanedLocator ? cleanedLocator.replace(/^ชิ้นส่วนที่\s*/, '') : '';
+        const cleanPage = (!isDocUnpaged && c.pageNumber) ? `หน้า ${c.pageNumber}` : '';
+        
+        let locatorLabel = '';
+        if (cleanIdx && cleanPage) {
+          locatorLabel = `ชิ้นส่วนที่ ${cleanIdx} | ${cleanPage}`;
+        } else if (cleanIdx) {
+          locatorLabel = `ชิ้นส่วนที่ ${cleanIdx}`;
+        } else if (cleanPage) {
+          locatorLabel = cleanPage;
+        } else {
+          locatorLabel = 'ไม่ระบุหมายเลข';
+        }
+
         const filteredText = filterRelevantChunkContent(c.text || '', latestPrompt);
-        return `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${cleanIdx}${pageClause}]:\n${filteredText}`;
+        return `[ส่วนอ้างอิง: ${locatorLabel}]:\n${filteredText}`;
       })
       .join('\n\n');
 
