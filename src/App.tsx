@@ -1231,111 +1231,116 @@ export default function App() {
                         </span>
                       </div>
                     )}
-                    {msg.references && msg.references.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
-                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                          แหล่งอ้างอิง / References
-                        </p>
-                        <div className="space-y-1.5">
-                          {msg.references.map((ref, idx) => (
-                            <div
-                              key={idx}
-                              id={`ref-${msg.id}-${idx + 1}`}
-                              className="flex items-start gap-2 text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 transition-colors"
-                            >
-                              <span className="text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 shrink-0 mt-0.5">
-                                [{idx + 1}]
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (
-                                  <a
-                                    href={ref.uri}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-cyan-400 hover:underline font-medium break-words block flex items-center gap-1.5"
-                                  >
-                                    <span>{ref.title || ref.uri}</span>
-                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
-                                  </a>
-                                ) : (
-                                  <span className="text-slate-200 font-semibold block">{ref.title}</span>
-                                )}
-
-                                {ref.excerpt && (
-                                  <p className="text-xs sm:text-[13px] text-slate-200 italic mt-1.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-lg border border-slate-800/80 leading-relaxed font-sans">
-                                    "{ref.excerpt}"
-                                  </p>
-                                )}
-
-                                {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
-                                  <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
-                                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                      Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `ชิ้นส่วนที่ ${idx + 1}`}
-                                    </span>
-                                    <span className={
-                                      ref.verificationStatus === 'source_grounded'
-                                        ? 'text-emerald-400 font-medium'
-                                        : ref.verificationStatus === 'unsupported_citation'
-                                        ? 'text-rose-400 font-medium'
-                                        : 'text-slate-400'
-                                    }>
-                                      • ชิ้นส่วนอ้างอิง: {
-                                        ref.verificationStatus === 'source_grounded'
-                                          ? 'พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)'
-                                          : ref.verificationStatus === 'unsupported_citation'
-                                          ? '⚠️ ชิ้นส่วนไม่สนับสนุนคำถาม (Unsupported Chunk)'
-                                          : 'แหล่งภายนอกยังไม่รับรอง (Unverified External)'
-                                      }
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div className="text-xs mt-1.5 space-y-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      {ref.sourceTier === 'official_authority' ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-sans font-medium text-[11px]">
-                                          🏛️ องค์กรมาตรฐานทางการ
-                                        </span>
-                                      ) : ref.sourceTier === 'academic_database' ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-sans font-medium text-[11px]">
-                                          📄 ฐานข้อมูลวิชาการ/วิจัย
-                                        </span>
-                                      ) : ref.sourceTier === 'university' ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800 font-sans font-medium text-[11px]">
-                                          🎓 มหาวิทยาลัย / สถาบันการศึกษา
-                                        </span>
-                                      ) : ref.sourceTier === 'commercial_risk' ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-sans font-medium text-[11px]">
-                                          ⚠️ แหล่งพาณิชย์/ความเสี่ยงสูง
-                                        </span>
-                                      ) : (
-                                        <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 font-sans font-medium text-[11px]">
-                                          🌐 เว็บไซต์ทั่วไป
-                                        </span>
-                                      )}
-
-                                      {ref.domain && (
-                                        <span className="text-slate-400 font-mono text-[11px]">
-                                          ({ref.domain})
-                                        </span>
-                                      )}
-
-                                      <span className="text-slate-500 font-mono text-[10px]">
-                                        • แหล่งภายนอก Google Search
+                    {msg.references && (
+                      (() => {
+                        const displayedReferences = msg.references.filter(r => r.verificationStatus !== 'unsupported_citation');
+                        const unsupportedCount = msg.references.filter(r => r.verificationStatus === 'unsupported_citation').length;
+                        return (
+                          <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
+                            {displayedReferences.length > 0 && (
+                              <>
+                                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                  แหล่งอ้างอิง / References ({displayedReferences.length})
+                                </p>
+                                <div className="space-y-1.5">
+                                  {displayedReferences.map((ref, idx) => (
+                                    <div
+                                      key={idx}
+                                      id={`ref-${msg.id}-${idx + 1}`}
+                                      className="flex items-start gap-2 text-xs p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 transition-colors"
+                                    >
+                                      <span className="text-[11px] font-mono font-bold text-cyan-400 bg-cyan-950/80 px-1.5 py-0.5 rounded border border-cyan-800/60 shrink-0 mt-0.5">
+                                        [{idx + 1}]
                                       </span>
-                                    </div>
+                                      <div className="flex-1 min-w-0">
+                                        {ref.uri && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) ? (
+                                          <a
+                                            href={ref.uri}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-cyan-400 hover:underline font-medium break-words block flex items-center gap-1.5"
+                                          >
+                                            <span>{ref.title || ref.uri}</span>
+                                            <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                          </a>
+                                        ) : (
+                                          <span className="text-slate-200 font-semibold block">{ref.title}</span>
+                                        )}
 
-                                    {ref.warningNotice && (
-                                      <p className="text-[11px] text-amber-300/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/50 mt-1 font-sans">
-                                        {ref.warningNotice}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
+                                        {ref.excerpt && (
+                                          <p className="text-xs sm:text-[13px] text-slate-200 italic mt-1.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-lg border border-slate-800/80 leading-relaxed font-sans">
+                                            "{ref.excerpt}"
+                                          </p>
+                                        )}
+
+                                        {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
+                                          <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
+                                            <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+                                              Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `ชิ้นส่วนที่ ${idx + 1}`}
+                                            </span>
+                                            <span className="text-emerald-400 font-medium">
+                                              • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <div className="text-xs mt-1.5 space-y-1">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              {ref.sourceTier === 'official_authority' ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-sans font-medium text-[11px]">
+                                                  🏛️ องค์กรมาตรฐานทางการ
+                                                </span>
+                                              ) : ref.sourceTier === 'academic_database' ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800 font-sans font-medium text-[11px]">
+                                                  📄 ฐานข้อมูลวิชาการ/วิจัย
+                                                </span>
+                                              ) : ref.sourceTier === 'university' ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800 font-sans font-medium text-[11px]">
+                                                  🎓 มหาวิทยาลัย / สถาบันการศึกษา
+                                                </span>
+                                              ) : ref.sourceTier === 'commercial_risk' ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 font-sans font-medium text-[11px]">
+                                                  ⚠️ แหล่งพาณิชย์/ความเสี่ยงสูง
+                                                </span>
+                                              ) : (
+                                                <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 font-sans font-medium text-[11px]">
+                                                  🌐 เว็บไซต์ทั่วไป
+                                                </span>
+                                              )}
+
+                                              {ref.domain && (
+                                                <span className="text-slate-400 font-mono text-[11px]">
+                                                  ({ref.domain})
+                                                </span>
+                                              )}
+
+                                              <span className="text-slate-500 font-mono text-[10px]">
+                                                • แหล่งภายนอก Google Search
+                                              </span>
+                                            </div>
+
+                                            {ref.warningNotice && (
+                                              <p className="text-[11px] text-amber-300/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/50 mt-1 font-sans">
+                                                {ref.warningNotice}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {unsupportedCount > 0 && (
+                              <div className="text-[11px] text-amber-300/90 bg-amber-950/40 p-2 rounded-lg border border-amber-900/50 flex items-center gap-1.5 mt-2">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                                <span>ระบบตรวจพบชิ้นส่วนเอกสารที่ไม่สนับสนุนคำถาม ({unsupportedCount} ชิ้นส่วน) และได้ตัดออกจากการแสดงผลเพื่อความถูกต้องทางวิชาการ</span>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                            )}
+                          </div>
+                        );
+                      })()
                     )}
                     <div
                       className={`text-[10px] mt-2 ${

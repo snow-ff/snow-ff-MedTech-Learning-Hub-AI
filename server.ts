@@ -138,6 +138,7 @@ function getCleanSectionTitle(text: string, chunkIndex: number | string): string
       /^#+\s+/.test(line) ||
       /^===+\s*/.test(line) ||
       /^===.*\s*===$/.test(line) ||
+      /^(?:---|\*\*\*)\s*(?:ส่วนที่|บทที่|section|chapter)/i.test(line) ||
       /^(ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*[:#\-]?/i.test(line);
 
     if (isGenuineHeading) {
@@ -155,6 +156,70 @@ function getCleanSectionTitle(text: string, chunkIndex: number | string): string
     }
   }
   return cleanChunkLocator(chunkIndex);
+}
+
+// Filters out unrequested sections (e.g. Word Root tables, Combining Vowel rules, Body Cavities) from chunk content
+function filterRelevantChunkContent(chunkText: string, prompt: string): string {
+  if (!chunkText) return '';
+  const decoded = decodeHtmlEntities(chunkText);
+  const queryLower = prompt.toLowerCase();
+  const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
+  const asksSuffix = /suffix|ปัจจัยท้าย/i.test(queryLower);
+  const asksRoot = /root|รากศัพท์/i.test(queryLower);
+  const asksCavity = /cavity|quadrant|ช่องว่าง|จตุภาค/i.test(queryLower);
+  const asksPosition = /position|plane|direction|ระนาบ|ทิศทาง|ท่ากายวิภาค/i.test(queryLower);
+
+  // If specific word parts query without root/cavity/position
+  if ((asksPrefix || asksSuffix) && !asksRoot && !asksCavity && !asksPosition) {
+    const lines = decoded.split('\n');
+    const filteredLines: string[] = [];
+    let skippingSection = false;
+
+    for (const line of lines) {
+      const lineLower = line.toLowerCase();
+
+      // Check section headers to skip
+      if (
+        /^##+\s*(?:2\.|common\s+word\s+roots|word\s+roots|combining\s+forms|รากศัพท์|ช่องว่าง|จตุภาค|ระนาบ|ท่ากายวิภาค)/i.test(lineLower) ||
+        /^(?:word root|combining vowel|combining form|รูปเชื่อมคำ|สระเชื่อม|รากศัพท์)\s*[:#\-]/i.test(lineLower)
+      ) {
+        skippingSection = true;
+        continue;
+      }
+
+      // Check section headers to resume
+      if (
+        /^##+\s*(?:1\.|common\s+prefixes|diagnostic|surgical|suffixes|คำอุปสรรค|คำปัจจัย)/i.test(lineLower) ||
+        /^(?:prefix|suffix|คำอุปสรรค|คำปัจจัย)\s*[:#\-]/i.test(lineLower)
+      ) {
+        skippingSection = false;
+      }
+
+      if (skippingSection) {
+        continue;
+      }
+
+      // Line-level filter for bullet items: skip word root / combining vowel lines if not queried
+      const isWordRootLine =
+        /^\s*[-*•]\s*\*\*(?:cardi|nephr|ren|hepat|gastr|enter|pulmon|pneum|derm|oste|neur|hemat)\/o/i.test(lineLower) ||
+        /^\s*\d+\.\s*\*\*word root/i.test(lineLower) ||
+        /^\s*\d+\.\s*\*\*combining vowel/i.test(lineLower) ||
+        /^\s*[-*•]\s*\*\*combining form/i.test(lineLower);
+
+      if (isWordRootLine) {
+        continue;
+      }
+
+      filteredLines.push(line);
+    }
+
+    const result = filteredLines.join('\n').trim();
+    if (result.length > 40) {
+      return result;
+    }
+  }
+
+  return decoded;
 }
 
 function buildChunkReferences(
@@ -209,11 +274,36 @@ function buildChunkReferences(
           /\bsuffix(?:es)?\s*(?:e\.g\.|such as|examples?:)/i.test(cl)
         );
 
+        const chunkHasWordComponentsList = clauses.some(cl => {
+          const isComp = /(?:ประกอบด้วย|องค์ประกอบ|components|มีส่วนประกอบ|มีองค์ประกอบ|สร้างจาก)/i.test(cl);
+          if (!isComp) return false;
+          if (asksPrefix && asksSuffix) {
+            return (/(?:prefix|คำอุปสรรค)/i.test(cl) && /(?:suffix|ปัจจัยท้าย)/i.test(cl));
+          }
+          if (asksPrefix) {
+            return /(?:prefix|คำอุปสรรค)/i.test(cl);
+          }
+          if (asksSuffix) {
+            return /(?:suffix|ปัจจัยท้าย)/i.test(cl);
+          }
+          if (asksRoot) {
+            return /(?:root|รากศัพท์)/i.test(cl);
+          }
+          return /(?:word root|รากศัพท์|prefix|คำอุปสรรค|suffix|ปัจจัยท้าย|combining)/i.test(cl);
+        });
+        const chunkHasRoot = /(?:root|รากศัพท์)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:แกนกลาง|คือ|หมายถึง|ทำหน้าที่|เป็น|cardi|nephr|hepat|gastr))/i.test(chunkLower) ||
+                             /\bword root\b/i.test(chunkLower);
+
         const chunkHasSubstantivePrefix = asksDefinitionOrFunction ? chunkHasPrefixDefinition : (chunkHasPrefixDefinition || chunkHasPrefixExamples);
         const chunkHasSubstantiveSuffix = asksDefinitionOrFunction ? chunkHasSuffixDefinition : (chunkHasSuffixDefinition || chunkHasSuffixExamples);
         const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
 
-        isChunkTopicRelevant = !isNoticeOrDisclaimer && ((asksSuffix && chunkHasSubstantiveSuffix) || (asksPrefix && chunkHasSubstantivePrefix));
+        isChunkTopicRelevant = !isNoticeOrDisclaimer && (
+          chunkHasWordComponentsList ||
+          (asksRoot && chunkHasRoot) ||
+          (asksSuffix && chunkHasSubstantiveSuffix) ||
+          (asksPrefix && chunkHasSubstantivePrefix)
+        );
       }
     } else {
       const isNoticeOrAdministrative = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
@@ -300,8 +390,9 @@ export function getAcademicFallback(
       const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
       const citations = retrieval.relevantChunks
         .map(c => {
-          const cleanIdx = decodeHtmlEntities(String(c.chunkIndex ?? '')).replace(/[^0-9]/g, '') || c.chunkIndex;
-          return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${c.text}`;
+          const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+          const filtered = filterRelevantChunkContent(c.text || '', prompt);
+          return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
         })
         .join('\n\n');
       const fallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
@@ -330,8 +421,6 @@ export function getAcademicFallback(
       const hasAnyGroundedReference = chunkReferences.some(r => r.verificationStatus === 'source_grounded');
       const isOverallEvidenceInsufficient = isFallbackInsufficient || !hasAnyGroundedReference;
 
-      // Adjust fallback answer text when evidence is incomplete or overgeneralized:
-      // Show ONLY conclusions supported by actual evidence and explicitly state missing parts.
       let finalFallbackText = fallbackText;
       if (isOverallEvidenceInsufficient || isFallbackInsufficient) {
         const queryLower = prompt.toLowerCase();
@@ -340,7 +429,8 @@ export function getAcademicFallback(
         const asksRoot = /root|รากศัพท์/i.test(queryLower);
 
         const groundedChunks = retrieval.relevantChunks.filter(c => {
-          const ref = chunkReferences.find(r => r.uri === `#chunk-${c.chunkIndex}`);
+          const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+          const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
           return ref && ref.verificationStatus === 'source_grounded';
         });
 
@@ -359,8 +449,9 @@ export function getAcademicFallback(
         if (groundedChunks.length > 0) {
           const groundedCitations = groundedChunks
             .map(c => {
-              const cleanIdx = decodeHtmlEntities(String(c.chunkIndex ?? '')).replace(/[^0-9]/g, '') || c.chunkIndex;
-              return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${decodeHtmlEntities(c.text || '')}`;
+              const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+              const filtered = filterRelevantChunkContent(c.text || '', prompt);
+              return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
             })
             .join('\n\n');
 
@@ -1100,7 +1191,12 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
 
     const formattedChunks = preComputedRetrieval.relevantChunks
-      .map((c: any) => `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${c.chunkIndex}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]:\n${c.text}`)
+      .map((c: any) => {
+        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+        const pageClause = c.pageNumber ? ` | หน้า ${c.pageNumber}` : '';
+        const filteredText = filterRelevantChunkContent(c.text || '', latestPrompt);
+        return `[ส่วนอ้างอิง: ชิ้นส่วนที่ ${cleanIdx}${pageClause}]:\n${filteredText}`;
+      })
       .join('\n\n');
 
     systemInstruction = `คุณคือผู้ช่วย AI สรุปและตอบคำถามเชิงวิชาการจากเอกสารการเรียนรู้ (Document-Grounded Learning Assistant) สำหรับ MedTech Learning Hub AI
@@ -1115,7 +1211,11 @@ ${formattedChunks}
 2. ระบุหมายเลขหน้าหรือส่วนอ้างอิง เช่น "[หน้า 2]" หรือ "[ส่วนที่ 1]" ทุกครั้งที่มีการอ้างอิงเนื้อหาจากเอกสาร ห้ามแต่งเลขหน้าขึ้นมาเองเด็ดขาด
 3. หากเนื้อหาในเอกสารที่แนบมาไม่มีคำตอบ หรือข้อมูลไม่เพียงพอที่จะตอบประเด็น ให้ตอบอย่างตรงไปตรงมาว่า "จากเอกสารที่ระบุ ไม่พบข้อมูลเกี่ยวกับเรื่องนี้" ห้ามแต่งข้อมูล คาดเดา หรือยกข้อมูลภายนอกมาตอบเด็ดขาด
 4. ตอบด้วยภาษาไทยที่สุภาพ ชัดเจน เข้าใจง่าย และคงศัพท์ภาษาอังกฤษทางวิชาการและเทคนิคการแพทย์ไว้
-5. ห้ามใส่ข้อความอ้างอิงแบบอินไลน์ เช่น [ส่วนอ้างอิง ...] ไว้ในเนื้อหาคำตอบเด็ดขาด ให้ตอบด้วยภาษาเนื้อหาทางวิชาการอย่างเป็นธรรมชาติ และให้ระบบจัดการแสดงกล่องแหล่งอ้างอิงแยกต่างหากเอง`;
+5. ห้ามใส่ข้อความอ้างอิงแบบอินไลน์ เช่น [ส่วนอ้างอิง ...] ไว้ในเนื้อหาคำตอบเด็ดขาด ให้ตอบด้วยภาษาเนื้อหาทางวิชาการอย่างเป็นธรรมชาติ และให้ระบบจัดการแสดงกล่องแหล่งอ้างอิงแยกต่างหากเอง
+6. ให้ตอบเฉพาะประเด็นที่ผู้ใช้ถามเท่านั้น (Strict Scope Control):
+   - หากผู้ใช้ถามเรื่องความแตกต่างระหว่าง Prefix และ Suffix ให้ตอบเฉพาะนิยาม ตำแหน่ง หน้าที่ และตัวอย่างของ Prefix และ Suffix
+   - ห้ามนำเนื้อหา Word Root (รากศัพท์), Combining Form (รูปเชื่อมคำ), หรือเนื้อหากายวิภาค/ช่องว่างร่างกาย (Body Cavities) มาตอบปะปนในคำตอบเด็ดขาด เว้นแต่ผู้ใช้จะถามถึงโดยตรง
+   - สรุปคำตอบให้กระชับ ชัดเจน ตรงประเด็น และไม่เขียนเยิ่นเย้อซ้ำซ้อน`;
   }
 
   // Map validated messages to Gemini SDK contents format
@@ -1202,8 +1302,11 @@ ${formattedChunks}
       if (isDocumentGrounding) {
         text = text
           .replace(/\[ส่วนอ้างอิง[^\]]*\]/g, '')
-          .replace(/\[chunk\s*\d+[^\]]*\]/gi, '')
-          .replace(/\[ส่วนที่\s*\d+[^\]]*\]/gi, '')
+          .replace(/\[chunk\s*[^\]]*\]/gi, '')
+          .replace(/\[ส่วนที่\s*[^\]]*\]/gi, '')
+          .replace(/\[หน้า\s*[^\]]*\]/gi, '')
+          .replace(/&#[xX][0-9a-fA-F]+;?/g, (m: string) => decodeHtmlEntities(m))
+          .replace(/&#\d+;?/g, (m: string) => decodeHtmlEntities(m))
           .replace(/\n{3,}/g, '\n\n')
           .trim();
       }
@@ -1420,7 +1523,9 @@ ${formattedChunks}
         : "unverified",
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
-      evidenceLocator: isDocumentGrounding ? ((r as any).evidenceLocator || (documentContext?.title ? `เอกสาร: ${decodeHtmlEntities(documentContext.title)}` : "ชิ้นส่วนเอกสารต้นทาง")) : null,
+      evidenceLocator: isDocumentGrounding
+        ? (cleanChunkLocator((r as any).evidenceLocator || (r as any).chunkIndex || '') || 'ชิ้นส่วนที่ 1')
+        : null,
       contentVersion: "1.2"
     })),
   });

@@ -254,6 +254,8 @@ export const ACADEMIC_STOPWORDS = new Set([
   'หาก', 'แต่', 'ต้อง', 'กว่า', 'มาก', 'น้อย', 'เท่า', 'ใด', 'อะไร', 'ไหน',
   'ทำไม', 'อย่างไร', 'ยังไง', 'เท่าไหร่', 'กี่', 'ครับ', 'ค่ะ', 'นะคะ', 'ขอ',
   'บอก', 'ช่วย', 'หน่อย', 'อยาก', 'ทราบ', 'รู้', 'และ/หรือ',
+  'ระหว่าง', 'พร้อม', 'อธิบาย', 'เอกสาร', 'ยกตัวอย่าง', 'ตัวอย่าง', 'ความหมาย',
+  'ความแตกต่าง', 'ต่างกัน', 'สรุป', 'เนื้อหา', 'ข้อมูล', 'ที่เลือก', 'อ้างอิง',
   'a', 'an', 'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
   'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been', 'this', 'that', 'it'
 ]);
@@ -591,6 +593,13 @@ export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: numb
   }
   const rawStr = String(chunkIndex);
   const decoded = decodeHtmlEntities(rawStr);
+
+  // If the locator string already contains "หน้า", preserve "หน้า <digits>"
+  if (/^หน้า\s*\d+/i.test(decoded.trim())) {
+    const cleanDigits = decoded.replace(/\D/g, '');
+    return cleanDigits ? `หน้า ${cleanDigits}` : '';
+  }
+
   const cleanNumber = decoded.replace(/\D/g, '');
   if (!cleanNumber) {
     return '';
