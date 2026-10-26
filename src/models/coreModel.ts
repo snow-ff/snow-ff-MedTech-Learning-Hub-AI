@@ -60,6 +60,8 @@ export interface OfficialCurriculum {
 export type DocumentType = 'pdf' | 'slide' | 'note' | 'paper' | 'text';
 export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable' | 'external_research';
 
+export type SourceLocatorProvenance = 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' | 'made_up';
+
 export interface DocumentChunk {
   id: string;
   documentId: string;
@@ -67,7 +69,7 @@ export interface DocumentChunk {
   pageNumber?: number; // Only present if document has genuine native pages (e.g. PDF)
   hasNativePage?: boolean;
   sourceLocator?: string; // Verified source locator from source document
-  sourceLocatorProvenance?: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' | string;
+  sourceLocatorProvenance?: SourceLocatorProvenance;
   text: string;
   charCount: number;
   heading?: string;

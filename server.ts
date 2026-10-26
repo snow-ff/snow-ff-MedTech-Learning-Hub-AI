@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
-import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS } from "./src/lib/documentChunker";
+import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS, validateAndResolveLocator } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
 import { AcademicVerificationReport } from "./src/models/coreModel";
 import {
@@ -233,19 +233,9 @@ function buildChunkReferences(
     const decodedText = decodeHtmlEntities(c.text || '');
     const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex ?? '');
     const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt || '', 140));
-    const safePage = !isDocUnpaged ? c.pageNumber : undefined;
-    const hasNative = (c as any).hasNativePage === true || (safePage !== undefined && safePage !== null);
-    const sourceProv = c.sourceLocatorProvenance;
-    const hasVerifiedProvenance = sourceProv && sourceProv !== 'unconfirmed';
-
-    let finalLocator = '';
-    if (hasNative && safePage !== undefined && safePage !== null) {
-      finalLocator = `หน้า ${safePage}`;
-    } else if (hasVerifiedProvenance && c.sourceLocator) {
-      finalLocator = c.sourceLocator;
-    } else {
-      finalLocator = 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
-    }
+    const resolvedLocator = validateAndResolveLocator(c, isDocUnpaged);
+    const finalLocator = resolvedLocator.locator;
+    const safePage = resolvedLocator.provenance === 'native_page' ? c.pageNumber : undefined;
 
     const queryLower = prompt.toLowerCase();
     const chunkLower = decodedText.toLowerCase();
@@ -1319,19 +1309,8 @@ app.post("/api/gemini/generate", async (req, res) => {
 
     const formattedChunks = preComputedRetrieval.relevantChunks
       .map((c: any) => {
-        const hasNative = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
-        let locatorLabel = '';
-        if (hasNative && c.pageNumber) {
-          locatorLabel = `หน้า ${c.pageNumber}`;
-        } else if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
-          const cleaned = cleanChunkLocator(c.chunkIndex);
-          const cleanIdx = cleaned.replace(/^ชิ้นส่วนที่\s*/, '');
-          if (cleanIdx) locatorLabel = `ชิ้นส่วนที่ ${cleanIdx}`;
-        }
-        if (!locatorLabel) {
-          locatorLabel = 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
-        }
-
+        const resolved = validateAndResolveLocator(c, isDocUnpaged);
+        const locatorLabel = resolved.locator;
         const filteredText = filterRelevantChunkContent(c.text || '', latestPrompt);
         return `[ส่วนอ้างอิง: ${locatorLabel}]:\n${filteredText}`;
       })
@@ -1662,7 +1641,7 @@ ${formattedChunks}
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
       evidenceLocator: isDocumentGrounding
-        ? (cleanChunkLocator((r as any).evidenceLocator || (r as any).chunkIndex || '') || null)
+        ? ((r as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้')
         : null,
       contentVersion: "1.2"
     })),

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
+import { DocumentChunk } from '../models/coreModel';
 import { getAcademicFallback } from '../../server';
 
 describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {

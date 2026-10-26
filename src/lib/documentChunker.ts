@@ -698,3 +698,78 @@ export function filterDisplayedReferences<T extends { verificationStatus?: strin
   });
 }
 
+export type SourceLocatorProvenance = 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed';
+
+export interface VerifiedLocatorResult {
+  locator: string;
+  provenance: SourceLocatorProvenance;
+  isVerified: boolean;
+}
+
+export function validateAndResolveLocator(
+  chunk: {
+    pageNumber?: number;
+    hasNativePage?: boolean;
+    sourceLocator?: string;
+    sourceLocatorProvenance?: string;
+    text?: string;
+    chunkIndex?: number | string;
+  },
+  isDocUnpaged: boolean = false
+): VerifiedLocatorResult {
+  const prov = chunk.sourceLocatorProvenance;
+  const rawLocator = chunk.sourceLocator;
+
+  if (!isDocUnpaged && chunk.pageNumber !== undefined && chunk.pageNumber !== null && chunk.pageNumber > 0 && chunk.pageNumber <= 1899 && prov !== 'unconfirmed' && prov !== 'made_up') {
+    return {
+      locator: `หน้า ${chunk.pageNumber}`,
+      provenance: 'native_page',
+      isVerified: true
+    };
+  }
+
+  if (!prov || prov === 'unconfirmed' || prov === 'made_up' || (prov !== 'native_page' && prov !== 'source_heading' && prov !== 'explicit_provenance')) {
+    return {
+      locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+      provenance: 'unconfirmed',
+      isVerified: false
+    };
+  }
+
+  if (prov === 'native_page') {
+    if (!isDocUnpaged && chunk.pageNumber !== undefined && chunk.pageNumber !== null && chunk.pageNumber > 0 && chunk.pageNumber <= 1899) {
+      return {
+        locator: `หน้า ${chunk.pageNumber}`,
+        provenance: 'native_page',
+        isVerified: true
+      };
+    }
+  }
+
+  if (prov === 'source_heading' && rawLocator && rawLocator !== 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') {
+    const decodedText = decodeHtmlEntities(chunk.text || '');
+    if (decodedText.includes(rawLocator) || new RegExp(rawLocator, 'i').test(decodedText) || /^ชิ้นส่วนที่\s*\d+$/.test(rawLocator) || /^ส่วนที่\s*\d+$/.test(rawLocator)) {
+      return {
+        locator: rawLocator,
+        provenance: 'source_heading',
+        isVerified: true
+      };
+    }
+  }
+
+  if (prov === 'explicit_provenance' && rawLocator && rawLocator !== 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') {
+    return {
+      locator: rawLocator,
+      provenance: 'explicit_provenance',
+      isVerified: true
+    };
+  }
+
+  return {
+    locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+    provenance: 'unconfirmed',
+    isVerified: false
+  };
+}
+
+
