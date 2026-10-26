@@ -1,6 +1,6 @@
 {
-  "summary": "สรุปการส่งมอบ Track B1.1 — Local-First Learning Document MVP สำหรับ MedTech Learning Hub AI v1.2: คลังเอกสารการเรียนรู้ในเครื่อง (IndexedDB), การแตกชิ้นส่วนข้อความ (Chunking & Page indexing), และระบบถามตอบที่อิงเนื้อหาจากเอกสารจริง (Strict Document Grounding & Anti-Hallucination) พร้อม 21 automated unit tests ผ่าน 100%",
-  "updatedAt": "2026-10-17T09:35:15.009291440Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "P0 Evidence Integrity Remediation Report for MedTech Learning Hub AI v1.2. Details fixes across server.ts, documentChunker.ts, App.tsx, and regression tests. All automated unit and integration tests pass; P0 status remains OPEN and AC-10 remains PENDING pending live Preview verification.",
+  "updatedAt":  "2026-10-26T01:12:39.212452476Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

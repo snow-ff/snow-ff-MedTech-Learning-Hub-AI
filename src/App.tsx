@@ -1233,8 +1233,14 @@ export default function App() {
                     )}
                     {msg.references && (
                       (() => {
-                        const displayedReferences = msg.references.filter(r => r.verificationStatus !== 'unsupported_citation');
-                        const unsupportedCount = msg.references.filter(r => r.verificationStatus === 'unsupported_citation').length;
+                        const isDocGrounding = msg.source === 'document_grounding' || msg.references.some(r => (r as any).type === 'document_chunk');
+                        const displayedReferences = msg.references.filter(r => {
+                          if (isDocGrounding || (r as any).type === 'document_chunk') {
+                            return r.verificationStatus === 'source_grounded';
+                          }
+                          return r.verificationStatus !== 'unsupported_citation' && r.verificationStatus !== 'unverified' && !!r.verificationStatus;
+                        });
+                        const unsupportedCount = msg.references.length - displayedReferences.length;
                         return (
                           <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2">
                             {displayedReferences.length > 0 && (
@@ -1276,7 +1282,7 @@ export default function App() {
                                         {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
                                           <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
                                             <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                              Locator: {(ref as any).evidenceLocator ? cleanChunkLocator((ref as any).evidenceLocator) : `ชิ้นส่วนที่ ${idx + 1}`}
+                                              Locator: {(ref as any).evidenceLocator ? (cleanChunkLocator((ref as any).evidenceLocator) || 'ไม่ระบุหมายเลข') : 'ไม่ระบุหมายเลข'}
                                             </span>
                                             <span className="text-emerald-400 font-medium">
                                               • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk Grounded)
@@ -1335,7 +1341,7 @@ export default function App() {
                             {unsupportedCount > 0 && (
                               <div className="text-[11px] text-amber-300/90 bg-amber-950/40 p-2 rounded-lg border border-amber-900/50 flex items-center gap-1.5 mt-2">
                                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                                <span>ระบบตรวจพบชิ้นส่วนเอกสารที่ไม่สนับสนุนคำถาม ({unsupportedCount} ชิ้นส่วน) และได้ตัดออกจากการแสดงผลเพื่อความถูกต้องทางวิชาการ</span>
+                                <span>ระบบตรวจพบชิ้นส่วนเอกสารที่ไม่สนับสนุนคำถามหรือยังไม่ผ่านการยืนยัน ({unsupportedCount} ชิ้นส่วน) และได้ตัดออกจากการแสดงผลเพื่อความถูกต้องทางวิชาการ (คำตอบครอบคลุมเฉพาะประเด็นที่มีหลักฐานยืนยันได้)</span>
                               </div>
                             )}
                           </div>

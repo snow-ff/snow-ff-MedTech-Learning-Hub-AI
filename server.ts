@@ -249,6 +249,7 @@ function buildChunkReferences(
         isChunkTopicRelevant = queryTerms.some(term => chunkLower.includes(term.toLowerCase()));
       } else {
         const asksDefinitionOrFunction = /(?:คืออะไร|หมายถึง|นิยาม|หน้าที่|ความหมาย|ทำหน้าที่|อธิบายหน้าที่|อธิบายความหมาย)/i.test(queryLower);
+        const asksExamples = /ตัวอย่าง|เช่น|ยกตัวอย่าง|examples?/i.test(queryLower);
         const clauses = chunkLower
           .split(/(?:\r?\n+|[.;|•\u2022]+|\s{2,}|ฯ(?:ลฯ)?)/)
           .map(s => s.trim())
@@ -294,8 +295,12 @@ function buildChunkReferences(
         const chunkHasRoot = /(?:root|รากศัพท์)(?:\s*(?:\([^)]*\)|[*_`"'])*\s*[:\-–]?\s*(?:แกนกลาง|คือ|หมายถึง|ทำหน้าที่|เป็น|cardi|nephr|hepat|gastr))/i.test(chunkLower) ||
                              /\bword root\b/i.test(chunkLower);
 
-        const chunkHasSubstantivePrefix = asksDefinitionOrFunction ? chunkHasPrefixDefinition : (chunkHasPrefixDefinition || chunkHasPrefixExamples);
-        const chunkHasSubstantiveSuffix = asksDefinitionOrFunction ? chunkHasSuffixDefinition : (chunkHasSuffixDefinition || chunkHasSuffixExamples);
+        const chunkHasSubstantivePrefix = (asksDefinitionOrFunction && !asksExamples)
+          ? chunkHasPrefixDefinition
+          : (chunkHasPrefixDefinition || chunkHasPrefixExamples);
+        const chunkHasSubstantiveSuffix = (asksDefinitionOrFunction && !asksExamples)
+          ? chunkHasSuffixDefinition
+          : (chunkHasSuffixDefinition || chunkHasSuffixExamples);
         const isNoticeOrDisclaimer = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer/i.test(chunkLower);
 
         isChunkTopicRelevant = !isNoticeOrDisclaimer && (
@@ -388,18 +393,62 @@ export function getAcademicFallback(
 
     if (retrieval.hasEvidence && retrieval.relevantChunks.length > 0) {
       const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
-      const citations = retrieval.relevantChunks
-        .map(c => {
-          const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-          const filtered = filterRelevantChunkContent(c.text || '', prompt);
-          return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
-        })
-        .join('\n\n');
-      const fallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${citations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
+      const chunkReferences = buildChunkReferences(retrieval.relevantChunks, prompt, {} as any, documentContext);
+
+      const groundedChunks = retrieval.relevantChunks.filter(c => {
+        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+        const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
+        return ref && ref.verificationStatus === 'source_grounded';
+      });
+
+      const unsupportedChunks = retrieval.relevantChunks.filter(c => {
+        const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+        const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
+        return !ref || ref.verificationStatus !== 'source_grounded';
+      });
+
+      const queryLower = prompt.toLowerCase();
+      const asksSuffix = /suffix|ปัจจัยท้าย/i.test(queryLower);
+      const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
+      const asksRoot = /root|รากศัพท์/i.test(queryLower);
+
+      const hasGroundedPrefix = groundedChunks.some(c => /prefix|คำอุปสรรค|brady|tachy/i.test(c.text || '')) ||
+                                chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /prefix|คำอุปสรรค|brady|tachy/i.test(r.excerpt || ''));
+      const hasGroundedSuffix = groundedChunks.some(c => /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(c.text || '')) ||
+                                chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(r.excerpt || ''));
+      const hasGroundedRoot = groundedChunks.some(c => /root|รากศัพท์|cardi|nephr/i.test(c.text || '')) ||
+                              chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /root|รากศัพท์|cardi|nephr/i.test(r.excerpt || ''));
+
+      const missingParts: string[] = [];
+      if (asksPrefix && !hasGroundedPrefix) missingParts.push('คำอุปสรรค (Prefix)');
+      if (asksSuffix && !hasGroundedSuffix) missingParts.push('ปัจจัยท้าย (Suffix)');
+      if (asksRoot && !hasGroundedRoot) missingParts.push('รากศัพท์ (Word Root)');
+
+      let finalFallbackText = '';
+      if (groundedChunks.length > 0) {
+        const groundedCitations = groundedChunks
+          .map(c => {
+            const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
+            const filtered = filterRelevantChunkContent(c.text || '', prompt);
+            return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
+          })
+          .join('\n\n');
+
+        if (missingParts.length > 0) {
+          const missingClause = `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วน โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`;
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
+        } else if (unsupportedChunks.length > 0) {
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องและมีหลักฐานรองรับ ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากชิ้นส่วนเอกสารที่มีหลักฐานยืนยันในคลังการเรียนรู้ โดยตัดชิ้นส่วนที่ไม่เกี่ยวข้องออกเพื่อความถูกต้องทางวิชาการ*`;
+        } else {
+          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\nจากการสืบค้นในเนื้อหาของเอกสาร พบข้อมูลที่เกี่ยวข้องกับข้อซักถาม ดังนี้:\n\n${groundedCitations}\n\n*ข้อแนะนำ: ข้อมูลข้างต้นอ้างอิงตรงจากเอกสารในคลังการเรียนรู้ของผู้ใช้โดยไม่แต่งเติมข้อมูลภายนอก*`;
+        }
+      } else {
+        finalFallbackText = `*(ค้นหาจากเอกสาร: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
+      }
 
       const verification = verifyAcademicAnswer({
         query: prompt,
-        candidateAnswer: fallbackText,
+        candidateAnswer: finalFallbackText,
         document: {
           title: documentContext.title,
           hasNativePages: documentContext.hasNativePages,
@@ -409,60 +458,35 @@ export function getAcademicFallback(
         conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
       });
 
+      for (const uc of unsupportedChunks) {
+        const cleanIdx = cleanChunkLocator(uc.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || uc.chunkIndex;
+        const msg = `ชิ้นส่วนที่ ${cleanIdx} ไม่ใช่หลักฐานทางวิชาการที่สนับสนุนคำถามนี้โดยตรง`;
+        if (!verification.stages.evidenceFidelity.unsupportedCitations.some(m => m.includes(`ชิ้นส่วนที่ ${cleanIdx}`))) {
+          verification.stages.evidenceFidelity.unsupportedCitations.push(msg);
+        }
+      }
+
       const isFallbackInsufficient =
         verification.verdict === 'INSUFFICIENT_EVIDENCE' ||
         verification.verdict === 'FAIL' ||
         !verification.stages.evidenceFidelity.passed ||
         verification.stages.answerFidelity.status === 'hallucinated' ||
-        verification.stages.answerFidelity.status === 'overgeneralized';
+        verification.stages.answerFidelity.status === 'overgeneralized' ||
+        groundedChunks.length === 0 ||
+        missingParts.length > 0;
 
-      const chunkReferences = buildChunkReferences(retrieval.relevantChunks, prompt, verification, documentContext);
-
-      const hasAnyGroundedReference = chunkReferences.some(r => r.verificationStatus === 'source_grounded');
-      const isOverallEvidenceInsufficient = isFallbackInsufficient || !hasAnyGroundedReference;
-
-      let finalFallbackText = fallbackText;
-      if (isOverallEvidenceInsufficient || isFallbackInsufficient) {
-        const queryLower = prompt.toLowerCase();
-        const asksSuffix = /suffix|ปัจจัยท้าย/i.test(queryLower);
-        const asksPrefix = /prefix|คำอุปสรรค/i.test(queryLower);
-        const asksRoot = /root|รากศัพท์/i.test(queryLower);
-
-        const groundedChunks = retrieval.relevantChunks.filter(c => {
-          const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-          const ref = chunkReferences.find(r => r.uri === `#chunk-${cleanIdx}` || r.uri === `#chunk-${c.chunkIndex}`);
-          return ref && ref.verificationStatus === 'source_grounded';
-        });
-
-        const hasGroundedPrefix = groundedChunks.some(c => /prefix|คำอุปสรรค|brady|tachy/i.test(c.text || '')) ||
-                                  chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /prefix|คำอุปสรรค|brady|tachy/i.test(r.excerpt || ''));
-        const hasGroundedSuffix = groundedChunks.some(c => /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(c.text || '')) ||
-                                  chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /suffix|ปัจจัยท้าย|-itis|-ectomy|-scopy|-gram|-graphy|-logy|-plasty|-stomy|-tomy|-emia|-osis|-pathy/i.test(r.excerpt || ''));
-        const hasGroundedRoot = groundedChunks.some(c => /root|รากศัพท์|cardi|nephr/i.test(c.text || '')) ||
-                                chunkReferences.some(r => r.verificationStatus === 'source_grounded' && /root|รากศัพท์|cardi|nephr/i.test(r.excerpt || ''));
-
-        const missingParts: string[] = [];
-        if (asksPrefix && !hasGroundedPrefix) missingParts.push('คำอุปสรรค (Prefix)');
-        if (asksSuffix && !hasGroundedSuffix) missingParts.push('ปัจจัยท้าย (Suffix)');
-        if (asksRoot && !hasGroundedRoot) missingParts.push('รากศัพท์ (Word Root)');
-
-        if (groundedChunks.length > 0) {
-          const groundedCitations = groundedChunks
-            .map(c => {
-              const cleanIdx = cleanChunkLocator(c.chunkIndex ?? '').replace(/^ชิ้นส่วนที่\s*/, '') || c.chunkIndex;
-              const filtered = filterRelevantChunkContent(c.text || '', prompt);
-              return `• **[ส่วนอ้างอิง ${cleanIdx}${c.pageNumber ? ` | หน้า ${c.pageNumber}` : ''}]**: ${filtered}`;
-            })
-            .join('\n\n');
-
-          const missingClause = missingParts.length > 0
-            ? `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**\nเอกสารนี้มีข้อมูลรองรับเพียงบางส่วน โดย**ไม่พบข้อมูลเกี่ยวกับ: ${missingParts.join(', ')}** ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`
-            : `⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Incomplete Evidence Notice):**\nเอกสารนี้มีหลักฐานไม่ครอบคลุมประเด็นคำถามทั้งหมด ระบบจึงนำเสนอเฉพาะส่วนที่มีหลักฐานยืนยันได้ ดังนี้:\n\n`;
-
-          finalFallbackText = `*(คำตอบสรุปจากเอกสารการเรียนรู้: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n${missingClause}${groundedCitations}\n\n*(หมายเหตุ: ส่วนที่ขาดหลักฐานไม่ถูกนำมาสรุปความ เพื่อป้องกันการคาดเดาข้อมูลเกินหลักฐานตามมาตรฐานทางวิชาการ)*`;
-        } else {
-          finalFallbackText = `*(ค้นหาจากเอกสาร: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
-        }
+      const hasAnyUnsupportedReference = unsupportedChunks.length > 0 || chunkReferences.some(r => r.verificationStatus === 'unsupported_citation');
+      if (hasAnyUnsupportedReference && verification.verdict === 'PASS') {
+        verification.verdict = 'WARNING';
+        verification.isVerified = false;
+      }
+      if (missingParts.length > 0) {
+        verification.verdict = 'WARNING';
+        verification.isVerified = false;
+      }
+      if (isFallbackInsufficient && missingParts.length === 0 && groundedChunks.length === 0) {
+        verification.verdict = 'INSUFFICIENT_EVIDENCE';
+        verification.isVerified = false;
       }
 
       const seenUris = new Set<string>();
@@ -472,19 +496,9 @@ export function getAcademicFallback(
         return true;
       });
 
-      const hasAnyUnsupportedReference = chunkReferences.some(r => r.verificationStatus === 'unsupported_citation');
-      if (hasAnyUnsupportedReference && verification.verdict === 'PASS') {
-        verification.verdict = 'WARNING';
-        verification.isVerified = false;
-      }
-      if (isOverallEvidenceInsufficient) {
-        verification.verdict = 'INSUFFICIENT_EVIDENCE';
-        verification.isVerified = false;
-      }
-
       return {
         text: finalFallbackText,
-        evidenceStatus: isOverallEvidenceInsufficient ? ("insufficient" as const) : ("sufficient" as const),
+        evidenceStatus: isFallbackInsufficient ? ("insufficient" as const) : ("sufficient" as const),
         verification,
         references: uniqueChunkReferences
       };
@@ -1524,7 +1538,7 @@ ${formattedChunks}
       reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
       reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
       evidenceLocator: isDocumentGrounding
-        ? (cleanChunkLocator((r as any).evidenceLocator || (r as any).chunkIndex || '') || 'ชิ้นส่วนที่ 1')
+        ? (cleanChunkLocator((r as any).evidenceLocator || (r as any).chunkIndex || '') || null)
         : null,
       contentVersion: "1.2"
     })),

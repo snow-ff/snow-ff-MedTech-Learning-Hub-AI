@@ -585,25 +585,44 @@ export function cleanChunkLocator(chunkIndex: number | string, pageNumber?: numb
     const decodedPage = decodeHtmlEntities(rawPageStr);
     const cleanPage = decodedPage.replace(/\D/g, '');
     if (cleanPage) {
-      return `หน้า ${cleanPage}`;
+      return `หน้า ${parseInt(cleanPage, 10)}`;
     }
   }
   if (chunkIndex === undefined || chunkIndex === null || String(chunkIndex).trim() === '') {
     return '';
   }
   const rawStr = String(chunkIndex);
-  const decoded = decodeHtmlEntities(rawStr);
+  let decoded = decodeHtmlEntities(rawStr);
+  while (/&#[xX]?[0-9a-fA-F]+;?/i.test(decoded) || /&amp;/i.test(decoded)) {
+    const prev = decoded;
+    decoded = decodeHtmlEntities(decoded);
+    if (decoded === prev) break;
+  }
 
   // If the locator string already contains "หน้า", preserve "หน้า <digits>"
-  if (/^หน้า\s*\d+/i.test(decoded.trim())) {
-    const cleanDigits = decoded.replace(/\D/g, '');
-    return cleanDigits ? `หน้า ${cleanDigits}` : '';
+  const pageMatch = decoded.match(/หน้า\s*(\d+)/i);
+  if (pageMatch) {
+    return `หน้า ${parseInt(pageMatch[1], 10)}`;
   }
 
-  const cleanNumber = decoded.replace(/\D/g, '');
-  if (!cleanNumber) {
-    return '';
+  // Extract explicit digits from chunk locator
+  const chunkMatch = decoded.match(/(?:ชิ้นส่วนที่|chunk|ส่วนที่|ส่วนอ้างอิง)?\s*(\d+)/i);
+  if (chunkMatch && chunkMatch[1]) {
+    const num = parseInt(chunkMatch[1], 10);
+    if (!isNaN(num) && num > 0) {
+      return `ชิ้นส่วนที่ ${num}`;
+    }
   }
-  return `ชิ้นส่วนที่ ${cleanNumber}`;
+
+  // Fallback: search for any standalone digit sequence
+  const anyDigits = decoded.replace(/\D/g, '');
+  if (anyDigits) {
+    const num = parseInt(anyDigits, 10);
+    if (!isNaN(num) && num > 0) {
+      return `ชิ้นส่วนที่ ${num}`;
+    }
+  }
+
+  return '';
 }
 

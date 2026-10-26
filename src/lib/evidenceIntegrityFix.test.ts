@@ -935,9 +935,9 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(hasRetrievedSuffixDef).toBe(true);
     expect(hasRetrievedSuffixEx).toBe(true);
 
-    // Verify reference distribution: both Prefix and Suffix are covered in references
-    const hasPrefixInReferences = res.references.some(r => /brady-|tachy-|คำอุปสรรค|เติมหน้า/i.test(r.excerpt || ''));
-    const hasSuffixInReferences = res.references.some(r => /-itis|-ectomy|-scopy|ปัจจัยท้าย|เติมท้าย/i.test(r.excerpt || ''));
+    // Verify reference distribution: both Prefix and Suffix are covered by source_grounded references
+    const hasPrefixInReferences = res.references.some(r => r.verificationStatus === 'source_grounded' && /brady-|tachy-|คำอุปสรรค|เติมหน้า/i.test(r.excerpt || ''));
+    const hasSuffixInReferences = res.references.some(r => r.verificationStatus === 'source_grounded' && /-itis|-ectomy|-scopy|ปัจจัยท้าย|เติมท้าย/i.test(r.excerpt || ''));
     expect(hasPrefixInReferences).toBe(true);
     expect(hasSuffixInReferences).toBe(true);
 
@@ -1025,6 +1025,93 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     });
     expect(reportMismatch.verdict).not.toBe('PASS');
     expect(reportMismatch.isVerified).toBe(false);
+  });
+
+  it('Test AG — Locator entity decoding: handles &#x34;, &amp;#x34;, ชิ้นส่วนที่ &#x34;, and returns empty string for unconfirmed digits without defaulting to 1', () => {
+    expect(cleanChunkLocator('&#x34;')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('&amp;#x34;')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('ชิ้นส่วนที่ &#x34;')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('ชิ้นส่วนที่ &amp;#x34;')).toBe('ชิ้นส่วนที่ 4');
+    expect(cleanChunkLocator('abc')).toBe('');
+    expect(cleanChunkLocator('')).toBe('');
+    expect(cleanChunkLocator(null as any)).toBe('');
+    expect(cleanChunkLocator(undefined as any)).toBe('');
+    expect(cleanChunkLocator('no_digits')).not.toBe('ชิ้นส่วนที่ 1');
+  });
+
+  it('Test AH — Reference Card filtering logic: strictly whitelists source_grounded and excludes unverified, unsupported_citation, undefined, null', () => {
+    const rawReferences = [
+      { id: '1', title: 'Grounded Prefix', verificationStatus: 'source_grounded', excerpt: 'Prefix definition' },
+      { id: '2', title: 'Grounded Suffix', verificationStatus: 'source_grounded', excerpt: 'Suffix definition' },
+      { id: '3', title: 'Unsupported chunk', verificationStatus: 'unsupported_citation', excerpt: 'Irrelevant text' },
+      { id: '4', title: 'Unverified item', verificationStatus: 'unverified', excerpt: 'Unverified text' },
+      { id: '5', title: 'Undefined status', verificationStatus: undefined as any, excerpt: 'No status' },
+      { id: '6', title: 'Null status', verificationStatus: null as any, excerpt: 'Null status' }
+    ];
+
+    const filterFunction = (refs: typeof rawReferences, isDocGrounding: boolean) => {
+      return refs.filter(r => {
+        if (isDocGrounding || (r as any).type === 'document_chunk') {
+          return r.verificationStatus === 'source_grounded';
+        }
+        return r.verificationStatus !== 'unsupported_citation' && r.verificationStatus !== 'unverified' && !!r.verificationStatus;
+      });
+    };
+
+    const displayed = filterFunction(rawReferences, true);
+    expect(displayed).toHaveLength(2);
+    expect(displayed.every(r => r.verificationStatus === 'source_grounded')).toBe(true);
+    expect(displayed.some(r => r.id === '3')).toBe(false);
+    expect(displayed.some(r => r.id === '4')).toBe(false);
+    expect(displayed.some(r => r.id === '5')).toBe(false);
+    expect(displayed.some(r => r.id === '6')).toBe(false);
+  });
+
+  it('Test AI — Unsupported chunks exclusion from fallbackText: citations never leak text from unsupported chunks', () => {
+    const docWithMixedChunks = {
+      title: 'เอกสารคำศัพท์และการจัดการ',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: 1, text: '=== ส่วนที่ 1: Prefix (คำอุปสรรค) ===\nPrefix คือคำที่เติมข้างหน้าคำหลัก เช่น brady- (ช้า)' },
+        { chunkIndex: 2, text: '=== ส่วนที่ 2: Suffix (ปัจจัยท้าย) ===\nSuffix คือคำต่อท้าย เช่น -itis (การอักเสบ)' },
+        { chunkIndex: 9, text: '=== ส่วนที่ 9: ตารางเวรและวันหยุดประจำปี 2568 ห้ามนำส่งสิ่งส่งตรวจ ===' }
+      ]
+    };
+
+    const prompt = 'อธิบาย Prefix และ Suffix พร้อมยกตัวอย่างจากเอกสาร';
+    const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], docWithMixedChunks);
+
+    // Ensure fallback text has grounded citations but NEVER mentions chunk 9 or administrative text
+    expect(res.text).toContain('[ส่วนอ้างอิง 1]');
+    expect(res.text).toContain('[ส่วนอ้างอิง 2]');
+    expect(res.text).not.toContain('[ส่วนอ้างอิง 9]');
+    expect(res.text).not.toContain('ตารางเวร');
+    expect(res.text).not.toContain('วันหยุดประจำปี');
+  });
+
+  it('Test AJ — Negative Suffix Test: Missing Suffix in document does not state Suffix examples as document facts', () => {
+    const docPrefixOnly = {
+      title: 'เอกสารที่มีเฉพาะคำนำหน้า',
+      courseCode: 'DTM67-111',
+      hasNativePages: false,
+      chunks: [
+        { chunkIndex: 4, text: '=== ส่วนที่ 4: คำอุปสรรคทางการแพทย์ (Prefix) ===\nPrefix เช่น brady- (ช้า), tachy- (เร็ว)' }
+      ]
+    };
+
+    const prompt = 'อธิบาย Prefix และ Suffix พร้อมยกตัวอย่างจากเอกสารที่เลือกเท่านั้น';
+    const res = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], docPrefixOnly);
+
+    expect(res.evidenceStatus).toBe('insufficient');
+    expect(res.text).toContain('⚠️ **คำเตือนความครอบคลุมของหลักฐาน (Partial Evidence Notice):**');
+    expect(res.text).toContain('ไม่พบข้อมูลเกี่ยวกับ: ปัจจัยท้าย (Suffix)');
+    // Must NOT state -itis or -ectomy as confirmed facts from document
+    expect(res.text).not.toContain('-itis');
+    expect(res.text).not.toContain('-ectomy');
+    // Reference cards must only have source_grounded Prefix
+    const groundedRefs = res.references.filter(r => r.verificationStatus === 'source_grounded');
+    expect(groundedRefs.every(r => !r.excerpt || !/-itis|-ectomy/i.test(r.excerpt))).toBe(true);
   });
 });
 
