@@ -229,7 +229,7 @@ function buildChunkReferences(
   documentContext: { title: string; courseCode?: string; hasNativePages?: boolean; totalPages?: number; chunks: any[] }
 ) {
   const isDocUnpaged = documentContext.hasNativePages === false;
-  return relevantChunks.map(c => {
+  return relevantChunks.map((c: any, idx: number) => {
     const decodedText = decodeHtmlEntities(c.text || '');
     const sectionTitle = getCleanSectionTitle(decodedText, c.chunkIndex ?? '');
     const excerpt = decodeHtmlEntities(extractRelevantExcerpt(decodedText, prompt || '', 140));
@@ -344,9 +344,10 @@ function buildChunkReferences(
     const isChunkUnsupported = !isChunkTopicRelevant;
     const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
 
+    const chunkId = (c as any).id || c.chunkIndex || `ref-${idx}`;
     return {
       title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
-      uri: `#chunk-${c.chunkIndex}`,
+      uri: `#chunk-${chunkId}`,
       type: "document_chunk",
       pageNumber: safePage,
       linkAccessStatus: "verified_local",
@@ -435,15 +436,15 @@ export function getAcademicFallback(
       const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
       const chunkReferences = buildChunkReferences(retrieval.relevantChunks, prompt, {} as any, documentContext);
 
-      const groundedChunks = retrieval.relevantChunks.filter(c => {
-        const cleanIdx = c.chunkIndex !== undefined ? cleanChunkLocator(c.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '') : '';
-        const ref = chunkReferences.find(r => (cleanIdx && r.uri === `#chunk-${cleanIdx}`) || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
+      const groundedChunks = retrieval.relevantChunks.filter((c: any) => {
+        const chunkId = c.id || c.chunkIndex;
+        const ref = chunkReferences.find(r => r.uri === `#chunk-${chunkId}` || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
         return ref && ref.verificationStatus === 'source_grounded';
       });
 
-      const unsupportedChunks = retrieval.relevantChunks.filter(c => {
-        const cleanIdx = c.chunkIndex !== undefined ? cleanChunkLocator(c.chunkIndex).replace(/^ชิ้นส่วนที่\s*/, '') : '';
-        const ref = chunkReferences.find(r => (cleanIdx && r.uri === `#chunk-${cleanIdx}`) || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
+      const unsupportedChunks = retrieval.relevantChunks.filter((c: any) => {
+        const chunkId = c.id || c.chunkIndex;
+        const ref = chunkReferences.find(r => r.uri === `#chunk-${chunkId}` || (c.chunkIndex !== undefined && r.uri === `#chunk-${c.chunkIndex}`));
         return !ref || ref.verificationStatus !== 'source_grounded';
       });
 
