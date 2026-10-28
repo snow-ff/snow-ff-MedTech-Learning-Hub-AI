@@ -382,20 +382,6 @@ export function getAcademicFallback(
     const isDocUnpaged = documentContext.hasNativePages === false;
     const chunksForRetrieval = documentContext.chunks.map((c: any, idx) => {
       const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
-      let sourceProv = c.sourceLocatorProvenance;
-      let sourceLoc = c.sourceLocator;
-
-      if (!sourceProv || sourceProv === 'unconfirmed') {
-        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
-        if (headingMatch && headingMatch[1]) {
-          const num = parseInt(headingMatch[1], 10);
-          if (!isNaN(num)) {
-            sourceLoc = `ชิ้นส่วนที่ ${num}`;
-            sourceProv = 'source_heading';
-          }
-        }
-      }
-
       let validIdx: number | undefined = undefined;
       if (c.chunkIndex !== undefined && c.chunkIndex !== null) {
         const rawIdxStr = String(c.chunkIndex);
@@ -420,6 +406,25 @@ export function getAcademicFallback(
               validPage = parsedPage;
               hasPage = true;
             }
+          }
+        }
+      }
+
+      let sourceProv = c.sourceLocatorProvenance;
+      let sourceLoc = c.sourceLocator;
+
+      if (!isDocUnpaged && validPage !== undefined && validPage > 0) {
+        if (!sourceProv || sourceProv === 'unconfirmed' || sourceProv === 'native_page') {
+          sourceLoc = `หน้า ${validPage}`;
+          sourceProv = 'native_page';
+        }
+      } else if (!sourceProv || sourceProv === 'unconfirmed') {
+        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+        if (headingMatch && headingMatch[1]) {
+          const num = parseInt(headingMatch[1], 10);
+          if (!isNaN(num)) {
+            sourceLoc = `ชิ้นส่วนที่ ${num}`;
+            sourceProv = 'source_heading';
           }
         }
       }
@@ -1113,7 +1118,12 @@ app.post("/api/gemini/generate", async (req, res) => {
       let sourceProv = c.sourceLocatorProvenance;
       let sourceLoc = c.sourceLocator;
 
-      if (!sourceProv || sourceProv === 'unconfirmed') {
+      if (!isDocUnpaged && validPage !== undefined && validPage > 0) {
+        if (!sourceProv || sourceProv === 'unconfirmed' || sourceProv === 'native_page') {
+          sourceLoc = `หน้า ${validPage}`;
+          sourceProv = 'native_page';
+        }
+      } else if (!sourceProv || sourceProv === 'unconfirmed') {
         const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
         if (headingMatch && headingMatch[1]) {
           const num = parseInt(headingMatch[1], 10);

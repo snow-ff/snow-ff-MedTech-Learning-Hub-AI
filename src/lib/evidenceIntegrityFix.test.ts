@@ -160,7 +160,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Anatomy Guide',
       hasNativePages: false,
       chunks: [
-        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: 'Standard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
+        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading' as const, text: 'Standard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
       ]
     };
     const negReport = verifyAcademicAnswer({
@@ -182,7 +182,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Medical Terminology Guide',
       hasNativePages: false,
       chunks: [
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 }
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 }
       ]
     };
     const posReport = verifyAcademicAnswer({
@@ -209,7 +209,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Prefix Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) อยู่ข้างหน้าคำหลัก เช่น brady- และ tachy-', charCount: 60 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: 'Prefix (คำอุปสรรค) อยู่ข้างหน้าคำหลัก เช่น brady- และ tachy-', charCount: 60 }
       ]
     };
     const multiReport = verifyAcademicAnswer({
@@ -404,7 +404,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Suffix Only Reference Guide',
       hasNativePages: false,
       chunks: [
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
       ]
     };
 
@@ -465,9 +465,9 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Robust Citation Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
-        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: 'Suffix (ปัจจัยท้าย) เช่น -itis และ -ectomy', charCount: 50 },
-        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: 'Prefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
+        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix (ปัจจัยท้าย) เช่น -itis และ -ectomy', charCount: 50 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading' as const, text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
       ]
     };
 

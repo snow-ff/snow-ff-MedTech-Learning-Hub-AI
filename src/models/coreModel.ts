@@ -60,7 +60,7 @@ export interface OfficialCurriculum {
 export type DocumentType = 'pdf' | 'slide' | 'note' | 'paper' | 'text';
 export type EvidenceStatus = 'sufficient' | 'insufficient' | 'unreadable' | 'external_research';
 
-export type SourceLocatorProvenance = 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' | 'made_up';
+export type SourceLocatorProvenance = 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed';
 
 export interface DocumentChunk {
   id: string;

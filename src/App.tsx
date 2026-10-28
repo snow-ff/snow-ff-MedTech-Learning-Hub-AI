@@ -1279,7 +1279,7 @@ export default function App() {
                                         {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
                                           <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
                                             <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                              Locator: {(ref as any).evidenceLocator ? (cleanChunkLocator((ref as any).evidenceLocator) || 'ไม่ระบุหมายเลข') : 'ไม่ระบุหมายเลข'}
+                                              Locator: {(ref as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'}
                                             </span>
                                             <span
                                               className="text-emerald-400 font-medium"

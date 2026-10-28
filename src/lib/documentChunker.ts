@@ -133,10 +133,10 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
     let explicitLocator: string | undefined = undefined;
     let explicitProvenance: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' = 'unconfirmed';
 
-    const headingMatch = blockText.match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+    const headingMatch = blockText.match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
     if (headingMatch && headingMatch[1]) {
       const headingNum = parseInt(headingMatch[1], 10);
-      if (!isNaN(headingNum)) {
+      if (!isNaN(headingNum) && headingNum > 0) {
         explicitLocator = `ชิ้นส่วนที่ ${headingNum}`;
         explicitProvenance = 'source_heading';
       }
@@ -706,9 +706,48 @@ export interface VerifiedLocatorResult {
   isVerified: boolean;
 }
 
+export function extractGenuineHeadings(text: string): { numbers: number[]; titles: string[] } {
+  const decoded = decodeHtmlEntities(text || '');
+  const lines = decoded.split('\n').map(l => l.trim()).filter(Boolean);
+  const numbers: number[] = [];
+  const titles: string[] = [];
+
+  for (const line of lines) {
+    const isHeadingLine =
+      /^#+\s+/.test(line) ||
+      /^===+\s*/.test(line) ||
+      /^===.*\s*===$/.test(line) ||
+      /^(?:---|\*\*\*)\s*(?:ส่วนที่|บทที่|section|chapter)/i.test(line) ||
+      /^(?:ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*[:#\-]?/i.test(line) ||
+      /(?:เนื้อหาสำคัญ|เนื้อหาหลัก|เนื้อหาชิ้นส่วนที่|ส่วนอ้างอิง)\s*[:#\-]?/i.test(line);
+
+    if (isHeadingLine) {
+      const matchNum = line.match(/(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/i);
+      if (matchNum && matchNum[1]) {
+        const n = parseInt(matchNum[1], 10);
+        if (!isNaN(n) && !numbers.includes(n)) numbers.push(n);
+      }
+      const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
+      if (cleaned.length >= 3 && cleaned.length <= 80) {
+        titles.push(cleaned.toLowerCase());
+      }
+    }
+  }
+
+  const globalMatches = Array.from(decoded.matchAll(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/gi));
+  for (const m of globalMatches) {
+    if (m[1]) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && !numbers.includes(n)) numbers.push(n);
+    }
+  }
+
+  return { numbers, titles };
+}
+
 export function validateAndResolveLocator(
   chunk: {
-    pageNumber?: number;
+    pageNumber?: number | string;
     hasNativePage?: boolean;
     sourceLocator?: string;
     sourceLocatorProvenance?: string;
@@ -720,15 +759,26 @@ export function validateAndResolveLocator(
   const prov = chunk.sourceLocatorProvenance;
   const rawLocator = chunk.sourceLocator;
 
-  if (!isDocUnpaged && chunk.pageNumber !== undefined && chunk.pageNumber !== null && chunk.pageNumber > 0 && chunk.pageNumber <= 1899 && prov !== 'unconfirmed' && prov !== 'made_up') {
-    return {
-      locator: `หน้า ${chunk.pageNumber}`,
-      provenance: 'native_page',
-      isVerified: true
-    };
+  const ALLOWED_PROVENANCES = new Set<string>(['native_page', 'source_heading', 'explicit_provenance']);
+
+  // Case 1: native_page provenance OR paged document with valid numeric pageNumber
+  let parsedPage: number | undefined = undefined;
+  if (typeof chunk.pageNumber === 'number' && !isNaN(chunk.pageNumber) && chunk.pageNumber > 0 && chunk.pageNumber <= 1899) {
+    parsedPage = chunk.pageNumber;
   }
 
-  if (!prov || prov === 'unconfirmed' || prov === 'made_up' || (prov !== 'native_page' && prov !== 'source_heading' && prov !== 'explicit_provenance')) {
+  if (!isDocUnpaged && parsedPage !== undefined) {
+    if (prov === 'native_page' || !prov || prov === 'unconfirmed') {
+      return {
+        locator: `หน้า ${parsedPage}`,
+        provenance: 'native_page',
+        isVerified: true
+      };
+    }
+  }
+
+  // Strict allowlist check: unknown, made_up, or unconfirmed provenance values immediately rejected
+  if (!prov || !ALLOWED_PROVENANCES.has(prov) || prov === 'unconfirmed') {
     return {
       locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
       provenance: 'unconfirmed',
@@ -737,31 +787,113 @@ export function validateAndResolveLocator(
   }
 
   if (prov === 'native_page') {
-    if (!isDocUnpaged && chunk.pageNumber !== undefined && chunk.pageNumber !== null && chunk.pageNumber > 0 && chunk.pageNumber <= 1899) {
+    if (!isDocUnpaged && parsedPage !== undefined) {
       return {
-        locator: `หน้า ${chunk.pageNumber}`,
+        locator: `หน้า ${parsedPage}`,
         provenance: 'native_page',
         isVerified: true
       };
     }
+    const pageMatch = rawLocator ? rawLocator.match(/^(?:หน้า|page)\s*(\d+)$/i) : null;
+    if (!isDocUnpaged && pageMatch && pageMatch[1]) {
+      const p = parseInt(pageMatch[1], 10);
+      if (p > 0 && p <= 1899) {
+        return {
+          locator: `หน้า ${p}`,
+          provenance: 'native_page',
+          isVerified: true
+        };
+      }
+    }
+    return {
+      locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+      provenance: 'unconfirmed',
+      isVerified: false
+    };
   }
 
-  if (prov === 'source_heading' && rawLocator && rawLocator !== 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') {
-    const decodedText = decodeHtmlEntities(chunk.text || '');
-    if (decodedText.includes(rawLocator) || new RegExp(rawLocator, 'i').test(decodedText) || /^ชิ้นส่วนที่\s*\d+$/.test(rawLocator) || /^ส่วนที่\s*\d+$/.test(rawLocator)) {
+  if (prov === 'source_heading' || prov === 'explicit_provenance') {
+    if (!rawLocator || rawLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') {
+      return {
+        locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+        provenance: 'unconfirmed',
+        isVerified: false
+      };
+    }
+
+    // Check if rawLocator specifies a page
+    const pageMatch = rawLocator.match(/^(?:หน้า|page)\s*(\d+)$/i);
+    if (pageMatch && pageMatch[1]) {
+      const p = parseInt(pageMatch[1], 10);
+      if (!isDocUnpaged && p > 0 && p <= 1899) {
+        return {
+          locator: `หน้า ${p}`,
+          provenance: prov,
+          isVerified: true
+        };
+      }
+      return {
+        locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+        provenance: 'unconfirmed',
+        isVerified: false
+      };
+    }
+
+    // Check if rawLocator specifies a section/chunk number
+    const numMatch = rawLocator.match(/^(?:#?chunk[\s\-:]*|ชิ้นส่วนที่[\s:]*|ส่วนอ้างอิง[\s:]*|ส่วนที่[\s:]*|section[\s:]*|chapter[\s:]*)(\d+)$/i);
+    if (numMatch && numMatch[1]) {
+      const n = parseInt(numMatch[1], 10);
+      if (isNaN(n) || n <= 0) {
+        return {
+          locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+          provenance: 'unconfirmed',
+          isVerified: false
+        };
+      }
+
+      const headings = extractGenuineHeadings(chunk.text || '');
+      const hasHeadingMatch =
+        headings.numbers.includes(n) ||
+        /(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter|เนื้อหาชิ้นส่วนที่|ชิ้นส่วนที่)\s*(\d+)/i.test(chunk.text || '');
+      const hasChunkIndexMatch =
+        chunk.chunkIndex !== undefined &&
+        chunk.chunkIndex !== null &&
+        !isNaN(Number(chunk.chunkIndex)) &&
+        Number(chunk.chunkIndex) === n;
+      const isExplicitDocumentChunk =
+        chunk.sourceLocator !== undefined &&
+        cleanChunkLocator(chunk.sourceLocator).replace(/^ชิ้นส่วนที่\s*/, '') === String(n);
+
+      if (hasHeadingMatch || hasChunkIndexMatch || isExplicitDocumentChunk) {
+        return {
+          locator: `ชิ้นส่วนที่ ${n}`,
+          provenance: prov,
+          isVerified: true
+        };
+      }
+
+      return {
+        locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+        provenance: 'unconfirmed',
+        isVerified: false
+      };
+    }
+
+    // Check if rawLocator matches a recognized heading title in text
+    const headings = extractGenuineHeadings(chunk.text || '');
+    const cleanRaw = rawLocator.toLowerCase().trim();
+    if (headings.titles.some(t => t.includes(cleanRaw) || cleanRaw.includes(t)) || (chunk.text && chunk.text.toLowerCase().includes(cleanRaw))) {
       return {
         locator: rawLocator,
-        provenance: 'source_heading',
+        provenance: prov,
         isVerified: true
       };
     }
-  }
 
-  if (prov === 'explicit_provenance' && rawLocator && rawLocator !== 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') {
     return {
-      locator: rawLocator,
-      provenance: 'explicit_provenance',
-      isVerified: true
+      locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+      provenance: 'unconfirmed',
+      isVerified: false
     };
   }
 
