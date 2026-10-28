@@ -41,7 +41,7 @@ import {
   officialSchoolWebUrl,
   curriculumDrivePdfUrl
 } from './data/curriculumData';
-import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport } from './models/coreModel';
+import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport, SourceLocatorProvenance } from './models/coreModel';
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
