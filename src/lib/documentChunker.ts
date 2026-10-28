@@ -786,7 +786,7 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
       /^===+\s*/.test(line) ||
       /^===.*\s*===$/.test(line) ||
       /^(?:---|\*\*\*)\s*(?:ส่วนที่|บทที่|section|chapter)/i.test(line) ||
-      /^(?:ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*[:#\-]?/i.test(line) ||
+      /^(?:ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*\d+\s*(?:[:#\-–—]|$)/i.test(line) ||
       /(?:เนื้อหาสำคัญ|เนื้อหาหลัก|เนื้อหาชิ้นส่วนที่|ส่วนอ้างอิง)\s*[:#\-]?/i.test(line);
 
     if (isHeadingLine) {
@@ -808,7 +808,7 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
     }
   }
 
-  const globalMatches = Array.from(decoded.matchAll(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/gi));
+  const globalMatches = Array.from(decoded.matchAll(/(?:===+|---+|\*\*\*+|#+|^)\s*(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/gi));
   for (const m of globalMatches) {
     if (m[2]) {
       const prefix = m[1];
@@ -984,17 +984,14 @@ export function validateAndResolveLocator(
       }
 
       if (prov === 'explicit_provenance') {
+        const prefixVal = rawPrefix;
         const matchedHeading = headings.headings.find(h => {
           if (h.number !== n) return false;
-          if (isGenericPrefix) return true;
-          return h.prefix.toLowerCase() === rawPrefix!.toLowerCase();
+          if (isGenericPrefix || !prefixVal) return true;
+          return h.prefix.toLowerCase() === prefixVal.toLowerCase();
         });
 
-        const hasValidTextLinkage = rawPrefix && !isGenericPrefix
-          ? chunk.text && new RegExp(`${rawPrefix!}\\s*${n}\\b`, 'i').test(chunk.text)
-          : chunk.text && new RegExp(`(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\\s*${n}\\b`, 'i').test(chunk.text) && headings.headings.some(h => h.number === n);
-
-        if (matchedHeading || hasValidTextLinkage) {
+        if (matchedHeading) {
           return {
             locator: rawLocator,
             provenance: prov,

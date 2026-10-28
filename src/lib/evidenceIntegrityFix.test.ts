@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences, validateAndResolveLocator } from './documentChunker';
+import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences, validateAndResolveLocator, extractGenuineHeadings } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
 import { DocumentChunk } from '../models/coreModel';
 import { getAcademicFallback } from '../../server';
@@ -1517,6 +1517,18 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     });
     expect(res.isVerified).toBe(false);
     expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Regression Bug: Ordinary sentence starting with บทที่ 3 on a new line must NOT be extracted as a genuine heading', () => {
+    const text = 'เนื้อหาบทเรียนเบื้องต้น\nบทที่ 3 คือเรื่อง Suffix';
+    const headings = extractGenuineHeadings(text);
+    expect(headings.numbers).not.toContain(3);
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text
+    });
+    expect(res.isVerified).toBe(false);
   });
 });
 
