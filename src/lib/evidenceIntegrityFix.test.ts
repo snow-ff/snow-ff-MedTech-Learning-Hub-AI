@@ -198,7 +198,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(posReport.isVerified).toBe(true);
 
     const posFallback = getAcademicFallback('อธิบาย suffix -scopy', [], docPositive);
-    expect(posFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3')).toBe(true);
+    expect(posFallback.references.some(r => r.evidenceLocator === 'ส่วนที่ 3')).toBe(true);
     expect(posFallback.evidenceStatus).toBe('sufficient');
     expect(posFallback.verification?.verdict).toBe('PASS');
     expect(posFallback.verification?.isVerified).toBe(true);
@@ -227,7 +227,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(multiFallback.verification?.isVerified).toBe(false);
     // Reference-level: chunk 1 is a genuine local document chunk covering prefix
     expect(multiFallback.references[0].verificationStatus).toBe('source_grounded');
-    expect(multiFallback.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(true);
+    expect(multiFallback.references.some(r => r.evidenceLocator === 'ส่วนที่ 1')).toBe(true);
 
     // 4. Mixed Chunks Case: Document contains both relevant chunk (Chunk 3: Suffix with -scopy) and casual chunk (Chunk 1: Suffix without -scopy)
     const docMixed = {
@@ -242,8 +242,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     // Overall answer has sufficient evidence because of Chunk 3
     expect(mixedFallback.evidenceStatus).toBe('sufficient');
     // Both chunks are retrieved due to shared terms
-    const ref3 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
-    const ref1 = mixedFallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref3 = mixedFallback.references.find(r => r.evidenceLocator === 'ส่วนที่ 3');
+    const ref1 = mixedFallback.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
     expect(ref3).toBeDefined();
     expect(ref3?.verificationStatus).toBe('source_grounded');
     expect(ref1).toBeDefined();
@@ -281,8 +281,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const res = getAcademicFallback('การตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ Complete Blood Count', [], docGeneral);
     expect(res.evidenceStatus).toBe('sufficient');
 
-    const refClinical = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 2');
-    const refNotice = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+    const refClinical = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 2');
+    const refNotice = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 10');
 
     expect(refClinical).toBeDefined();
     expect(refClinical?.verificationStatus).toBe('source_grounded');
@@ -302,7 +302,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     };
 
     const res = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docCollision);
-    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
     expect(ref1).toBeDefined();
     // Chunk 1 genuinely supports the prefix query, so it must be source_grounded
     expect(ref1?.verificationStatus).toBe('source_grounded');
@@ -353,14 +353,14 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const res = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docExact);
     expect(res.references).toHaveLength(2);
 
-    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
-    const ref13 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
+    const ref13 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 13');
 
     expect(ref1).toBeDefined();
     expect(ref13).toBeDefined();
 
     // Verify that unsupportedCitations actually flagged chunk 13
-    expect(res.verification?.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes('ชิ้นส่วนที่ 13'))).toBe(true);
+    expect(res.verification?.stages.evidenceFidelity.unsupportedCitations.some(uc => uc.includes('ส่วนที่ 13'))).toBe(true);
 
     // Chunk 1 must be source_grounded and NOT contaminated by chunk 13's violation
     expect(ref1?.verificationStatus).toBe('source_grounded');
@@ -388,7 +388,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // 2. Reference-level: Prefix chunk genuinely supports the Prefix portion and is source_grounded
     expect(res.references).toHaveLength(1);
-    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
     expect(ref1).toBeDefined();
     expect(ref1?.verificationStatus).toBe('source_grounded');
 
@@ -418,7 +418,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // 2. Reference-level: Suffix chunk (chunkIndex 3) maps to real fixture chunk and is source_grounded
     expect(res.references).toHaveLength(1);
-    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 3');
     expect(ref3).toBeDefined();
     expect(ref3?.verificationStatus).toBe('source_grounded');
 
@@ -454,8 +454,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // 2. Reference-level: Both chunks must be source_grounded
     expect(res.references).toHaveLength(2);
-    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
-    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 3');
     expect(ref1?.verificationStatus).toBe('source_grounded');
     expect(ref3?.verificationStatus).toBe('source_grounded');
   });
@@ -540,8 +540,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // 5. Fallback evaluation with exact locator isolation
     const fallback = getAcademicFallback('อธิบาย prefix brady- และ tachy-', [], docRobust);
-    const ref1 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
-    const ref13 = fallback.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 13');
+    const ref1 = fallback.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
+    const ref13 = fallback.references.find(r => r.evidenceLocator === 'ส่วนที่ 13');
 
     expect(ref1?.verificationStatus).toBe('source_grounded');
     expect(ref13?.verificationStatus).toBe('unsupported_citation');
@@ -568,7 +568,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // 2. Reference-level:
     // Chunk 2 (genuine prefix evidence) is source_grounded
-    const ref2 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 2');
+    const ref2 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 2');
     expect(ref2).toBeDefined();
     expect(ref2?.verificationStatus).toBe('source_grounded');
 
@@ -763,18 +763,18 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       expect(ref.excerpt).not.toContain('&#');
     }
 
-    const ref3 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 3');
+    const ref3 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 3');
     expect(ref3).toBeDefined();
-    expect(ref3?.evidenceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(ref3?.evidenceLocator).toBe('ส่วนที่ 3');
     expect(ref3?.verificationStatus).toBe('source_grounded');
 
-    const ref5 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 5');
+    const ref5 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 5');
     expect(ref5).toBeDefined();
-    expect(ref5?.evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+    expect(ref5?.evidenceLocator).toBe('ส่วนที่ 5');
 
-    const ref10 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+    const ref10 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 10');
     if (ref10) {
-      expect(ref10.evidenceLocator).toBe('ชิ้นส่วนที่ 10');
+      expect(ref10.evidenceLocator).toBe('ส่วนที่ 10');
       expect(ref10.verificationStatus).toBe('unsupported_citation');
     }
 
@@ -810,8 +810,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.text).not.toContain('[ส่วนอ้างอิง 10]');
 
     // 3. Chunk-level status must be distinct: Chunk 1 grounded, Chunk 10 unsupported
-    const ref1 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1');
-    const ref10 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 10');
+    const ref1 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 1');
+    const ref10 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 10');
     expect(ref1?.verificationStatus).toBe('source_grounded');
     if (ref10) {
       expect(ref10.verificationStatus).toBe('unsupported_citation');
@@ -845,7 +845,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const res = getAcademicFallback('Prefix Suffix Safety', [], docWithEntities);
     for (const ref of res.references) {
       expect(ref.evidenceLocator).not.toContain('&#');
-      expect(ref.evidenceLocator).toMatch(/ชิ้นส่วนที่ \d+/);
+      expect(ref.evidenceLocator).toMatch(/ส่วนที่ \d+/);
     }
 
     const loc3 = cleanChunkLocator('&#x33;');
@@ -887,7 +887,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       expect(ref.evidenceLocator).not.toContain('&#');
       expect(ref.evidenceLocator).not.toContain('&amp;');
       expect(ref.evidenceLocator).not.toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
-      expect(ref.evidenceLocator).toMatch(/^ชิ้นส่วนที่ \d+$/);
+      expect(ref.evidenceLocator).toMatch(/^ส่วนที่ \d+$/);
       expect(ref.evidenceLocator).not.toContain('หน้า');
       expect(ref.sourceLocatorProvenance).toBe('source_heading');
       expect((ref as any).isLocatorVerified).toBe(true);
@@ -1264,7 +1264,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     const res = getAcademicFallback('Prefix คืออะไร', [], docWithAnnouncements);
 
     expect(res.references.length).toBeGreaterThan(0);
-    expect(res.references[0].evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+    expect(res.references[0].evidenceLocator).toBe('ส่วนที่ 5');
     expect(res.references[0].evidenceLocator).not.toContain('2568');
     expect(res.text).not.toContain('หน้า 2568');
     expect(res.text).not.toContain('2568');
@@ -1281,7 +1281,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     };
     const res = getAcademicFallback('Prefix คืออะไร', [], doc);
     expect(res.references).toHaveLength(1);
-    expect(res.references[0].evidenceLocator).toBe('ชิ้นส่วนที่ 5');
+    expect(res.references[0].evidenceLocator).toBe('ส่วนที่ 5');
     expect(res.text).toContain('ส่วนอ้างอิง 5');
   });
 
@@ -1324,7 +1324,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       ]
     };
     const res = getAcademicFallback('Prefix คืออะไร', [], doc);
-    const ref4 = res.references.find(r => r.evidenceLocator === 'ชิ้นส่วนที่ 4');
+    const ref4 = res.references.find(r => r.evidenceLocator === 'ส่วนที่ 4');
     expect(ref4).toBeDefined();
     expect(res.references.some(r => r.evidenceLocator === 'ชิ้นส่วนที่ 1')).toBe(false);
   });
@@ -1367,7 +1367,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     }
   });
 
-  it('P0-C Case 8 — Dashed heading format ("--- ส่วนที่ 1: ... ---") resolves to verified "ชิ้นส่วนที่ 1" with source_grounded status', () => {
+  it('P0-C Case 8 — Dashed heading format ("--- ส่วนที่ 1: ... ---") resolves to verified "ส่วนที่ 1" with source_grounded status', () => {
     const doc = {
       title: 'DTM67-111 บันทึกความจำคำศัพท์แพทย์',
       hasNativePages: false,
@@ -1375,13 +1375,15 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
         {
           id: 'chunk-1',
           chunkIndex: 1,
+          sourceLocator: 'ส่วนที่ 1',
+          sourceLocatorProvenance: 'source_heading' as const,
           text: '--- ส่วนที่ 1: การแนะนำศัพท์แพทย์เบื้องต้น (Medical Terminology) ---\nPrefix คือส่วนเติมหน้า เช่น brady- (ช้า) tachy- (เร็ว)'
         }
       ]
     };
     const res = getAcademicFallback('Prefix คืออะไร', [], doc);
     expect(res.references).toHaveLength(1);
-    expect(res.references[0].evidenceLocator).toBe('ชิ้นส่วนที่ 1');
+    expect(res.references[0].evidenceLocator).toBe('ส่วนที่ 1');
     expect(res.references[0].verificationStatus).toBe('source_grounded');
     expect((res.references[0] as any).isLocatorVerified).toBe(true);
   });
