@@ -1296,7 +1296,7 @@ export default function App() {
                                               >
                                                 • ชิ้นส่วนอ้างอิง: ไม่ตรงกับประเด็นคำถาม (Unsupported)
                                               </span>
-                                            ) : ((ref as any).verificationStatus === 'unverified' || !(ref as any).evidenceLocator || (ref as any).evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้' || (ref as any).isLocatorVerified === false) ? (
+                                            ) : ((ref as any).verificationStatus === 'unverified' || !(ref as any).evidenceLocator || (ref as any).evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้' || (ref as any).isLocatorVerified !== true) ? (
                                               <span
                                                 className="text-amber-400 font-medium"
                                                 title="พบเนื้อหาที่เกี่ยวข้องแต่ไม่สามารถยืนยันเลขหน้าหรือหัวข้ออ้างอิงที่แน่นอนได้ (Unverified Locator)"
