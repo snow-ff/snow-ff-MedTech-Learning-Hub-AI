@@ -869,7 +869,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       chunks: chunks
     });
 
-    // Part 1: Source Document Content Check (Ground Truth contains info)
+    // Part 1: Source Document Content Check (Ground Truth contains info independently)
     const hasSourcePrefixDef = /คำอุปสรรค|เติมหน้า/i.test(rawText);
     const hasSourcePrefixEx = /brady-|tachy-/i.test(rawText);
     const hasSourceSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(rawText);
@@ -880,45 +880,46 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(hasSourceSuffixDef).toBe(true);
     expect(hasSourceSuffixEx).toBe(true);
 
-    // Part 2: System Retrieval & Reference Evidence Check (Strictly valid explicit chunkIndex locators)
+    // Part 2: Rigorous Reference-to-Chunk Identity, Traceability, and Contract Invariants
     expect(res.references.length).toBeGreaterThan(0);
     for (const ref of res.references) {
+      // 2a. Reference Contract & Status Invariants
       expect(ref.evidenceLocator).not.toContain('&#');
       expect(ref.evidenceLocator).not.toContain('&amp;');
+      expect(ref.evidenceLocator).not.toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
       expect(ref.evidenceLocator).toMatch(/^ชิ้นส่วนที่ \d+$/);
       expect(ref.evidenceLocator).not.toContain('หน้า');
+      expect(ref.sourceLocatorProvenance).toBe('source_heading');
+      expect((ref as any).isLocatorVerified).toBe(true);
+      expect(ref.verificationStatus).toBe('source_grounded');
+
+      // 2b. Identity Traceability: Excerpt MUST trace back strictly to the specific cited chunk
+      const chunkId = ref.uri.replace(/^#chunk-/, '');
+      const sourceChunk = chunks.find(c => c.id === chunkId || String(c.chunkIndex) === chunkId);
+      expect(sourceChunk).toBeDefined();
+
       const cleanExcerpt = (ref.excerpt || '').replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim();
-      const keywords = cleanExcerpt.split(/\s+/).filter(w => w.length > 2);
-      const matchedChunk = chunks.find(c => keywords.length === 0 || keywords.some(kw => (c.text || '').includes(kw)));
-      expect(matchedChunk).toBeDefined();
+      expect(cleanExcerpt.length).toBeGreaterThan(15);
+      const normalizedSource = sourceChunk!.text.replace(/[*_#]+/g, '').replace(/\s+/g, ' ');
+      expect(normalizedSource).toContain(cleanExcerpt);
     }
 
-    const matchedSourceChunks = res.references.map(ref => {
-      const cleanExcerpt = (ref.excerpt || '').replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim();
-      const keywords = cleanExcerpt.split(/\s+/).filter(w => w.length > 2);
-      return chunks.find(c => keywords.length === 0 || keywords.some(kw => (c.text || '').includes(kw)));
-    }).filter(Boolean);
-    const matchedSourceChunkTexts = matchedSourceChunks.map(c => c?.text || '').join(' ');
-    const referenceExcerptsOnly = res.references.map(r => r.excerpt || '').join(' ');
-    // Strictly combine reference excerpts and matched source chunks WITHOUT res.text and WITHOUT ref.title
-    const strictSourceEvidence = referenceExcerptsOnly + ' ' + rawText;
-
-    // Check 4 criteria independently on strict source evidence
-    const hasRetrievedPrefixDef = /คำอุปสรรค|เติมหน้า/i.test(strictSourceEvidence);
-    const hasRetrievedPrefixEx = /brady-|tachy-/i.test(strictSourceEvidence);
-    const hasRetrievedSuffixDef = /ปัจจัยท้าย|เติมท้าย|พยาธิสภาพ|คำปัจจัย/i.test(strictSourceEvidence);
-    const hasRetrievedSuffixEx = /-itis|-ectomy|-scopy/i.test(strictSourceEvidence);
-
+    // Part 3: Retrieval Grounding Validation strictly on Reference Excerpts (WITHOUT rawText and WITHOUT res.text)
+    const retrievedExcerptsCombined = res.references.map(r => r.excerpt || '').join(' \n ');
+    
+    // 3a. Prefix Validation in retrieved references
+    const hasRetrievedPrefixDef = /คำอุปสรรค|ส่วนนำหน้า|วางไว้ข้างหน้า/i.test(retrievedExcerptsCombined);
+    const hasRetrievedPrefixEx = /brady-|tachy-/i.test(retrievedExcerptsCombined);
     expect(hasRetrievedPrefixDef).toBe(true);
     expect(hasRetrievedPrefixEx).toBe(true);
+
+    // 3b. Suffix Validation in retrieved references
+    const hasRetrievedSuffixDef = /ปัจจัยท้าย|คำปัจจัย|ส่วนลงท้าย|พยาธิสภาพ/i.test(retrievedExcerptsCombined);
+    const hasRetrievedSuffixEx = /-itis|-ectomy|-scopy|splenomegaly|-algia/i.test(retrievedExcerptsCombined);
     expect(hasRetrievedSuffixDef).toBe(true);
     expect(hasRetrievedSuffixEx).toBe(true);
 
-    // Verify reference distribution: references are source grounded and contain relevant study guide terms
-    const hasReferences = res.references.some(r => r.verificationStatus === 'source_grounded' && (r.excerpt || '').length > 0);
-    expect(hasReferences).toBe(true);
-
-    // Part 3: Answer Completeness & Verification Verdict Check
+    // Part 4: Answer Completeness & Verification Verdict Check
     expect(res.evidenceStatus).toBe('sufficient');
     expect(res.verification?.verdict).toBe('PASS');
     expect(res.verification?.isVerified).toBe(true);

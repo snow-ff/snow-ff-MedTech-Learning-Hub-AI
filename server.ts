@@ -314,7 +314,8 @@ function buildChunkReferences(
         );
       }
     } else {
-      const isNoticeOrAdministrative = /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
+      const hasCoreContent = /ส่วนที่|บทที่|word root|prefix|suffix|combining|รากศัพท์|คำอุปสรรค|ปัจจัยท้าย|กฎการวิเคราะห์/i.test(chunkLower);
+      const isNoticeOrAdministrative = !hasCoreContent && /notice of adaptation|non-endorsement|copyright|สงวนลิขสิทธิ์|ประกาศ|disclaimer|วันหยุด/i.test(chunkLower);
       const asksNotice = /copyright|ประกาศ|ลิขสิทธิ์|disclaimer|notice|วันหยุด/i.test(queryLower);
       const SPECIFIC_LAB_MARKERS = [
         'cbc', 'pcr', 'edta', 'elisa', 'hba1c', 'bun', 'wbc', 'rbc', 'lft',
@@ -327,7 +328,35 @@ function buildChunkReferences(
       if (queriedMarkers.length > 0) {
         hasSubstantiveMatch = queriedMarkers.some(marker => chunkLower.includes(marker));
       } else {
-        hasSubstantiveMatch = true;
+        const rawTokens = queryLower.split(/[\s,;:.!?()\/+\-]+/);
+        const expandedTokens: string[] = [];
+        rawTokens.forEach(t => {
+          if (t.length >= 3 && !ACADEMIC_STOPWORDS.has(t)) expandedTokens.push(t);
+        });
+        if (/[ก-ฮ]/.test(queryLower)) {
+          const domainKeywords = [
+            'กฎการวิเคราะห์', 'วิเคราะห์', 'คำศัพท์', 'การแพทย์', 'ขั้นตอน',
+            'รากศัพท์', 'คำอุปสรรค', 'ปัจจัยท้าย', 'สระเชื่อม', 'องค์ประกอบ',
+            'อ้างอิง', 'ความหมาย', 'หลักการ', 'ระบบ'
+          ];
+          for (const kw of domainKeywords) {
+            if (queryLower.includes(kw)) {
+              expandedTokens.push(kw);
+            }
+          }
+          if (queryLower.includes('ฮีโมโกลบิน') || queryLower.includes('hb')) expandedTokens.push('hemoglobin');
+          if (queryLower.includes('ฮีมาโตคริต') || queryLower.includes('hct')) expandedTokens.push('hematocrit');
+          if (queryLower.includes('เม็ดเลือดแดง')) expandedTokens.push('red blood cell', 'rbc');
+          if (queryLower.includes('เม็ดเลือดขาว')) expandedTokens.push('white blood cell', 'wbc');
+          if (queryLower.includes('เกล็ดเลือด')) expandedTokens.push('platelet');
+          if (queryLower.includes('ผู้ชาย') || queryLower.includes('ชาย')) expandedTokens.push('male');
+          if (queryLower.includes('ผู้หญิง') || queryLower.includes('หญิง')) expandedTokens.push('female');
+          if (queryLower.includes('ปกติ')) expandedTokens.push('reference', 'normal');
+        }
+        const queryTokens = Array.from(new Set(expandedTokens));
+        hasSubstantiveMatch = queryTokens.length > 0
+          ? queryTokens.some(tok => chunkLower.includes(tok))
+          : true;
       }
       isChunkTopicRelevant = (!isNoticeOrAdministrative || asksNotice) && hasSubstantiveMatch;
     }

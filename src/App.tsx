@@ -88,6 +88,8 @@ export interface Message {
     linkAccessStatus?: string;
     verificationStatus?: string;
     evidenceLocator?: string;
+    isLocatorVerified?: boolean;
+    sourceLocatorProvenance?: SourceLocatorProvenance;
     contentVersion?: string;
     sourceTier?: string;
     sourceTierLabel?: string;
@@ -527,7 +529,9 @@ export default function App() {
             ? (r.evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'
                 ? 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'
                 : (cleanChunkLocator(r.evidenceLocator) || decodeHtmlEntities(r.evidenceLocator)))
-            : r.evidenceLocator
+            : r.evidenceLocator,
+          isLocatorVerified: r.isLocatorVerified ?? (Boolean(r.evidenceLocator) && r.evidenceLocator !== 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'),
+          sourceLocatorProvenance: r.sourceLocatorProvenance
         })) : undefined
       };
 
@@ -1292,7 +1296,7 @@ export default function App() {
                                               >
                                                 • ชิ้นส่วนอ้างอิง: ไม่ตรงกับประเด็นคำถาม (Unsupported)
                                               </span>
-                                            ) : ((ref as any).verificationStatus === 'unverified' || !(ref as any).evidenceLocator || (ref as any).evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') ? (
+                                            ) : ((ref as any).verificationStatus === 'unverified' || !(ref as any).evidenceLocator || (ref as any).evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้' || (ref as any).isLocatorVerified === false) ? (
                                               <span
                                                 className="text-amber-400 font-medium"
                                                 title="พบเนื้อหาที่เกี่ยวข้องแต่ไม่สามารถยืนยันเลขหน้าหรือหัวข้ออ้างอิงที่แน่นอนได้ (Unverified Locator)"

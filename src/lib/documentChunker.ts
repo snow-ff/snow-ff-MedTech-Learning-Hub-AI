@@ -4,6 +4,7 @@ export function decodeHtmlEntities(str: string): string {
   if (!str) return '';
   let decoded = str;
   for (let i = 0; i < 4; i++) {
+    const prev = decoded;
     decoded = decoded
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
@@ -11,8 +12,15 @@ export function decodeHtmlEntities(str: string): string {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&nbsp;/g, ' ')
-      .replace(/&#[xX]([0-9a-fA-F]+);?/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-      .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+      .replace(/&#[xX]([0-9a-fA-F]+);?/g, (_, hex) => {
+        const cp = parseInt(hex, 16);
+        return Number.isFinite(cp) && cp > 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : _;
+      })
+      .replace(/&#(\d+);?/g, (_, dec) => {
+        const cp = parseInt(dec, 10);
+        return Number.isFinite(cp) && cp > 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : _;
+      });
+    if (decoded === prev) break;
   }
   return decoded;
 }
@@ -436,6 +444,21 @@ export function retrieveGroundedChunks(
     }
   }
 
+
+  // 1d. Thai learning domain keyword extraction for continuous strings
+  if (/[ก-ฮ]/.test(cleanQuery)) {
+    const domainKeywords = [
+      'กฎการวิเคราะห์', 'วิเคราะห์', 'คำศัพท์', 'การแพทย์', 'ขั้นตอน',
+      'รากศัพท์', 'คำอุปสรรค', 'ปัจจัยท้าย', 'สระเชื่อม', 'องค์ประกอบ',
+      'อ้างอิง', 'ความหมาย', 'หลักการ', 'ระบบ'
+    ];
+    for (const kw of domainKeywords) {
+      if (cleanQuery.includes(kw)) {
+        candidateTerms.push(kw);
+      }
+    }
+  }
+
   // Remove duplicates and sort longer terms first
   const uniqueCandidateTerms = Array.from(new Set(candidateTerms)).sort((a, b) => b.length - a.length);
 
@@ -491,9 +514,7 @@ export function retrieveGroundedChunks(
     // Match candidate keywords with precision
     for (const term of uniqueCandidateTerms) {
       const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const isMatch = term.length <= 3 
-        ? new RegExp(`(^|[^a-zA-Z0-9ก-ฮะ-์])${escapedTerm}([^a-zA-Z0-9ก-ฮะ-์]|$)`, 'i').test(chunkLower)
-        : chunkLower.includes(term);
+      const isMatch = chunkLower.includes(term);
 
       if (isMatch) {
         // Longer academic terms carry significantly more weight than short fragments
@@ -513,15 +534,16 @@ export function retrieveGroundedChunks(
   // Sort descending by score
   scored.sort((a, b) => b.score - a.score);
 
-  const positiveScored = scored.filter(s => s.score >= 4);
+  const positiveScored = scored.filter(s => s.score >= 3);
   const maxScore = scored[0]?.score || 0;
-  const hasEvidence = positiveScored.length > 0 && maxScore >= 4;
+  const hasEvidence = positiveScored.length > 0 && maxScore >= 3;
   const relevantChunks = hasEvidence
     ? positiveScored.slice(0, topK).map(s => s.chunk)
     : [];
 
   // Prune matchedKeywords to keep key terms
   const finalMatchedKeywords = Array.from(matchedKeywordsSet);
+
 
   return {
     relevantChunks,

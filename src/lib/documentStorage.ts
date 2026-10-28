@@ -192,6 +192,38 @@ export function normalizeAndMigrateDocument(doc: LearningDocument): { doc: Learn
 }
 
 /**
+ * Asynchronously persist a migrated document back to IndexedDB only if it has not
+ * been concurrently modified by the user since reading.
+ */
+async function saveMigratedDocumentIfUnchanged(migratedDoc: LearningDocument, originalUpdatedAt?: string): Promise<void> {
+  if (!isIndexedDBAvailable()) {
+    if (originalUpdatedAt && memoryStorage.get(migratedDoc.id)?.updatedAt !== originalUpdatedAt) {
+      return;
+    }
+    memoryStorage.set(migratedDoc.id, migratedDoc);
+    return;
+  }
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const getReq = store.get(migratedDoc.id);
+    getReq.onsuccess = () => {
+      const current = getReq.result as LearningDocument | undefined;
+      if (current && originalUpdatedAt && current.updatedAt !== originalUpdatedAt) {
+        // Record was modified concurrently, skip overwriting
+        resolve();
+        return;
+      }
+      const putReq = store.put(migratedDoc);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => resolve();
+    };
+    getReq.onerror = () => resolve();
+  });
+}
+
+/**
  * Get all learning documents sorted by createdAt descending.
  */
 export async function getAllDocuments(): Promise<LearningDocument[]> {
@@ -230,7 +262,7 @@ export async function getAllDocuments(): Promise<LearningDocument[]> {
       const docs: LearningDocument[] = rawDocs.map((d) => {
         const { doc: migratedDoc, isUpdated } = normalizeAndMigrateDocument(d);
         if (isUpdated) {
-          saveDocument(migratedDoc).catch((err) => {
+          saveMigratedDocumentIfUnchanged(migratedDoc, d.updatedAt).catch((err) => {
             console.warn('[DocumentStorage] Background migration deferred:', err);
           });
         }
@@ -269,7 +301,7 @@ export async function getDocumentById(id: string): Promise<LearningDocument | nu
       }
       const { doc: migratedDoc, isUpdated } = normalizeAndMigrateDocument(rawDoc);
       if (isUpdated) {
-        saveDocument(migratedDoc).catch((err) => {
+        saveMigratedDocumentIfUnchanged(migratedDoc, rawDoc.updatedAt).catch((err) => {
           console.warn('[DocumentStorage] Background migration deferred:', err);
         });
       }
