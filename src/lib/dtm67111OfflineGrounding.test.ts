@@ -229,7 +229,7 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
     expect(fallback.evidenceStatus).toBe('sufficient');
     expect(fallback.references.length).toBeGreaterThan(0);
     const ref = fallback.references[0] as any;
-    expect(ref.evidenceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(ref.evidenceLocator).toBe('ส่วนที่ 3');
     expect(ref.evidenceLocator).not.toContain('&');
     expect(ref.excerpt).toBeDefined();
   });
