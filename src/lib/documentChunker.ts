@@ -825,6 +825,12 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
   return { numbers, headings, titles };
 }
 
+export interface VerifiedLocatorResult {
+  locator: string;
+  provenance: SourceLocatorProvenance;
+  isVerified: boolean;
+}
+
 export function validateAndResolveLocator(
   chunk: {
     pageNumber?: number | string;
