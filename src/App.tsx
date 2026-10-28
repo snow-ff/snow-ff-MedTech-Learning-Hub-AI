@@ -523,7 +523,11 @@ export default function App() {
           ...r,
           title: r.title ? decodeHtmlEntities(r.title) : r.title,
           excerpt: r.excerpt ? decodeHtmlEntities(r.excerpt) : r.excerpt,
-          evidenceLocator: r.evidenceLocator ? cleanChunkLocator(r.evidenceLocator) : r.evidenceLocator
+          evidenceLocator: r.evidenceLocator
+            ? (r.evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'
+                ? 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'
+                : (cleanChunkLocator(r.evidenceLocator) || decodeHtmlEntities(r.evidenceLocator)))
+            : r.evidenceLocator
         })) : undefined
       };
 
@@ -1263,30 +1267,46 @@ export default function App() {
                                             rel="noopener noreferrer"
                                             className="text-cyan-400 hover:underline font-medium break-words block flex items-center gap-1.5"
                                           >
-                                            <span>{ref.title || ref.uri}</span>
+                                            <span>{decodeHtmlEntities(ref.title || ref.uri || '')}</span>
                                             <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
                                           </a>
                                         ) : (
-                                          <span className="text-slate-200 font-semibold block">{ref.title}</span>
+                                          <span className="text-slate-200 font-semibold block">{decodeHtmlEntities(ref.title || '')}</span>
                                         )}
 
                                         {ref.excerpt && (
                                           <p className="text-xs sm:text-[13px] text-slate-200 italic mt-1.5 bg-slate-900/90 p-2 sm:p-2.5 rounded-lg border border-slate-800/80 leading-relaxed font-sans">
-                                            "{ref.excerpt}"
+                                            "{decodeHtmlEntities(ref.excerpt)}"
                                           </p>
                                         )}
 
                                         {((ref as any).type === 'document_chunk' || (ref as any).evidenceLocator) ? (
                                           <div className="text-xs text-slate-300 font-mono mt-1.5 flex items-center gap-2 flex-wrap">
                                             <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                              Locator: {(ref as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้'}
+                                              Locator: {decodeHtmlEntities((ref as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้')}
                                             </span>
-                                            <span
-                                              className="text-emerald-400 font-medium"
-                                              title="ยืนยันความสอดคล้องระดับชิ้นส่วนเอกสาร (Chunk-Level Grounded) โดยไม่ได้ครอบคลุมข้อความภายนอกบริบทที่อ้างอิง"
-                                            >
-                                              • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk-Level Grounded)
-                                            </span>
+                                            {(ref as any).verificationStatus === 'unsupported_citation' ? (
+                                              <span
+                                                className="text-rose-400 font-medium"
+                                                title="ชิ้นส่วนนี้ไม่ตรงกับประเด็นที่สอบถาม (Unsupported Citation)"
+                                              >
+                                                • ชิ้นส่วนอ้างอิง: ไม่ตรงกับประเด็นคำถาม (Unsupported)
+                                              </span>
+                                            ) : ((ref as any).verificationStatus === 'unverified' || !(ref as any).evidenceLocator || (ref as any).evidenceLocator === 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้') ? (
+                                              <span
+                                                className="text-amber-400 font-medium"
+                                                title="พบเนื้อหาที่เกี่ยวข้องแต่ไม่สามารถยืนยันเลขหน้าหรือหัวข้ออ้างอิงที่แน่นอนได้ (Unverified Locator)"
+                                              >
+                                                • ชิ้นส่วนอ้างอิง: ไม่สามารถยืนยันตำแหน่งได้ (Unverified Locator)
+                                              </span>
+                                            ) : (
+                                              <span
+                                                className="text-emerald-400 font-medium"
+                                                title="ยืนยันความสอดคล้องระดับชิ้นส่วนเอกสาร (Chunk-Level Grounded) โดยไม่ได้ครอบคลุมข้อความภายนอกบริบทที่อ้างอิง"
+                                              >
+                                                • ชิ้นส่วนอ้างอิง: พบเนื้อหาตรงกับเอกสาร (Chunk-Level Grounded)
+                                              </span>
+                                            )}
                                           </div>
                                         ) : (
                                           <div className="text-xs mt-1.5 space-y-1">

@@ -1,5 +1,5 @@
 import { LearningDocument } from '../models/coreModel';
-import { chunkText } from './documentChunker';
+import { chunkText, decodeHtmlEntities } from './documentChunker';
 
 const DB_NAME = 'MedTechLearningHub_DB';
 const DB_VERSION = 1;
@@ -104,6 +104,94 @@ export async function saveDocument(doc: LearningDocument): Promise<void> {
 }
 
 /**
+ * Safely validates, normalizes HTML entities, and upgrades legacy document chunks
+ * in-memory to satisfy canonical evidence contracts without requiring users to
+ * wipe IndexedDB or re-upload documents.
+ */
+export function normalizeAndMigrateDocument(doc: LearningDocument): { doc: LearningDocument; isUpdated: boolean } {
+  if (!doc) return { doc, isUpdated: false };
+  let isUpdated = false;
+
+  const cleanTitle = decodeHtmlEntities(doc.title || '');
+  if (cleanTitle !== doc.title) {
+    isUpdated = true;
+  }
+
+  const isDocUnpaged = doc.hasNativePages === false;
+  const migratedChunks = (doc.chunks || []).map((c) => {
+    let chunkUpdated = false;
+    const cleanText = decodeHtmlEntities(c.text || '');
+    if (cleanText !== c.text) {
+      chunkUpdated = true;
+    }
+
+    let sourceProv = c.sourceLocatorProvenance;
+    let sourceLoc = c.sourceLocator;
+
+    if (!isDocUnpaged && typeof c.pageNumber === 'number' && c.pageNumber > 0 && c.pageNumber <= 1899) {
+      if (!sourceProv || sourceProv === 'unconfirmed' || sourceProv === 'native_page') {
+        const expectedLoc = `หน้า ${c.pageNumber}`;
+        if (sourceLoc !== expectedLoc || sourceProv !== 'native_page') {
+          sourceLoc = expectedLoc;
+          sourceProv = 'native_page';
+          chunkUpdated = true;
+        }
+      }
+    } else if (isDocUnpaged) {
+      // Unpaged document: Ensure pageNumber is undefined so it never displays fake page numbers
+      let pageNum = c.pageNumber;
+      if (pageNum !== undefined && pageNum !== null) {
+        pageNum = undefined;
+        chunkUpdated = true;
+      }
+      if (!sourceProv || sourceProv === 'unconfirmed') {
+        const headingMatch = cleanText.match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
+        if (headingMatch && headingMatch[1]) {
+          const num = parseInt(headingMatch[1], 10);
+          if (!isNaN(num) && num > 0) {
+            sourceLoc = `ชิ้นส่วนที่ ${num}`;
+            sourceProv = 'source_heading';
+            chunkUpdated = true;
+          }
+        }
+      }
+      if (chunkUpdated) {
+        isUpdated = true;
+        return {
+          ...c,
+          pageNumber: undefined,
+          hasNativePage: false,
+          text: cleanText,
+          sourceLocator: sourceLoc,
+          sourceLocatorProvenance: sourceProv
+        };
+      }
+    }
+
+    if (chunkUpdated) {
+      isUpdated = true;
+      return {
+        ...c,
+        text: cleanText,
+        sourceLocator: sourceLoc,
+        sourceLocatorProvenance: sourceProv
+      };
+    }
+    return c;
+  });
+
+  const updatedDoc: LearningDocument = isUpdated
+    ? {
+        ...doc,
+        title: cleanTitle,
+        chunks: migratedChunks
+      }
+    : doc;
+
+  return { doc: updatedDoc, isUpdated };
+}
+
+/**
  * Get all learning documents sorted by createdAt descending.
  */
 export async function getAllDocuments(): Promise<LearningDocument[]> {
@@ -113,13 +201,20 @@ export async function getAllDocuments(): Promise<LearningDocument[]> {
         const raw = window.localStorage.getItem('medtech_docs_fallback');
         if (raw) {
           const list: LearningDocument[] = JSON.parse(raw);
-          list.forEach(d => memoryStorage.set(d.id, d));
+          list.forEach(d => {
+            const { doc: migrated } = normalizeAndMigrateDocument(d);
+            memoryStorage.set(migrated.id, migrated);
+          });
         }
       } catch {
         // Ignore JSON error
       }
     }
-    return Array.from(memoryStorage.values()).sort(
+    const docs = Array.from(memoryStorage.values()).map(d => {
+      const { doc: migrated } = normalizeAndMigrateDocument(d);
+      return migrated;
+    });
+    return docs.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -131,7 +226,16 @@ export async function getAllDocuments(): Promise<LearningDocument[]> {
     const request = store.getAll();
 
     request.onsuccess = () => {
-      const docs: LearningDocument[] = request.result || [];
+      const rawDocs: LearningDocument[] = request.result || [];
+      const docs: LearningDocument[] = rawDocs.map((d) => {
+        const { doc: migratedDoc, isUpdated } = normalizeAndMigrateDocument(d);
+        if (isUpdated) {
+          saveDocument(migratedDoc).catch((err) => {
+            console.warn('[DocumentStorage] Background migration deferred:', err);
+          });
+        }
+        return migratedDoc;
+      });
       docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       resolve(docs);
     };
@@ -145,7 +249,10 @@ export async function getAllDocuments(): Promise<LearningDocument[]> {
  */
 export async function getDocumentById(id: string): Promise<LearningDocument | null> {
   if (!isIndexedDBAvailable()) {
-    return memoryStorage.get(id) || null;
+    const d = memoryStorage.get(id);
+    if (!d) return null;
+    const { doc: migrated } = normalizeAndMigrateDocument(d);
+    return migrated;
   }
 
   const db = await openDB();
@@ -154,7 +261,20 @@ export async function getDocumentById(id: string): Promise<LearningDocument | nu
     const store = transaction.objectStore(STORE_NAME);
     const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const rawDoc: LearningDocument | null = request.result || null;
+      if (!rawDoc) {
+        resolve(null);
+        return;
+      }
+      const { doc: migratedDoc, isUpdated } = normalizeAndMigrateDocument(rawDoc);
+      if (isUpdated) {
+        saveDocument(migratedDoc).catch((err) => {
+          console.warn('[DocumentStorage] Background migration deferred:', err);
+        });
+      }
+      resolve(migratedDoc);
+    };
     request.onerror = () => reject(request.error || new Error('Error retrieving document'));
   });
 }

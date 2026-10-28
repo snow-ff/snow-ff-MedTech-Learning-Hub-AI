@@ -26,7 +26,7 @@ import {
   seedSampleDocumentsIfEmpty,
   getStorageStatus
 } from '../lib/documentStorage';
-import { chunkText, cleanChunkLocator } from '../lib/documentChunker';
+import { chunkText, cleanChunkLocator, decodeHtmlEntities } from '../lib/documentChunker';
 import { extractTextFromFile } from '../lib/pdfExtractor';
 import { OFFICIAL_COURSES_2567 } from '../data/curriculumData';
 import { downloadDtm67111SourceSecurely, downloadDtm67111ManifestSecurely } from '../lib/learningSourceDownload';
@@ -182,14 +182,16 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
   // Handle Create Manual Note
   const handleCreateNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!noteTitle.trim() || !noteContent.trim()) {
+    const cleanNoteTitle = decodeHtmlEntities(noteTitle.trim());
+    const cleanNoteContent = decodeHtmlEntities(noteContent.trim());
+    if (!cleanNoteTitle || !cleanNoteContent) {
       setNoteError('กรุณากรอกหัวข้อและเนื้อหาโน้ตสรุป');
       return;
     }
     setNoteError(null);
 
     const docId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const chunks = chunkText(noteContent, {
+    const chunks = chunkText(cleanNoteContent, {
       documentId: docId,
       maxChunkChars: 800,
       overlapChars: 100
@@ -203,16 +205,16 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({
 
     const newNoteDoc: LearningDocument = {
       id: docId,
-      title: noteTitle.trim(),
-      filename: `${noteTitle.trim().replace(/\s+/g, '_')}.md`,
-      fileSize: noteContent.length,
+      title: cleanNoteTitle,
+      filename: `${cleanNoteTitle.replace(/\s+/g, '_')}.md`,
+      fileSize: cleanNoteContent.length,
       type: noteType,
       courseCode: noteCourseCode || undefined,
       courseTitle: courseInfo?.titleThai || courseInfo?.titleEnglish,
       tags: tagsArray.length > 0 ? tagsArray : ['บันทึกสรุป', 'note'],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      totalChars: noteContent.length,
+      totalChars: cleanNoteContent.length,
       totalPages: undefined,
       hasNativePages: false,
       readabilityStatus: 'readable',

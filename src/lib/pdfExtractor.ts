@@ -2,6 +2,7 @@
  * Client-side document and PDF text extractor.
  * Reads .txt, .md, and .pdf files directly in the user's browser without uploading files to any external server.
  */
+import { decodeHtmlEntities } from './documentChunker';
 
 // Dynamically load PDF.js from cdnjs if not already present
 let pdfjsPromise: Promise<any> | null = null;
@@ -127,17 +128,19 @@ export async function extractTextFromFile(file: File): Promise<ExtractedFileResu
   const lowerName = filename.toLowerCase();
 
   // Clean title without file extension
-  const title = filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+  const rawTitle = filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+  const title = decodeHtmlEntities(rawTitle);
 
   if (lowerName.endsWith('.pdf')) {
     const { pages, totalText } = await extractTextFromPdf(file);
-    const cleanText = totalText.trim();
-    const isReadable = cleanText.length > 0 && pages.length > 0;
+    const cleanText = decodeHtmlEntities(totalText.trim());
+    const decodedPages = pages.map(p => decodeHtmlEntities(p));
+    const isReadable = cleanText.length > 0 && decodedPages.length > 0;
 
     return {
       title,
       text: cleanText,
-      pages: isReadable ? pages : [],
+      pages: isReadable ? decodedPages : [],
       fileType: 'pdf',
       hasNativePages: true,
       isReadable,
@@ -148,7 +151,8 @@ export async function extractTextFromFile(file: File): Promise<ExtractedFileResu
   }
 
   // For text/markdown files (.txt, .md, .json, .csv)
-  const text = (await file.text()).trim();
+  const rawText = (await file.text()).trim();
+  const text = decodeHtmlEntities(rawText);
   const lowerText = text.toLowerCase();
 
   // Guard against erroneous HTML error pages or cookie check responses downloaded instead of markdown content

@@ -344,6 +344,8 @@ function buildChunkReferences(
       linkAccessStatus: "verified_local",
       verificationStatus: isChunkUnsupported ? ("unsupported_citation" as const) : ("source_grounded" as const),
       evidenceLocator: finalLocator,
+      isLocatorVerified: resolvedLocator.isVerified,
+      sourceLocatorProvenance: resolvedLocator.provenance,
       excerpt,
       contentVersion: "1.2"
     };
@@ -373,6 +375,8 @@ export function getAcademicFallback(
     linkAccessStatus?: string;
     verificationStatus?: "source_grounded" | "unsupported_citation" | "unverified";
     evidenceLocator?: string;
+    isLocatorVerified?: boolean;
+    sourceLocatorProvenance?: string;
     excerpt?: string;
     contentVersion?: string;
   }>;
@@ -419,10 +423,10 @@ export function getAcademicFallback(
           sourceProv = 'native_page';
         }
       } else if (!sourceProv || sourceProv === 'unconfirmed') {
-        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+        const headingMatch = (c.text || '').match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
         if (headingMatch && headingMatch[1]) {
           const num = parseInt(headingMatch[1], 10);
-          if (!isNaN(num)) {
+          if (!isNaN(num) && num > 0) {
             sourceLoc = `ชิ้นส่วนที่ ${num}`;
             sourceProv = 'source_heading';
           }
@@ -1124,10 +1128,10 @@ app.post("/api/gemini/generate", async (req, res) => {
           sourceProv = 'native_page';
         }
       } else if (!sourceProv || sourceProv === 'unconfirmed') {
-        const headingMatch = (c.text || '').match(/(?:===+\s*|#+\s*|^)(?:ส่วนที่|บทที่|section)\s*(\d+)/i);
+        const headingMatch = (c.text || '').match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
         if (headingMatch && headingMatch[1]) {
           const num = parseInt(headingMatch[1], 10);
-          if (!isNaN(num)) {
+          if (!isNaN(num) && num > 0) {
             sourceLoc = `ชิ้นส่วนที่ ${num}`;
             sourceProv = 'source_heading';
           }

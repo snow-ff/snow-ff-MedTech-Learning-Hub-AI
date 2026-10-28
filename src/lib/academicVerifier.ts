@@ -1,5 +1,5 @@
 import { DocumentChunk, AcademicVerificationReport, AnswerFidelityStatus, VerificationVerdict } from '../models/coreModel';
-import { retrieveGroundedChunks, GroundedRetrievalResult } from './documentChunker';
+import { retrieveGroundedChunks, GroundedRetrievalResult, extractGenuineHeadings } from './documentChunker';
 
 export interface VerificationOptions {
   query: string;
@@ -109,8 +109,19 @@ export function verifyAcademicAnswer(options: VerificationOptions): AcademicVeri
   const chunkMatches = Array.from(candidateAnswer.matchAll(/(?:ชิ้นส่วนที่|ส่วนอ้างอิง|chunk)\s*(\d+)/gi));
   const uniqueCitedChunkIndices = Array.from(new Set(chunkMatches.map(m => parseInt(m[1], 10)).filter(n => !isNaN(n))));
   const retrievedChunkIndices = retrieval.relevantChunks.map(c => c.chunkIndex);
+  const allowedRetrievedIndices = new Set(retrievedChunkIndices);
+  for (const c of retrieval.relevantChunks) {
+    const headings = extractGenuineHeadings(c.text || '');
+    headings.numbers.forEach(n => allowedRetrievedIndices.add(n));
+    if (c.sourceLocator) {
+      const match = c.sourceLocator.match(/ชิ้นส่วนที่\s*(\d+)/);
+      if (match && match[1]) {
+        allowedRetrievedIndices.add(parseInt(match[1], 10));
+      }
+    }
+  }
   for (const chunkIdx of uniqueCitedChunkIndices) {
-    const isRetrieved = retrievedChunkIndices.includes(chunkIdx);
+    const isRetrieved = allowedRetrievedIndices.has(chunkIdx);
     if (!isRetrieved) {
       unsupportedCitations.push(
         `คำตอบอ้างอิงชิ้นส่วนที่ ${chunkIdx} ซึ่งไม่ได้อยู่ในหลักฐานที่สืบค้นพบและเกี่ยวข้อง (${retrievedChunkIndices.join(', ')})`
