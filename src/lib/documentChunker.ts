@@ -920,9 +920,12 @@ export function validateAndResolveLocator(
     }
 
     // Check if rawLocator specifies a section/chunk number
-    const numMatch = rawLocator.match(/^(?:#?chunk[\s\-:]*|ชิ้นส่วนที่[\s:]*|ส่วนอ้างอิง[\s:]*|ส่วนที่[\s:]*|บทที่[\s:]*|section[\s:]*|chapter[\s:]*)(\d+)$/i);
-    if (numMatch && numMatch[1]) {
-      const n = parseInt(numMatch[1], 10);
+    const headingLocatorMatch = rawLocator.match(/^(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)[\s\-:]*(\d+)/i) || rawLocator.match(/(\d+)/);
+    const rawPrefix = headingLocatorMatch && headingLocatorMatch.length > 2 ? headingLocatorMatch[1] : undefined;
+    const numStr = headingLocatorMatch && headingLocatorMatch.length > 2 ? headingLocatorMatch[2] : (headingLocatorMatch ? headingLocatorMatch[1] : null);
+
+    if (numStr) {
+      const n = parseInt(numStr, 10);
       if (isNaN(n) || n <= 0) {
         return {
           locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
@@ -932,7 +935,10 @@ export function validateAndResolveLocator(
       }
 
       const headings = extractGenuineHeadings(chunk.text || '');
-      const matchedHeading = headings.headings.find(h => h.number === n);
+      const matchedHeading = headings.headings.find(h => 
+        h.number === n && 
+        (!rawPrefix || /^(?:ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)$/i.test(rawPrefix) || h.prefix.toLowerCase() === rawPrefix.toLowerCase())
+      ) || headings.headings.find(h => h.number === n);
 
       if (prov === 'source_heading') {
         if (matchedHeading) {
@@ -943,6 +949,22 @@ export function validateAndResolveLocator(
           };
         }
         if (headings.numbers.includes(n)) {
+          return {
+            locator: rawPrefix && !/^(?:ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)$/i.test(rawPrefix) ? `${rawPrefix} ${n}` : rawLocator,
+            provenance: prov,
+            isVerified: true
+          };
+        }
+        return {
+          locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+          provenance: 'unconfirmed',
+          isVerified: false
+        };
+      }
+
+      if (prov === 'explicit_provenance') {
+        const hasEvidence = headings.numbers.includes(n) || (chunk.text && new RegExp(`\\b${n}\\b`).test(chunk.text));
+        if (hasEvidence) {
           return {
             locator: rawLocator,
             provenance: prov,
