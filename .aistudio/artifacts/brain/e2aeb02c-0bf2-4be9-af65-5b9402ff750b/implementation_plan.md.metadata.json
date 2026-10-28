@@ -1,6 +1,6 @@
 {
-  "summary":  "Targeted P0 Root-Cause Remediation of Source Locator Provenance: Complete verification, code changes, diffs, regression test results, and AC-1 through AC-5 status assessment.",
-  "updatedAt":  "2026-10-28T03:03:58.654869379Z",
+  "summary":  "รายงานสรุปผลการแก้ปัญหา P0 Source Locator Provenance และการวินิจฉัย Preview HMR สำหรับ MedTech Learning Hub AI v1.2 ใน Workspace ปัจจุบัน",
+  "updatedAt":  "2026-10-28T03:31:23.513345187Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

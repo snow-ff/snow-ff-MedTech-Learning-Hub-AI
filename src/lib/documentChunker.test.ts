@@ -5,7 +5,8 @@ import {
   buildGroundingContext,
   decodeHtmlEntities,
   retrieveGroundedChunks,
-  extractRelevantExcerpt
+  extractRelevantExcerpt,
+  validateAndResolveLocator
 } from './documentChunker';
 import { DocumentChunk } from '../models/coreModel';
 
@@ -170,4 +171,90 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       }
     });
   });
+
+  describe('validateAndResolveLocator direct unit tests', () => {
+    it('Case 1: หัวข้อจริง ส่วนที่ 3 และ Locator ชิ้นส่วนที่ 3 — ผ่าน (isVerified: true, locator: ชิ้นส่วนที่ 3)', () => {
+      const chunk = {
+        text: '=== ส่วนที่ 3: Prefix ในการแพทย์ ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก',
+        sourceLocator: 'ชิ้นส่วนที่ 3',
+        sourceLocatorProvenance: 'source_heading'
+      };
+      const res = validateAndResolveLocator(chunk, true);
+      expect(res.isVerified).toBe(true);
+      expect(res.locator).toBe('ชิ้นส่วนที่ 3');
+      expect(res.provenance).toBe('source_heading');
+    });
+
+    it('Case 2: หัวข้อจริง ส่วนที่ 3 แต่ Locator ชิ้นส่วนที่ 13 และ chunkIndex = 13 — ไม่ผ่าน (isVerified: false)', () => {
+      const chunk = {
+        chunkIndex: 13,
+        text: '=== ส่วนที่ 3: Prefix ในการแพทย์ ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก',
+        sourceLocator: 'ชิ้นส่วนที่ 13',
+        sourceLocatorProvenance: 'source_heading'
+      };
+      const res = validateAndResolveLocator(chunk, true);
+      expect(res.isVerified).toBe(false);
+      expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+      expect(res.provenance).toBe('unconfirmed');
+    });
+
+    it('Case 3: ไม่มีหัวข้อจริง แต่มี chunkIndex = 13 และ sourceLocator = ชิ้นส่วนที่ 13 — ไม่ผ่าน (isVerified: false)', () => {
+      const chunk = {
+        chunkIndex: 13,
+        text: 'ข้อความทั่วไปเกี่ยวกับศัพท์แพทย์โดยไม่มีหัวข้อส่วนหรือบทเรียน',
+        sourceLocator: 'ชิ้นส่วนที่ 13',
+        sourceLocatorProvenance: 'source_heading'
+      };
+      const res = validateAndResolveLocator(chunk, true);
+      expect(res.isVerified).toBe(false);
+      expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+      expect(res.provenance).toBe('unconfirmed');
+    });
+
+    it('Case 4: Provenance ที่ไม่อนุญาต (เช่น made_up) หรือ unconfirmed — ไม่ผ่าน (isVerified: false)', () => {
+      const chunkMadeUp = {
+        text: '=== ส่วนที่ 3: Prefix ===\nข้อความ',
+        sourceLocator: 'ชิ้นส่วนที่ 3',
+        sourceLocatorProvenance: 'made_up'
+      };
+      const resMadeUp = validateAndResolveLocator(chunkMadeUp, true);
+      expect(resMadeUp.isVerified).toBe(false);
+      expect(resMadeUp.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+
+      const chunkUnconfirmed = {
+        text: '=== ส่วนที่ 3: Prefix ===\nข้อความ',
+        sourceLocator: 'ชิ้นส่วนที่ 3',
+        sourceLocatorProvenance: 'unconfirmed'
+      };
+      const resUnconfirmed = validateAndResolveLocator(chunkUnconfirmed, true);
+      expect(resUnconfirmed.isVerified).toBe(false);
+      expect(resUnconfirmed.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+    });
+
+    it('Case 5 (Test AP): pageNumber = 3 จากเอกสารที่มีเลขหน้าจริงต้องได้ evidenceLocator = หน้า 3', () => {
+      const pagedChunk = {
+        pageNumber: 3,
+        hasNativePage: true,
+        sourceLocatorProvenance: 'native_page',
+        text: 'เนื้อหาหน้า 3 ของเอกสารตำรา'
+      };
+      const res = validateAndResolveLocator(pagedChunk, false); // isDocUnpaged: false
+      expect(res.isVerified).toBe(true);
+      expect(res.locator).toBe('หน้า 3');
+      expect(res.provenance).toBe('native_page');
+    });
+
+    it('Case 6: สถานะ Locator ที่ไม่สามารถยืนยันได้ยังคงแสดงใน Reference UI โดยไม่ถูกแปลงเป็นไม่ระบุหมายเลข', () => {
+      const unindexedChunk = {
+        chunkIndex: 1,
+        text: 'เนื้อหาชิ้นส่วนที่ไม่มีหัวข้อ'
+      };
+      const res = validateAndResolveLocator(unindexedChunk, true);
+      expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+      const renderedCardLocator = res.locator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้';
+      expect(renderedCardLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+      expect(renderedCardLocator).not.toBe('ไม่ระบุหมายเลข');
+    });
+  });
 });
+

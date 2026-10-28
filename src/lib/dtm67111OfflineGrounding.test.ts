@@ -216,7 +216,7 @@ describe('DTM67-111: Production Offline Document Grounding & API Quota Fallback 
   it('Case I: Excerpt Readability and Clean Locator Verification - excerpts must start at clean word boundaries around matching terms and locators must be clean without raw entities or escape artifacts', () => {
     const prompt = 'Prefix คืออะไร';
     const sampleChunks = [
-      { chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'เนื้อหาสำคัญ: Prefix (คำอุปสรรค) คือส่วนของคำที่เติมข้างหน้า Root เพื่อขยายความหมาย' }
+      { chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 3: Prefix ===\nเนื้อหาสำคัญ: Prefix (คำอุปสรรค) คือส่วนของคำที่เติมข้างหน้า Root เพื่อขยายความหมาย' }
     ];
 
     const fallback = getAcademicFallback(prompt, [{ role: 'user', text: prompt }], {

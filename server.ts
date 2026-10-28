@@ -1660,6 +1660,9 @@ ${formattedChunks}
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    if (process.env.DISABLE_HMR === undefined) {
+      process.env.DISABLE_HMR = 'true';
+    }
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

@@ -128,6 +128,52 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
     return [];
   }
 
+  // Detect structured sections (e.g. --- ส่วนที่ 1: ... --- or === ส่วนที่ 1 ===)
+  const sectionSplit = cleanText.split(/(?=\n(?:---|===+|\*\*\*+)\s*(?:ส่วนที่|บทที่|section|chapter)\s*\d+)/i);
+  if (sectionSplit.length > 1) {
+    let globalIdx = 0;
+    for (const sec of sectionSplit) {
+      const trimmedSec = sec.trim();
+      if (!trimmedSec) continue;
+      const hMatch = trimmedSec.match(/^(?:---|===+|\*\*\*+)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
+      let secNum: number | undefined = undefined;
+      let secTitle = '';
+      if (hMatch && hMatch[1]) {
+        secNum = parseInt(hMatch[1], 10);
+        const firstLine = trimmedSec.split('\n')[0] || '';
+        secTitle = firstLine.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
+      }
+      const blocks = splitStringWithOverlap(trimmedSec, maxChars, overlap);
+      blocks.forEach((bText, bIdx) => {
+        globalIdx++;
+        let finalBlockText = bText;
+        let explicitLocator: string | undefined = undefined;
+        let explicitProvenance: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' = 'unconfirmed';
+        if (secNum !== undefined && secNum > 0) {
+          explicitLocator = `ชิ้นส่วนที่ ${secNum}`;
+          explicitProvenance = 'source_heading';
+          if (bIdx > 0 && !extractGenuineHeadings(bText).numbers.includes(secNum)) {
+            finalBlockText = `--- ส่วนที่ ${secNum}: ${secTitle} (ต่อ) ---\n` + bText;
+          }
+        }
+        chunks.push({
+          id: `${docId}-chunk-${globalIdx}`,
+          documentId: docId,
+          chunkIndex: globalIdx,
+          pageNumber: undefined,
+          hasNativePage: false,
+          sourceLocator: explicitLocator,
+          sourceLocatorProvenance: explicitProvenance,
+          text: finalBlockText,
+          charCount: finalBlockText.length
+        });
+      });
+    }
+    if (chunks.length > 0) {
+      return chunks;
+    }
+  }
+
   const textBlocks = splitStringWithOverlap(cleanText, maxChars, overlap);
   textBlocks.forEach((blockText, idx) => {
     let explicitLocator: string | undefined = undefined;
@@ -852,19 +898,9 @@ export function validateAndResolveLocator(
       }
 
       const headings = extractGenuineHeadings(chunk.text || '');
-      const hasHeadingMatch =
-        headings.numbers.includes(n) ||
-        /(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter|เนื้อหาชิ้นส่วนที่|ชิ้นส่วนที่)\s*(\d+)/i.test(chunk.text || '');
-      const hasChunkIndexMatch =
-        chunk.chunkIndex !== undefined &&
-        chunk.chunkIndex !== null &&
-        !isNaN(Number(chunk.chunkIndex)) &&
-        Number(chunk.chunkIndex) === n;
-      const isExplicitDocumentChunk =
-        chunk.sourceLocator !== undefined &&
-        cleanChunkLocator(chunk.sourceLocator).replace(/^ชิ้นส่วนที่\s*/, '') === String(n);
+      const hasHeadingMatch = headings.numbers.includes(n);
 
-      if (hasHeadingMatch || hasChunkIndexMatch || isExplicitDocumentChunk) {
+      if (hasHeadingMatch) {
         return {
           locator: `ชิ้นส่วนที่ ${n}`,
           provenance: prov,
@@ -882,7 +918,7 @@ export function validateAndResolveLocator(
     // Check if rawLocator matches a recognized heading title in text
     const headings = extractGenuineHeadings(chunk.text || '');
     const cleanRaw = rawLocator.toLowerCase().trim();
-    if (headings.titles.some(t => t.includes(cleanRaw) || cleanRaw.includes(t)) || (chunk.text && chunk.text.toLowerCase().includes(cleanRaw))) {
+    if (headings.titles.some(t => t === cleanRaw || (cleanRaw.length > 5 && (t.includes(cleanRaw) || cleanRaw.includes(t))))) {
       return {
         locator: rawLocator,
         provenance: prov,

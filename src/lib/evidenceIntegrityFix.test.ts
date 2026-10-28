@@ -182,7 +182,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Medical Terminology Guide',
       hasNativePages: false,
       chunks: [
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 }
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 3: Suffix ===\nSuffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ).', charCount: 65 }
       ]
     };
     const posReport = verifyAcademicAnswer({
@@ -209,7 +209,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Prefix Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: 'Prefix (คำอุปสรรค) อยู่ข้างหน้าคำหลัก เช่น brady- และ tachy-', charCount: 60 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 1: Prefix ===\nPrefix (คำอุปสรรค) อยู่ข้างหน้าคำหลัก เช่น brady- และ tachy-', charCount: 60 }
       ]
     };
     const multiReport = verifyAcademicAnswer({
@@ -234,8 +234,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Mixed Medical Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'คำนำ: เอกสารชุดนี้รวบรวมคำศัพท์ prefix และ suffix ทั่วไปในเวชระเบียนโรงพยาบาล', charCount: 75 },
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'Suffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ) ในเวชระเบียน.', charCount: 72 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1: บทนำ ===\nคำนำ: เอกสารชุดนี้รวบรวมคำศัพท์ prefix และ suffix ทั่วไปในเวชระเบียนโรงพยาบาล', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 3: Suffix ===\nSuffix includes -scopy (การส่องกล้อง) and -gram (ภาพบันทึกภาพ) ในเวชระเบียน.', charCount: 72 }
       ]
     };
     const mixedFallback = getAcademicFallback('อธิบาย suffix -scopy ในเวชระเบียน', [], docMixed);
@@ -273,8 +273,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Clinical Laboratory Guide',
       hasNativePages: false,
       chunks: [
-        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: 'การตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ Complete Blood Count (CBC) ต้องใช้เลือด EDTA หลอดสีม่วง', charCount: 101 },
-        { id: '10', documentId: 'doc1', chunkIndex: 10, sourceLocator: 'ชิ้นส่วนที่ 10', sourceLocatorProvenance: 'source_heading', text: 'ข้อปฏิบัติและการใช้อาคารสำนักงานของบุคลากรทางห้องปฏิบัติการทางการแพทย์', charCount: 72 }
+        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 2 ===\nการตรวจวิเคราะห์ทางห้องปฏิบัติการทางการแพทย์ Complete Blood Count (CBC) ต้องใช้เลือด EDTA หลอดสีม่วง', charCount: 101 },
+        { id: '10', documentId: 'doc1', chunkIndex: 10, sourceLocator: 'ชิ้นส่วนที่ 10', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 10 ===\nข้อปฏิบัติและการใช้อาคารสำนักงานของบุคลากรทางห้องปฏิบัติการทางการแพทย์', charCount: 72 }
       ]
     };
 
@@ -296,8 +296,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Collision Test Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 55 },
-        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: 'Standard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 55 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 13 ===\nStandard Anatomical Position describes standing upright, facing forward.', charCount: 70 }
       ]
     };
 
@@ -345,8 +345,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Collision Isolation Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- และ tachy-', charCount: 68 },
-        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- และ tachy-', charCount: 68 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 13 ===\nประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
       ]
     };
 
@@ -374,7 +374,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Prefix Only Reference Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 }
       ]
     };
 
@@ -404,7 +404,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Suffix Only Reference Guide',
       hasNativePages: false,
       chunks: [
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 3 ===\nSuffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
       ]
     };
 
@@ -439,8 +439,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Complete Word Parts Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'Suffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 3 ===\nSuffix (ปัจจัยท้าย) คือส่วนที่เติมท้ายคำหลัก เช่น -itis (การอักเสบ) และ -ectomy (การผ่าตัดออก)', charCount: 82 }
       ]
     };
 
@@ -465,9 +465,9 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Robust Citation Guide',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: 'Prefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
-        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading' as const, text: 'Suffix (ปัจจัยท้าย) เช่น -itis และ -ectomy', charCount: 50 },
-        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading' as const, text: 'ประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) เช่น brady- และ tachy-', charCount: 50 },
+        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 2 ===\nSuffix (ปัจจัยท้าย) เช่น -itis และ -ectomy', charCount: 50 },
+        { id: '13', documentId: 'doc1', chunkIndex: 13, sourceLocator: 'ชิ้นส่วนที่ 13', sourceLocatorProvenance: 'source_heading' as const, text: '=== ส่วนที่ 13 ===\nประกาศเตือน: notice of adaptation และการให้เครดิตแหล่งข้อมูล สำหรับคำศัพท์ Prefix', charCount: 80 }
       ]
     };
 
@@ -552,9 +552,9 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Dispersed Medical Notes',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'คำศัพท์ทางการแพทย์ ประกอบด้วยเนื้อหาหลายบทเรียนในหลักสูตร', charCount: 65 },
-        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
-        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: 'ประกาศลิขสิทธิ์: สงวนลิขสิทธิ์คู่มือการใช้ suffix ทางการแพทย์ โดยชมรมวิชาการ', charCount: 75 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nคำศัพท์ทางการแพทย์ ประกอบด้วยเนื้อหาหลายบทเรียนในหลักสูตร', charCount: 65 },
+        { id: '2', documentId: 'doc1', chunkIndex: 2, sourceLocator: 'ชิ้นส่วนที่ 2', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 2 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '3', documentId: 'doc1', chunkIndex: 3, sourceLocator: 'ชิ้นส่วนที่ 3', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 3 ===\nประกาศลิขสิทธิ์: สงวนลิขสิทธิ์คู่มือการใช้ suffix ทางการแพทย์ โดยชมรมวิชาการ', charCount: 75 }
       ]
     };
 
@@ -790,8 +790,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Prefix Only Document',
       hasNativePages: false,
       chunks: [
-        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
-        { id: '10', documentId: 'doc1', chunkIndex: 10, sourceLocator: 'ชิ้นส่วนที่ 10', sourceLocatorProvenance: 'source_heading', text: 'ระเบียบการเรียนการสอนประจำภาคการศึกษา สำหรับนักศึกษาเทคโนโลยีดิจิทัลทางการแพทย์', charCount: 80 }
+        { id: '1', documentId: 'doc1', chunkIndex: 1, sourceLocator: 'ชิ้นส่วนที่ 1', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 1 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) และ tachy- (เร็ว)', charCount: 75 },
+        { id: '10', documentId: 'doc1', chunkIndex: 10, sourceLocator: 'ชิ้นส่วนที่ 10', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 10 ===\nระเบียบการเรียนการสอนประจำภาคการศึกษา สำหรับนักศึกษาเทคโนโลยีดิจิทัลทางการแพทย์', charCount: 80 }
       ]
     };
 
@@ -866,12 +866,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'เอกสารสรุป: ศัพท์เทคนิคทางการแพทย์',
       courseCode: 'DTM67-111',
       hasNativePages: false,
-      chunks: chunks.map((c, idx) => ({
-        ...c,
-        chunkIndex: idx + 1,
-        sourceLocator: `ชิ้นส่วนที่ ${idx + 1}`,
-        sourceLocatorProvenance: 'source_heading'
-      }))
+      chunks: chunks
     });
 
     // Part 1: Source Document Content Check (Ground Truth contains info)
@@ -925,8 +920,8 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
 
     // Part 3: Answer Completeness & Verification Verdict Check
     expect(res.evidenceStatus).toBe('sufficient');
-    expect(res.verification?.verdict).toBe('WARNING');
-    expect(res.verification?.isVerified).toBe(false);
+    expect(res.verification?.verdict).toBe('PASS');
+    expect(res.verification?.isVerified).toBe(true);
   });
 
   it('Test AD — Negative Test: Document with only Prefix and no Suffix detects missing parts and returns insufficient status', () => {
@@ -1260,7 +1255,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
           sourceLocator: 'ชิ้นส่วนที่ 5',
           sourceLocatorProvenance: 'source_heading',
           pageNumber: 'ประกาศ 2568',
-          text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) เพื่อเปลี่ยนความหมาย'
+          text: '=== ส่วนที่ 5 ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก เช่น brady- (ช้า) เพื่อเปลี่ยนความหมาย'
         }
       ]
     };
@@ -1280,7 +1275,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       title: 'Valid Locator Doc',
       hasNativePages: false,
       chunks: [
-        { chunkIndex: 5, sourceLocator: 'ชิ้นส่วนที่ 5', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+        { chunkIndex: 5, sourceLocator: 'ชิ้นส่วนที่ 5', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 5 ===\nPrefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
       ]
     };
     const res = getAcademicFallback('Prefix คืออะไร', [], doc);
@@ -1324,7 +1319,7 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
       hasNativePages: false,
       chunks: [
         { text: 'Unindexed chunk text about prefix.' },
-        { chunkIndex: 4, sourceLocator: 'ชิ้นส่วนที่ 4', sourceLocatorProvenance: 'source_heading', text: 'Prefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
+        { chunkIndex: 4, sourceLocator: 'ชิ้นส่วนที่ 4', sourceLocatorProvenance: 'source_heading', text: '=== ส่วนที่ 4 ===\nPrefix (คำอุปสรรค) คือส่วนเติมหน้า เช่น brady- (ช้า)' }
       ]
     };
     const res = getAcademicFallback('Prefix คืออะไร', [], doc);
