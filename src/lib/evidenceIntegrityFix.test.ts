@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences } from './documentChunker';
+import { retrieveGroundedChunks, decodeHtmlEntities, chunkText, cleanChunkLocator, extractRelevantExcerpt, filterDisplayedReferences, validateAndResolveLocator } from './documentChunker';
 import { verifyAcademicAnswer } from './academicVerifier';
 import { DocumentChunk } from '../models/coreModel';
 import { getAcademicFallback } from '../../server';
@@ -1404,6 +1404,68 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.references).toHaveLength(1);
     expect(res.references[0].evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
     expect((res.references[0] as any).isLocatorVerified).toBe(false);
+  });
+
+  // 6 Required Locator Regression Cases
+  it('Locator Regr 1: Prefix and number match genuine heading -> verified', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'ส่วนที่ 3',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 3: Suffix ===\nText about suffix'
+    });
+    expect(res.isVerified).toBe(true);
+    expect(res.locator).toBe('ส่วนที่ 3');
+  });
+
+  it('Locator Regr 2: Number matches but prefix differs (บทที่ 3 vs ส่วนที่ 3) -> MUST NOT verify', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 3: Suffix ===\nText about suffix'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Locator Regr 3: Duplicate number across different prefixes -> selects exact matching prefix', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 2',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 2: General ===\n=== บทที่ 2: Specific ===\nText'
+    });
+    expect(res.isVerified).toBe(true);
+    expect(res.locator).toBe('บทที่ 2');
+  });
+
+  it('Locator Regr 4: Missing source heading supporting locator -> MUST NOT verify', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'ส่วนที่ 5',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 1: Introduction ===\nNo section 5 here.'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Locator Regr 5: explicit_provenance with number in text but no linking evidence -> MUST NOT verify', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: '99',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: 'The patient had temperature 38.5 and pulse 99 beats per minute.'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Locator Regr 6: Correct heading but different chunkIndex -> must not corrupt locator or create fake evidence', () => {
+    const res = validateAndResolveLocator({
+      chunkIndex: 12,
+      sourceLocator: 'ส่วนที่ 3',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 3: Suffix ===\nSuffix details'
+    });
+    expect(res.isVerified).toBe(true);
+    expect(res.locator).toBe('ส่วนที่ 3');
   });
 });
 

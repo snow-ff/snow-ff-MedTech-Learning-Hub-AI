@@ -796,7 +796,7 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
         const n = parseInt(matchNum[2], 10);
         if (!isNaN(n)) {
           if (!numbers.includes(n)) numbers.push(n);
-          if (!headings.some(h => h.number === n)) {
+          if (!headings.some(h => h.number === n && h.prefix.toLowerCase() === prefix.toLowerCase())) {
             headings.push({ prefix, number: n });
           }
         }
@@ -815,7 +815,7 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
       const n = parseInt(m[2], 10);
       if (!isNaN(n)) {
         if (!numbers.includes(n)) numbers.push(n);
-        if (!headings.some(h => h.number === n)) {
+        if (!headings.some(h => h.number === n && h.prefix.toLowerCase() === prefix.toLowerCase())) {
           headings.push({ prefix, number: n });
         }
       }
@@ -935,12 +935,15 @@ export function validateAndResolveLocator(
       }
 
       const headings = extractGenuineHeadings(chunk.text || '');
-      const matchedHeading = headings.headings.find(h => 
-        h.number === n && 
-        (!rawPrefix || /^(?:ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)$/i.test(rawPrefix) || h.prefix.toLowerCase() === rawPrefix.toLowerCase())
-      ) || headings.headings.find(h => h.number === n);
+      const isGenericPrefix = !rawPrefix || /^(?:ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)$/i.test(rawPrefix);
 
       if (prov === 'source_heading') {
+        const matchedHeading = headings.headings.find(h => {
+          if (h.number !== n) return false;
+          if (isGenericPrefix) return true;
+          return h.prefix.toLowerCase() === rawPrefix.toLowerCase();
+        });
+
         if (matchedHeading) {
           return {
             locator: `${matchedHeading.prefix} ${n}`,
@@ -948,13 +951,7 @@ export function validateAndResolveLocator(
             isVerified: true
           };
         }
-        if (headings.numbers.includes(n)) {
-          return {
-            locator: rawPrefix && !/^(?:ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)$/i.test(rawPrefix) ? `${rawPrefix} ${n}` : rawLocator,
-            provenance: prov,
-            isVerified: true
-          };
-        }
+
         return {
           locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
           provenance: 'unconfirmed',
@@ -963,14 +960,22 @@ export function validateAndResolveLocator(
       }
 
       if (prov === 'explicit_provenance') {
-        const hasEvidence = headings.numbers.includes(n) || (chunk.text && new RegExp(`\\b${n}\\b`).test(chunk.text));
-        if (hasEvidence) {
+        const hasMatchingHeading = headings.headings.some(h => {
+          if (h.number !== n) return false;
+          if (isGenericPrefix) return true;
+          return h.prefix.toLowerCase() === rawPrefix.toLowerCase();
+        });
+
+        const hasExplicitTextLinkage = chunk.text && new RegExp(`(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\\s*${n}\\b`, 'i').test(chunk.text);
+
+        if (hasMatchingHeading || hasExplicitTextLinkage) {
           return {
             locator: rawLocator,
             provenance: prov,
             isVerified: true
           };
         }
+
         return {
           locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
           provenance: 'unconfirmed',
