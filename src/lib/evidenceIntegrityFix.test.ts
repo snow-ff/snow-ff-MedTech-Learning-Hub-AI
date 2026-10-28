@@ -1467,6 +1467,57 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(res.isVerified).toBe(true);
     expect(res.locator).toBe('ส่วนที่ 3');
   });
+
+  // Scenarios A, B, C, D, E for explicit_provenance and strict prefix validation
+  it('Scenario A: Locator บทที่ 3, text has heading === ส่วนที่ 3: Suffix === but no heading บทที่ 3 -> Must NOT be Verified', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: '=== ส่วนที่ 3: Suffix ===\nText content'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Scenario B: Locator บทที่ 3, text has heading === บทที่ 3: Suffix === -> Verified when rules support it', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: '=== บทที่ 3: Suffix ===\nText content'
+    });
+    expect(res.isVerified).toBe(true);
+    expect(res.locator).toBe('บทที่ 3');
+  });
+
+  it('Scenario C: Locator is pure number 99, text has number 99 in pulse data but no heading -> Must NOT be Verified', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: '99',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: 'Patient pulse rate was 99 beats per minute.'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
+
+  it('Scenario D: Locator ส่วนที่ 3, text has both ส่วนที่ 3 and บทที่ 3 -> Must select matching prefix', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'ส่วนที่ 3',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== บทที่ 3: Intro ===\n=== ส่วนที่ 3: Details ===\nContent'
+    });
+    expect(res.isVerified).toBe(true);
+    expect(res.locator).toBe('ส่วนที่ 3');
+  });
+
+  it('Scenario E: Locator has unsupported prefix or cannot be parsed clearly -> Must fail closed', () => {
+    const res = validateAndResolveLocator({
+      sourceLocator: 'บทความพิเศษ 3',
+      sourceLocatorProvenance: 'source_heading',
+      text: '=== ส่วนที่ 3: Suffix ===\nContent'
+    });
+    expect(res.isVerified).toBe(false);
+    expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+  });
 });
 
 

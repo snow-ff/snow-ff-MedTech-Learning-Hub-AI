@@ -925,10 +925,28 @@ export function validateAndResolveLocator(
       };
     }
 
-    // Check if rawLocator specifies a section/chunk number
-    const headingLocatorMatch = rawLocator.match(/^(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)[\s\-:]*(\d+)/i) || rawLocator.match(/(\d+)/);
-    const rawPrefix = headingLocatorMatch && headingLocatorMatch.length > 2 ? headingLocatorMatch[1] : undefined;
-    const numStr = headingLocatorMatch && headingLocatorMatch.length > 2 ? headingLocatorMatch[2] : (headingLocatorMatch ? headingLocatorMatch[1] : null);
+    // Check if rawLocator specifies a section/chunk number with strict prefix parsing
+    const headingLocatorMatch = rawLocator.match(/^(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่|ส่วนอ้างอิง|#?chunk)[\s\-:]*(\d+)/i);
+    let rawPrefix: string | undefined = undefined;
+    let numStr: string | null = null;
+
+    if (headingLocatorMatch && headingLocatorMatch[1] && headingLocatorMatch[2]) {
+      rawPrefix = headingLocatorMatch[1];
+      numStr = headingLocatorMatch[2];
+    } else {
+      const arbitraryWordMatch = rawLocator.match(/^([a-zA-Zก-ฮะ-์]+)[\s\-:]*(\d+)/);
+      if (arbitraryWordMatch) {
+        return {
+          locator: 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้',
+          provenance: 'unconfirmed',
+          isVerified: false
+        };
+      }
+      const pureNumMatch = rawLocator.match(/^(\d+)$/);
+      if (pureNumMatch && pureNumMatch[1]) {
+        numStr = pureNumMatch[1];
+      }
+    }
 
     if (numStr) {
       const n = parseInt(numStr, 10);
@@ -947,7 +965,7 @@ export function validateAndResolveLocator(
         const matchedHeading = headings.headings.find(h => {
           if (h.number !== n) return false;
           if (isGenericPrefix) return true;
-          return h.prefix.toLowerCase() === rawPrefix.toLowerCase();
+          return h.prefix.toLowerCase() === rawPrefix!.toLowerCase();
         });
 
         if (matchedHeading) {
@@ -966,15 +984,17 @@ export function validateAndResolveLocator(
       }
 
       if (prov === 'explicit_provenance') {
-        const hasMatchingHeading = headings.headings.some(h => {
+        const matchedHeading = headings.headings.find(h => {
           if (h.number !== n) return false;
           if (isGenericPrefix) return true;
-          return h.prefix.toLowerCase() === rawPrefix.toLowerCase();
+          return h.prefix.toLowerCase() === rawPrefix!.toLowerCase();
         });
 
-        const hasExplicitTextLinkage = chunk.text && new RegExp(`(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\\s*${n}\\b`, 'i').test(chunk.text);
+        const hasValidTextLinkage = rawPrefix && !isGenericPrefix
+          ? chunk.text && new RegExp(`${rawPrefix!}\\s*${n}\\b`, 'i').test(chunk.text)
+          : chunk.text && new RegExp(`(?:ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\\s*${n}\\b`, 'i').test(chunk.text) && headings.headings.some(h => h.number === n);
 
-        if (hasMatchingHeading || hasExplicitTextLinkage) {
+        if (matchedHeading || hasValidTextLinkage) {
           return {
             locator: rawLocator,
             provenance: prov,
