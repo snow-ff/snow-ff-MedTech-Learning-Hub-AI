@@ -88,6 +88,37 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(classification.isTransient).toBe(false);
       expect(classification.reason).toBe('quota_or_credential_exhausted');
     });
+
+    it('should classify RESOURCE_EXHAUSTED with case-insensitive Rate Limit as retryable transient_rate_limit', () => {
+      const cases = [
+        'RESOURCE_EXHAUSTED: Rate Limit Exceeded',
+        'RESOURCE_EXHAUSTED: rate limit exceeded',
+        'RESOURCE_EXHAUSTED: RATE LIMIT',
+        'Resource has been exhausted: Rate-Limit exceeded'
+      ];
+
+      for (const msg of cases) {
+        const classification = classifyGeminiError({ message: msg });
+        expect(classification.shouldRetry).toBe(true);
+        expect(classification.isTransient).toBe(true);
+        expect(classification.status).toBe(429);
+        expect(classification.reason).toBe('transient_rate_limit');
+      }
+    });
+
+    it('should resolve specific 5xx status from message when status property is absent', () => {
+      expect(classifyGeminiError({ message: '500 Internal Server Error' }).status).toBe(500);
+      expect(classifyGeminiError({ message: '502 Bad Gateway' }).status).toBe(502);
+      expect(classifyGeminiError({ message: '504 Gateway Timeout' }).status).toBe(504);
+      expect(classifyGeminiError({ message: '503 Service Unavailable' }).status).toBe(503);
+    });
+
+    it('should resolve client error status from message strings', () => {
+      expect(classifyGeminiError({ message: 'INVALID_ARGUMENT: Bad parameter' }).status).toBe(400);
+      expect(classifyGeminiError({ message: 'API_KEY_INVALID: Key expired' }).status).toBe(401);
+      expect(classifyGeminiError({ message: 'PERMISSION_DENIED: Access forbidden' }).status).toBe(403);
+      expect(classifyGeminiError({ message: 'NOT_FOUND: Resource missing' }).status).toBe(404);
+    });
   });
 
   describe('2. Exponential Backoff & Jitter Calculation', () => {

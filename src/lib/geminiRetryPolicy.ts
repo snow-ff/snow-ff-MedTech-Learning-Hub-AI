@@ -93,11 +93,12 @@ export function classifyGeminiError(err: any): RetryClassification {
   }
 
   // 2. Non-retryable quota exhaustion (explicitly 429 with RESOURCE_EXHAUSTED or Quota exceeded)
+  const isRateLimitMentioned = /rate[\s_-]?limit/i.test(message);
   const isQuotaExhausted =
     message.includes('generate_content_free_tier_requests') ||
-    message.includes('Quota exceeded') ||
-    message.includes('You exceeded your current quota') ||
-    (message.includes('RESOURCE_EXHAUSTED') && !message.includes('rate limit'));
+    /quota\s*exceeded/i.test(message) ||
+    /exceeded your current quota/i.test(message) ||
+    (message.includes('RESOURCE_EXHAUSTED') && !isRateLimitMentioned);
 
   if (isQuotaExhausted) {
     return {
@@ -122,9 +123,16 @@ export function classifyGeminiError(err: any): RetryClassification {
     message.includes('overloaded');
 
   if (isTransient5xx) {
+    let resolved5xx = status;
+    if (!resolved5xx) {
+      if (message.includes('500')) resolved5xx = 500;
+      else if (message.includes('502')) resolved5xx = 502;
+      else if (message.includes('504')) resolved5xx = 504;
+      else resolved5xx = 503;
+    }
     return {
       shouldRetry: true,
-      status: status || 503,
+      status: resolved5xx,
       reason: 'transient_service_unavailable',
       isTransient: true
     };
@@ -151,8 +159,8 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 5. Retryable transient rate limit (temporary burst 429)
-  const isTransient429 = status === 429 || message.includes('429');
+  // 5. Retryable transient rate limit (temporary burst 429 or rate limit keyword)
+  const isTransient429 = status === 429 || message.includes('429') || isRateLimitMentioned;
   if (isTransient429) {
     return {
       shouldRetry: true,

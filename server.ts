@@ -1651,8 +1651,16 @@ ${formattedChunks}
       } else {
         serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP 429 Rate Limit) — ${modeNotice})*\n\n`;
       }
-    } else if (classification.status === 503 || classification.reason === 'transient_service_unavailable') {
+    } else if (classification.status === 503 || (classification.reason === 'transient_service_unavailable' && (!classification.status || classification.status === 503))) {
       serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+    } else if (classification.status === 500) {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 500 Internal Server Error) — ${modeNotice})*\n\n`;
+    } else if (classification.status === 502) {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 502 Bad Gateway) — ${modeNotice})*\n\n`;
+    } else if (classification.status === 504) {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 504 Gateway Timeout) — ${modeNotice})*\n\n`;
+    } else if (classification.reason === 'transient_service_unavailable') {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status || '5xx'} Service Error) — ${modeNotice})*\n\n`;
     } else if (classification.reason === 'transient_timeout_or_network') {
       serviceNoticeText = `*(แจ้งเตือน: การเชื่อมต่อไปยัง Gemini AI หมดเวลาหรือขาดการเชื่อมต่อชั่วคราว (Network/Timeout) — ${modeNotice})*\n\n`;
     } else if (classification.status === 401 || classification.status === 403) {

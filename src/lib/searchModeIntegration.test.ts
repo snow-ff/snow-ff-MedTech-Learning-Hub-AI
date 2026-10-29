@@ -383,4 +383,142 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     expect(refReal.verificationStatus).toBe('source_grounded');
     expect(refReal.sourceLocatorProvenance).toBe('source_heading');
   });
+
+  // Scenario 10: Real server retry loop proves transient HTTP 503 retries twice and returns HTTP 503 notice
+  it('10. real server retry loop: retries transient 503 exactly twice and reflects HTTP 503 Service Unavailable in notice', async () => {
+    let callAttempts = 0;
+    setCustomGeminiMock(async () => {
+      callAttempts++;
+      const err = new Error('503 Service Unavailable: The model is overloaded.');
+      (err as any).status = 503;
+      throw err;
+    });
+
+    const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'อธิบาย Serum และ Plasma' }],
+        searchMode: 'web_search'
+      })
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(callAttempts).toBe(2); // 1 initial + 1 retry
+    expect(data.source).toBe('academic_fallback');
+    expect(data.serviceStatus.isApiUnavailable).toBe(true);
+    expect(data.serviceStatus.attemptsRun).toBe(2);
+    expect(data.serviceStatus.lastErrorStatus).toBe(503);
+    expect(data.serviceStatus.reason).toBe('transient_service_unavailable');
+    expect(data.text).toContain('HTTP 503 Service Unavailable');
+  }, 15000);
+
+  // Scenario 11: Real server retry loop reflects HTTP 500, 502, 504 accurately without hardcoding 503
+  it('11. real server retry loop: accurately reflects HTTP 500/502/504 instead of hardcoding 503', async () => {
+    for (const code of [500, 502, 504]) {
+      let callCount = 0;
+      setCustomGeminiMock(async () => {
+        callCount++;
+        const err = new Error(`${code} Server Error`);
+        (err as any).status = code;
+        throw err;
+      });
+
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'อธิบาย Serum และ Plasma' }],
+          searchMode: 'web_search'
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(callCount).toBe(2);
+      expect(data.serviceStatus.attemptsRun).toBe(2);
+      expect(data.serviceStatus.lastErrorStatus).toBe(code);
+      expect(data.text).toContain(`HTTP ${code}`);
+      expect(data.text).not.toContain('HTTP 503');
+    }
+  }, 25000);
+
+  // Scenario 12: Real server aborts immediately on non-transient 400 Bad Request (1 attempt only)
+  it('12. real server retry loop: stops immediately on attempt 1 for non-transient 400 Bad Request', async () => {
+    let callAttempts = 0;
+    setCustomGeminiMock(async () => {
+      callAttempts++;
+      const err = new Error('400 Bad Request: INVALID_ARGUMENT');
+      (err as any).status = 400;
+      throw err;
+    });
+
+    const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'อธิบาย Serum และ Plasma' }],
+        searchMode: 'web_search'
+      })
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(callAttempts).toBe(1); // Immediate stop without retry
+    expect(data.serviceStatus.attemptsRun).toBe(1);
+    expect(data.serviceStatus.lastErrorStatus).toBe(400);
+    expect(data.serviceStatus.reason).toBe('client_error');
+    expect(data.text).toContain('HTTP 400 Bad Request');
+    expect(data.text).not.toContain('โควตา');
+  }, 15000);
+
+  // Scenario 13: Case-insensitive Rate Limit vs Quota Exceeded in real server execution
+  it('13. real server retry loop: distinguishes case-insensitive Rate Limit (retries twice) from Quota Exceeded (stops at 1)', async () => {
+    // 13a: TitleCase 'Rate Limit Exceeded' -> retryable transient rate limit
+    let rateLimitCalls = 0;
+    setCustomGeminiMock(async () => {
+      rateLimitCalls++;
+      const err = new Error('RESOURCE_EXHAUSTED: Rate Limit Exceeded');
+      (err as any).status = 429;
+      throw err;
+    });
+
+    const resRateLimit = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'อธิบาย Serum และ Plasma' }],
+        searchMode: 'web_search'
+      })
+    });
+    const dataRateLimit = await resRateLimit.json();
+    expect(rateLimitCalls).toBe(2);
+    expect(dataRateLimit.serviceStatus.attemptsRun).toBe(2);
+    expect(dataRateLimit.serviceStatus.reason).toBe('transient_rate_limit');
+    expect(dataRateLimit.text).toContain('HTTP 429 Rate Limit');
+
+    // 13b: Permanent 'Quota exceeded' -> non-retryable quota exhaustion
+    let quotaCalls = 0;
+    setCustomGeminiMock(async () => {
+      quotaCalls++;
+      const err = new Error('RESOURCE_EXHAUSTED: Quota exceeded for free tier');
+      (err as any).status = 429;
+      throw err;
+    });
+
+    const resQuota = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'อธิบาย Serum และ Plasma' }],
+        searchMode: 'web_search'
+      })
+    });
+    const dataQuota = await resQuota.json();
+    expect(quotaCalls).toBe(1); // Immediate stop at 1
+    expect(dataQuota.serviceStatus.attemptsRun).toBe(1);
+    expect(dataQuota.serviceStatus.reason).toBe('quota_or_credential_exhausted');
+    expect(dataQuota.text).toContain('HTTP 429 Quota Exceeded');
+  }, 25000);
 });
