@@ -82,39 +82,74 @@ export function sanitizeMetadata(meta: unknown): Record<string, string | number 
   return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
+function parseCandidateStatus(val: unknown): number | undefined {
+  if (typeof val === 'number') {
+    if (val === 20) return 408; // gRPC CANCELLED/aborted maps to 408 timeout
+    if (Number.isInteger(val) && val >= 100 && val <= 599) {
+      return val;
+    }
+    return undefined;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed === '20') return 408;
+    if (/^[1-5]\d{2}$/.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isInteger(parsed) && parsed >= 100 && parsed <= 599) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function extractSafeGeminiErrorMeta(err: any) {
   if (!err || typeof err !== 'object') {
     return { status: undefined, message: "ไม่มี message ใน Error object", errorDetailsCount: 0, details: [] };
   }
-  const errorObj = err.error && typeof err.error === 'object' ? err.error : err;
+  const errorObj = (err.error && typeof err.error === 'object') ? err.error : err;
+  const nestedErrorObj = (errorObj.error && typeof errorObj.error === 'object') ? errorObj.error : null;
+
   const statusCandidates = [
-    err.status,
-    err.statusCode,
-    err.code,
     err.response?.status,
-    errorObj.status,
-    errorObj.statusCode,
-    errorObj.code,
     errorObj.response?.status,
-    err.response?.data?.status,
-    errorObj.response?.data?.status
+    nestedErrorObj?.response?.status,
+    err.status,
+    errorObj.status,
+    nestedErrorObj?.status,
+    err.statusCode,
+    errorObj.statusCode,
+    err.code,
+    errorObj.code
   ];
+
   let status: any = undefined;
   for (const cand of statusCandidates) {
-    if (cand !== undefined && cand !== null && cand !== '') {
-      status = cand;
+    const parsed = parseCandidateStatus(cand);
+    if (parsed !== undefined) {
+      status = parsed;
       break;
     }
   }
 
-  const rawMessage = err.message || errorObj.message || err.response?.data?.message || (err.response && typeof err.response.data === 'string' ? err.response.data : undefined);
+  const rawMessage = 
+    nestedErrorObj?.message ||
+    errorObj.response?.data?.error?.message ||
+    err.response?.data?.error?.message ||
+    errorObj.message ||
+    err.response?.data?.message ||
+    err.message ||
+    (typeof err.response?.data === 'string' ? err.response.data : undefined);
+
   const message = (rawMessage !== undefined && rawMessage !== null && String(rawMessage).trim() !== '')
     ? sanitizeErrorText(String(rawMessage))
     : "ไม่มี message ใน Error object";
   
   const rawContainers = [
-    err.errorDetails,
+    nestedErrorObj?.errorDetails,
     errorObj.errorDetails,
+    err.errorDetails,
+    nestedErrorObj?.details,
     errorObj.details,
     err.details,
     err.response?.data?.errorDetails,

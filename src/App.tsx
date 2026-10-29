@@ -152,9 +152,14 @@ export const vocabularyList = [
   { term: 'Hospital Information System (HIS)', thai: 'ระบบสารสนเทศโรงพยาบาลสำหรับจัดการงานเวชระเบียน การตรวจรักษา และการบริหาร', category: 'Health Informatics' },
   { term: 'Clinical Decision Support System (CDSS)', thai: 'ระบบช่วยเตือนและสนับสนุนการตัดสินใจทางคลินิก (เช่น เตือนแพ้ยา ปฏิกิริยาระหว่างยา)', category: 'Health Informatics' },
   { term: 'Telemedicine', thai: 'การให้บริการทางการแพทย์และการปรึกษาโรคทางไกลผ่านระบบโทรคมนาคมดิจิทัล', category: 'Health Informatics' },
+  { term: 'Clinical Data Repository (CDR)', thai: 'คลังเก็บข้อมูลทางคลินิกแบบรวมศูนย์ที่รวบรวมข้อมูลผู้ป่วยจากหลายระบบสารสนเทศเพื่อการวิเคราะห์และดูแลรักษา', category: 'Health Informatics' },
+  { term: 'Enterprise Master Patient Index (EMPI)', thai: 'ระบบดัชนีผู้ป่วยหลักระดับองค์กรสำหรับการเชื่อมโยงระเบียนผู้ป่วยทั่วทั้งเครือข่ายโรงพยาบาลไม่ให้เกิดข้อมูลซ้ำซ้อน', category: 'Health Informatics' },
 
-  // Standards & Data Classification
-  { term: 'HL7 FHIR (Fast Healthcare Interoperability Resources)', thai: 'มาตรฐานสากลสำหรับการแลกเปลี่ยนข้อมูลสุขภาพผ่าน RESTful API ในรูปแบบ JSON/XML', category: 'Medical Standards' },
+  // Standards, FHIR Latest & Data Governance
+  { term: 'HL7 FHIR (Fast Healthcare Interoperability Resources R4/R5)', thai: 'มาตรฐานสากลสำหรับการแลกเปลี่ยนข้อมูลสุขภาพผ่าน RESTful API ในรูปแบบ JSON/XML พร้อมระบบ Subscriptions และ Operations ล่าสุด', category: 'Medical Standards' },
+  { term: 'SMART on FHIR', thai: 'มาตรฐานเปิดสำหรับการบูรณาการแอปพลิเคชันภายนอกเข้ากับระบบ EHR โดยใช้ OAuth2 และ OpenID Connect', category: 'Medical Standards' },
+  { term: 'Health Data Governance', thai: 'ธรรมาภิบาลข้อมูลสุขภาพ นโยบายและแนวปฏิบัติในการบริหารจัดการความปลอดภัย คุณภาพ ความเป็นส่วนตัว และสิทธิ์การเข้าถึงตามกฎหมาย (เช่น PDPA / HIPAA)', category: 'Medical Standards' },
+  { term: 'PHI De-identification & Anonymization', thai: 'กระบวนการแปลงหรือลบข้อมูลระบุตัวตนผู้ป่วย (Protected Health Information) เพื่อใช้ในการวิจัยหรือพัฒนา AI อย่างปลอดภัย', category: 'Medical Standards' },
   { term: 'DICOM (Digital Imaging and Communications in Medicine)', thai: 'มาตรฐานสากลสำหรับโครงสร้างข้อมูลและการรับส่งภาพถ่ายทางการแพทย์ (CT, MRI, X-ray)', category: 'Medical Standards' },
   { term: 'PACS (Picture Archiving and Communication System)', thai: 'ระบบแม่ข่ายและเครือข่ายสำหรับจัดเก็บ สำรอง และกระจายภาพถ่ายทางการแพทย์ในโรงพยาบาล', category: 'Medical Standards' },
   { term: 'ICD-10 / ICD-11', thai: 'ระบบการจัดประเภทและให้รหัสโรคสากลสำหรับการวินิจฉัยและสถิติสุขภาพ', category: 'Medical Standards' },
