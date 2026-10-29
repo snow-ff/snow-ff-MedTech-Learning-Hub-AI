@@ -127,61 +127,109 @@ export function classifyGeminiError(err: any): RetryClassification {
 
   const statusString = String(errorObj.status || err.code || '').toUpperCase();
 
-  // 2. Comprehensive Structured Reason collection without shadowing
-  const collectedReasons: string[] = [];
-
-  // Inspect direct reason properties
-  if (typeof err.reason === 'string' && err.reason.trim()) {
-    collectedReasons.push(err.reason.trim().toUpperCase());
+  // 2. Comprehensive Structured Reason collection with Source Authority & Conflict Resolution
+  interface ScoredReason {
+    reason: string;
+    sourceWeight: number; // 3: Primary Google RPC ErrorInfo, 2: Direct property, 1: Generic details
   }
-  if (typeof errorObj.reason === 'string' && errorObj.reason.trim()) {
-    collectedReasons.push(errorObj.reason.trim().toUpperCase());
-  }
+  const scoredReasons: ScoredReason[] = [];
 
-  // Combine all detail containers so empty arrays never shadow non-empty arrays
-  const allDetailContainers: any[] = [];
-  if (Array.isArray(err.errorDetails)) allDetailContainers.push(...err.errorDetails);
-  if (Array.isArray(errorObj.details)) allDetailContainers.push(...errorObj.details);
-  if (Array.isArray(err.details)) allDetailContainers.push(...err.details);
+  // Source Level 3: Primary Google RPC ErrorInfo (err.errorDetails or errorObj.errorDetails)
+  const primaryErrorDetails = Array.isArray(err.errorDetails) && err.errorDetails.length > 0
+    ? err.errorDetails
+    : Array.isArray(errorObj.errorDetails) && errorObj.errorDetails.length > 0
+    ? errorObj.errorDetails
+    : [];
 
-  for (const d of allDetailContainers) {
+  for (const d of primaryErrorDetails) {
     if (d && typeof d.reason === 'string' && d.reason.trim()) {
-      collectedReasons.push(d.reason.trim().toUpperCase());
+      scoredReasons.push({ reason: d.reason.trim().toUpperCase(), sourceWeight: 3 });
     }
   }
 
-  // Prioritize recognized standard reasons over unknown reasons
+  // Source Level 2: Direct reason properties
+  if (typeof err.reason === 'string' && err.reason.trim()) {
+    scoredReasons.push({ reason: err.reason.trim().toUpperCase(), sourceWeight: 2 });
+  }
+  if (typeof errorObj.reason === 'string' && errorObj.reason.trim()) {
+    scoredReasons.push({ reason: errorObj.reason.trim().toUpperCase(), sourceWeight: 2 });
+  }
+
+  // Source Level 1: Generic detail containers
+  const genericDetails = Array.isArray(errorObj.details) && errorObj.details.length > 0
+    ? errorObj.details
+    : Array.isArray(err.details) && err.details.length > 0
+    ? err.details
+    : [];
+
+  for (const d of genericDetails) {
+    if (d && typeof d.reason === 'string' && d.reason.trim()) {
+      scoredReasons.push({ reason: d.reason.trim().toUpperCase(), sourceWeight: 1 });
+    }
+  }
+
+  // Conflict Resolution among Structured Reasons
   let structuredReason = '';
-  const matchedKnownReason = collectedReasons.find(r => (KNOWN_STRUCTURED_REASONS as readonly string[]).includes(r));
-  if (matchedKnownReason) {
-    structuredReason = matchedKnownReason;
-  } else if (collectedReasons.length > 0) {
-    structuredReason = collectedReasons[0];
+  const knownMatches = scoredReasons.filter(sr => (KNOWN_STRUCTURED_REASONS as readonly string[]).includes(sr.reason));
+
+  if (knownMatches.length === 0) {
+    // If no known reason exists, fall back to the highest authority unknown reason (if any)
+    if (scoredReasons.length > 0) {
+      scoredReasons.sort((a, b) => b.sourceWeight - a.sourceWeight);
+      structuredReason = scoredReasons[0].reason;
+    }
+  } else {
+    const uniqueKnown = Array.from(new Set(knownMatches.map(m => m.reason)));
+    if (uniqueKnown.length === 1) {
+      structuredReason = uniqueKnown[0];
+    } else {
+      // Conflicting Known Reasons:
+      // Policy 1: Authentication & Permission & Argument validity have absolute precedence over Rate/Quota
+      if (uniqueKnown.includes('API_KEY_INVALID')) {
+        structuredReason = 'API_KEY_INVALID';
+      } else if (uniqueKnown.includes('PERMISSION_DENIED')) {
+        structuredReason = 'PERMISSION_DENIED';
+      } else if (uniqueKnown.includes('INVALID_ARGUMENT')) {
+        structuredReason = 'INVALID_ARGUMENT';
+      } else if (uniqueKnown.includes('RATE_LIMIT_EXCEEDED') && uniqueKnown.includes('QUOTA_EXCEEDED')) {
+        // Policy 2: Conflicting RATE_LIMIT_EXCEEDED vs QUOTA_EXCEEDED
+        // Check if one source has higher authority weight:
+        const rateLimitMaxWeight = Math.max(...knownMatches.filter(m => m.reason === 'RATE_LIMIT_EXCEEDED').map(m => m.sourceWeight));
+        const quotaMaxWeight = Math.max(...knownMatches.filter(m => m.reason === 'QUOTA_EXCEEDED').map(m => m.sourceWeight));
+
+        if (rateLimitMaxWeight > quotaMaxWeight) {
+          structuredReason = 'RATE_LIMIT_EXCEEDED';
+        } else if (quotaMaxWeight > rateLimitMaxWeight) {
+          structuredReason = 'QUOTA_EXCEEDED';
+        } else {
+          // Equal source authority: inspect message context after stripping URLs
+          const msgClean = String(err.message || '').replace(/https?:\/\/[^\s)]+/g, '');
+          const isDailyOrPlan = /exceeded your current quota|check your plan and billing|per[\s_-]?day|daily[\s_-]?quota/i.test(msgClean);
+          const isPerMinuteOrRpm = /per[\s_-]?minute|\bRPM\b/i.test(msgClean);
+
+          if (isDailyOrPlan && !isPerMinuteOrRpm) {
+            structuredReason = 'QUOTA_EXCEEDED';
+          } else if (isPerMinuteOrRpm && !isDailyOrPlan) {
+            structuredReason = 'RATE_LIMIT_EXCEEDED';
+          } else {
+            // Irreconcilable conflict between transient rate limit and permanent quota:
+            // Fail-Safe Principle: Do NOT guess rate limit or retry blindly.
+            structuredReason = 'CONFLICTING_QUOTA_OR_RATE_LIMIT';
+          }
+        }
+      } else {
+        // Tie-breaker: sort by source weight
+        knownMatches.sort((a, b) => b.sourceWeight - a.sourceWeight);
+        structuredReason = knownMatches[0].reason;
+      }
+    }
   }
 
   // 3. Rule 1: Recognized Structured Reason has highest priority
-  if (structuredReason === 'RATE_LIMIT_EXCEEDED') {
-    return {
-      shouldRetry: true,
-      status: 429,
-      reason: 'transient_rate_limit',
-      isTransient: true
-    };
-  }
-
-  if (structuredReason === 'QUOTA_EXCEEDED') {
-    return {
-      shouldRetry: false,
-      status: 429,
-      reason: 'quota_or_credential_exhausted',
-      isTransient: false
-    };
-  }
-
   if (structuredReason === 'API_KEY_INVALID' || statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED') {
     return {
       shouldRetry: false,
-      status: status || (statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED' ? 403 : 401),
+      status: (status && status >= 400 && status <= 403) ? status : (statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED' ? 403 : 401),
       reason: 'client_error',
       isTransient: false
     };
@@ -196,22 +244,40 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
+  if (structuredReason === 'RATE_LIMIT_EXCEEDED') {
+    return {
+      shouldRetry: true,
+      status: 429,
+      reason: 'transient_rate_limit',
+      isTransient: true
+    };
+  }
+
+  if (structuredReason === 'QUOTA_EXCEEDED' || structuredReason === 'CONFLICTING_QUOTA_OR_RATE_LIMIT') {
+    return {
+      shouldRetry: false,
+      status: status || 429,
+      reason: 'quota_or_credential_exhausted',
+      isTransient: false
+    };
+  }
+
   const message = String(err.message || '');
-  // Strip URLs so help documentation links (e.g. https://.../rate-limits) do not pollute keyword matching
+  // Strip URLs so help documentation links (e.g. https://.../rate-limits or /timeout) do not pollute keyword matching
   const messageWithoutUrls = message.replace(/https?:\/\/[^\s)]+/g, '');
 
   // 4. Rule 2: HTTP 5xx / Transient Server Errors take precedence over general message keywords
   const explicit5xxMatch =
-    message.match(/(?:HTTP|status|code)\s*[:=-]?\s*(500|502|503|504)\b/i) ||
-    message.match(/^\s*(500|502|503|504)\b/) ||
-    message.match(/\b(500|502|503|504)\s+(?:Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i);
+    messageWithoutUrls.match(/(?:HTTP|status|code)\s*[:=-]?\s*(500|502|503|504)\b/i) ||
+    messageWithoutUrls.match(/^\s*(500|502|503|504)\b/) ||
+    messageWithoutUrls.match(/\b(500|502|503|504)\s+(?:Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i);
 
   const isTransient5xx =
     (typeof status === 'number' && status >= 500 && status < 600) ||
     (!status && (
       Boolean(explicit5xxMatch) ||
-      /\bUNAVAILABLE\b/i.test(message) ||
-      /\boverloaded\b/i.test(message)
+      /\bUNAVAILABLE\b/i.test(messageWithoutUrls) ||
+      /\boverloaded\b/i.test(messageWithoutUrls)
     ));
 
   if (isTransient5xx) {
@@ -231,19 +297,19 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 5. Transient transport connection drops / timeouts
+  // 5. Transient transport connection drops / timeouts (safe regex and URL-stripped)
   const isTransientTimeoutOrNetwork =
     status === 408 ||
-    /(?:HTTP|status|code)\s*[:=-]?\s*408\b/i.test(message) ||
-    /^\s*408\b/.test(message) ||
-    /\b408\s+Request Timeout\b/i.test(message) ||
-    message.includes('deadline') ||
-    message.includes('timeout') ||
-    message.includes('AbortError') ||
-    message.includes('fetch failed') ||
-    message.includes('ECONNRESET') ||
-    message.includes('ETIMEDOUT') ||
-    message.includes('UND_ERR_SOCKET');
+    /(?:HTTP|status|code)\s*[:=-]?\s*408\b/i.test(messageWithoutUrls) ||
+    /^\s*408\b/.test(messageWithoutUrls) ||
+    /\b408\s+Request Timeout\b/i.test(messageWithoutUrls) ||
+    /\bdeadline\s*exceeded\b/i.test(messageWithoutUrls) ||
+    /\b(?:gateway\s+|request\s+|connection\s+|socket\s+)?timeout\b/i.test(messageWithoutUrls) ||
+    /\boperation\s+timed?\s*out\b/i.test(messageWithoutUrls) ||
+    /\bAbortError\b/i.test(messageWithoutUrls) ||
+    /\boperation\s+was\s+aborted\b/i.test(messageWithoutUrls) ||
+    /\bfetch\s+failed\b/i.test(messageWithoutUrls) ||
+    /\b(?:ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|UND_ERR_SOCKET|ENOTFOUND)\b/i.test(messageWithoutUrls);
 
   if (isTransientTimeoutOrNetwork) {
     return {

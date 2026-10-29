@@ -377,6 +377,67 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(res3.reason).toBe('quota_or_credential_exhausted');
       expect(res3.shouldRetry).toBe(false);
     });
+
+    // Targeted Remediation A & B: Structured Reason Conflict Resolution & Auth Precedence
+    it('should resolve conflicting structured reasons with clear source authority and security precedence', () => {
+      // 1. Primary errorDetails takes precedence over generic details
+      const errWithSourceConflict = {
+        errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }],
+        details: [{ reason: 'QUOTA_EXCEEDED' }],
+        status: 429,
+        message: 'Mixed signals'
+      };
+      const res1 = classifyGeminiError(errWithSourceConflict);
+      expect(res1.reason).toBe('transient_rate_limit');
+      expect(res1.shouldRetry).toBe(true);
+
+      // 2. Authentication/Permission has absolute precedence even if conflicting with status 429 or RATE_LIMIT_EXCEEDED
+      const errWithAuthConflict = {
+        status: 429, // Upstream returned 429, but structured reason states API_KEY_INVALID
+        errorDetails: [{ reason: 'API_KEY_INVALID' }, { reason: 'RATE_LIMIT_EXCEEDED' }],
+        message: 'API key is expired or invalid'
+      };
+      const res2 = classifyGeminiError(errWithAuthConflict);
+      expect(res2.reason).toBe('client_error');
+      expect(res2.status).toBe(401);
+      expect(res2.shouldRetry).toBe(false); // MUST NOT retry an invalid API key!
+
+      // 3. Irreconcilable conflict between RATE_LIMIT_EXCEEDED and QUOTA_EXCEEDED falls back safely to non-retryable
+      const errWithTieConflict = {
+        status: 429,
+        errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }, { reason: 'QUOTA_EXCEEDED' }],
+        message: 'Unknown capacity conflict'
+      };
+      const res3 = classifyGeminiError(errWithTieConflict);
+      expect(res3.reason).toBe('quota_or_credential_exhausted');
+      expect(res3.shouldRetry).toBe(false); // Fail-safe: do not retry blindly on conflicting evidence
+    });
+
+    // Targeted Remediation C: Network / Timeout Matching Consistency & URL Isolation
+    it('should match network/timeouts accurately without false positives from URLs', () => {
+      // 1. URL containing timeout must NOT trigger transient timeout classification
+      const errWithUrlTimeout = {
+        message: 'Generic error with help link: https://ai.google.dev/docs/timeout-troubleshooting'
+      };
+      const res1 = classifyGeminiError(errWithUrlTimeout);
+      expect(res1.shouldRetry).toBe(false);
+      expect(res1.reason).toBe('unclassified_non_transient');
+
+      // 2. Legitimate deadline exceeded or socket abort triggers transient timeout
+      const errWithDeadline = {
+        message: 'DEADLINE_EXCEEDED: The upstream operation deadline exceeded'
+      };
+      const res2 = classifyGeminiError(errWithDeadline);
+      expect(res2.shouldRetry).toBe(true);
+      expect(res2.reason).toBe('transient_timeout_or_network');
+
+      const errWithSocketDrop = {
+        message: 'read ECONNRESET on socket connect'
+      };
+      const res3 = classifyGeminiError(errWithSocketDrop);
+      expect(res3.shouldRetry).toBe(true);
+      expect(res3.reason).toBe('transient_timeout_or_network');
+    });
   });
 
   describe('2. Exponential Backoff & Jitter Calculation', () => {
