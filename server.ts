@@ -49,6 +49,46 @@ export function setCustomGeminiMock(mockFn: ((params: any) => Promise<any>) | nu
   customGeminiMock = mockFn;
 }
 
+function extractSafeGeminiErrorMeta(err: any) {
+  if (!err || typeof err !== 'object') {
+    return { message: String(err) };
+  }
+  const errorObj = err.error && typeof err.error === 'object' ? err.error : err;
+  const status = err.status || err.statusCode || err.code || errorObj.status || errorObj.statusCode || errorObj.code;
+  const message = typeof err.message === 'string' ? err.message : String(err);
+  
+  const detailsContainers = [
+    err.errorDetails,
+    errorObj.errorDetails,
+    errorObj.details,
+    err.details
+  ];
+
+  const extractedDetails: Array<{ reason?: string; quotaMetric?: string; quotaId?: string; domain?: string; metadata?: any }> = [];
+  for (const container of detailsContainers) {
+    if (Array.isArray(container)) {
+      for (const item of container) {
+        if (item && typeof item === 'object') {
+          extractedDetails.push({
+            reason: item.reason,
+            quotaMetric: item.quotaMetric || item.metadata?.quotaMetric,
+            quotaId: item.quotaId || item.metadata?.quotaId,
+            domain: item.domain,
+            metadata: item.metadata
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    status,
+    message,
+    errorDetailsCount: extractedDetails.length,
+    details: extractedDetails
+  };
+}
+
 function getDirectTopic(text: string): string | null {
   const t = text.toLowerCase();
   if (t.includes("serum") || t.includes("plasma") || t.includes("ซีรั่ม") || t.includes("พลาสมา")) {
@@ -1586,7 +1626,8 @@ ${formattedChunks}
       const totalBackendDuration = Date.now() - requestStartTime;
 
       const classification = classifyGeminiError(err);
-      console.error(`[Req ${requestId}] [RAW GEMINI ERROR] message: "${err?.message}", status: ${err?.status || err?.statusCode}, code: ${err?.code}, details:`, err?.errorDetails || err?.cause || err);
+      const safeMeta = extractSafeGeminiErrorMeta(err);
+      console.error(`[Req ${requestId}] [GEMINI ERROR DIAGNOSTIC] status: ${safeMeta.status}, message: "${safeMeta.message}", details: ${JSON.stringify(safeMeta.details)}`);
       const canRetry = classification.shouldRetry && attempt < maxAttempts;
 
       if (!canRetry) {
