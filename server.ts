@@ -84,17 +84,43 @@ export function sanitizeMetadata(meta: unknown): Record<string, string | number 
 
 export function extractSafeGeminiErrorMeta(err: any) {
   if (!err || typeof err !== 'object') {
-    return { status: undefined, message: sanitizeErrorText(String(err)), errorDetailsCount: 0, details: [] };
+    return { status: undefined, message: "ไม่มี message ใน Error object", errorDetailsCount: 0, details: [] };
   }
   const errorObj = err.error && typeof err.error === 'object' ? err.error : err;
-  const status = err.status || err.statusCode || err.code || errorObj.status || errorObj.statusCode || errorObj.code;
-  const message = sanitizeErrorText(err.message || errorObj.message || String(err));
+  const statusCandidates = [
+    err.status,
+    err.statusCode,
+    err.code,
+    err.response?.status,
+    errorObj.status,
+    errorObj.statusCode,
+    errorObj.code,
+    errorObj.response?.status,
+    err.response?.data?.status,
+    errorObj.response?.data?.status
+  ];
+  let status: any = undefined;
+  for (const cand of statusCandidates) {
+    if (cand !== undefined && cand !== null && cand !== '') {
+      status = cand;
+      break;
+    }
+  }
+
+  const rawMessage = err.message || errorObj.message || err.response?.data?.message || (err.response && typeof err.response.data === 'string' ? err.response.data : undefined);
+  const message = (rawMessage !== undefined && rawMessage !== null && String(rawMessage).trim() !== '')
+    ? sanitizeErrorText(String(rawMessage))
+    : "ไม่มี message ใน Error object";
   
   const rawContainers = [
     err.errorDetails,
     errorObj.errorDetails,
     errorObj.details,
-    err.details
+    err.details,
+    err.response?.data?.errorDetails,
+    err.response?.data?.details,
+    errorObj.response?.data?.errorDetails,
+    errorObj.response?.data?.details
   ];
   const detailsContainers = rawContainers.filter((c, idx, arr) => c && Array.isArray(c) && arr.indexOf(c) === idx);
 
