@@ -208,6 +208,105 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(classifyGeminiError({ message: 'PERMISSION_DENIED: Access forbidden' }).status).toBe(403);
       expect(classifyGeminiError({ message: 'NOT_FOUND: Resource missing' }).status).toBe(404);
     });
+
+    // Targeted Edge Case 1: String err.code with HTTP status in err.message
+    it('should safely extract numeric status from message when err.code is a string token', () => {
+      const errWithCodeString503 = {
+        code: 'RESOURCE_EXHAUSTED',
+        message: '503 Service Unavailable: The model is temporarily overloaded'
+      };
+      const res503 = classifyGeminiError(errWithCodeString503);
+      expect(res503.status).toBe(503);
+      expect(Number.isNaN(res503.status)).toBe(false);
+      expect(res503.shouldRetry).toBe(true);
+      expect(res503.reason).toBe('transient_service_unavailable');
+
+      const errWithCodeString429 = {
+        code: 'RESOURCE_EXHAUSTED',
+        message: '429 Too Many Requests: Rate limit exceeded, please retry later'
+      };
+      const res429 = classifyGeminiError(errWithCodeString429);
+      expect(res429.status).toBe(429);
+      expect(Number.isNaN(res429.status)).toBe(false);
+      expect(res429.shouldRetry).toBe(true);
+      expect(res429.reason).toBe('transient_rate_limit');
+    });
+
+    // Targeted Edge Case 2: HTTP Status Priority over Conflicting Message Keywords
+    it('should maintain HTTP 5xx transient semantics even if message mentions quota', () => {
+      const err503WithQuotaText = {
+        status: 503,
+        message: '503 Service Unavailable: backend overloaded while checking quota metrics'
+      };
+      const res1 = classifyGeminiError(err503WithQuotaText);
+      expect(res1.shouldRetry).toBe(true);
+      expect(res1.status).toBe(503);
+      expect(res1.reason).toBe('transient_service_unavailable');
+
+      const err500WithQuotaText = {
+        status: 500,
+        message: 'Internal error during daily quota evaluation'
+      };
+      const res2 = classifyGeminiError(err500WithQuotaText);
+      expect(res2.shouldRetry).toBe(true);
+      expect(res2.status).toBe(500);
+      expect(res2.reason).toBe('transient_service_unavailable');
+
+      const err400WithQuotaText = {
+        status: 400,
+        message: 'Invalid argument: invalid quota group parameter provided'
+      };
+      const res3 = classifyGeminiError(err400WithQuotaText);
+      expect(res3.shouldRetry).toBe(false);
+      expect(res3.status).toBe(400);
+      expect(res3.reason).toBe('client_error');
+    });
+
+    // Targeted Edge Case 3: Multiple entries in errorDetails or details array
+    it('should scan all items in errorDetails/details array to find recognized semantic reasons', () => {
+      // Multiple items with Help doc first, RATE_LIMIT_EXCEEDED second
+      const multiDetailsRateLimit = {
+        status: 429,
+        errorDetails: [
+          { '@type': 'type.googleapis.com/google.rpc.Help', links: [{ description: 'Docs', url: 'https://ai.google.dev' }] },
+          { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'RATE_LIMIT_EXCEEDED', domain: 'googleapis.com' }
+        ],
+        message: 'Quota exceeded for metric'
+      };
+      const res1 = classifyGeminiError(multiDetailsRateLimit);
+      expect(res1.shouldRetry).toBe(true);
+      expect(res1.status).toBe(429);
+      expect(res1.reason).toBe('transient_rate_limit');
+
+      // Multiple items with Metadata first, QUOTA_EXCEEDED second
+      const multiDetailsQuota = {
+        status: 429,
+        error: {
+          details: [
+            { metadata: { service: 'generativelanguage.googleapis.com' } },
+            { reason: 'QUOTA_EXCEEDED' }
+          ]
+        },
+        message: 'Rate limit encountered on endpoint'
+      };
+      const res2 = classifyGeminiError(multiDetailsQuota);
+      expect(res2.shouldRetry).toBe(false);
+      expect(res2.status).toBe(429);
+      expect(res2.reason).toBe('quota_or_credential_exhausted');
+
+      // Multiple items with Help doc first, API_KEY_INVALID second
+      const multiDetailsAuth = {
+        errorDetails: [
+          { info: 'context data' },
+          { reason: 'API_KEY_INVALID' }
+        ],
+        message: 'API call failed'
+      };
+      const res3 = classifyGeminiError(multiDetailsAuth);
+      expect(res3.shouldRetry).toBe(false);
+      expect(res3.status).toBe(401);
+      expect(res3.reason).toBe('client_error');
+    });
   });
 
   describe('2. Exponential Backoff & Jitter Calculation', () => {
@@ -303,6 +402,82 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       }
 
       expect(callCount).toBe(1); // Stopped immediately at attempt 1!
+      expect(finalOutcome).toBe('FALLBACK_ACADEMIC');
+    });
+
+    it('should simulate transient 429 rate limit retrying and succeeding on attempt 2', async () => {
+      let callCount = 0;
+      const simulatedGemini = async () => {
+        callCount++;
+        if (callCount === 1) {
+          const err = new Error('429 Too Many Requests: Rate limit exceeded');
+          (err as any).status = 429;
+          throw err;
+        }
+        return { text: 'Gemini recovered response on retry' };
+      };
+
+      let attempt = 0;
+      let finalOutcome = 'UNKNOWN';
+      let resultData: any = null;
+      const recordedDelays: number[] = [];
+      const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
+
+      while (attempt < maxAttempts) {
+        attempt++;
+        try {
+          resultData = await simulatedGemini();
+          finalOutcome = 'SUCCESS';
+          break;
+        } catch (err: any) {
+          const classification = classifyGeminiError(err);
+          if (!classification.shouldRetry || attempt >= maxAttempts) {
+            finalOutcome = 'FALLBACK_ACADEMIC';
+            break;
+          }
+          const delay = calculateRetryDelay(attempt, DEFAULT_RETRY_CONFIG);
+          recordedDelays.push(delay);
+        }
+      }
+
+      expect(callCount).toBe(2);
+      expect(recordedDelays.length).toBe(1);
+      expect(finalOutcome).toBe('SUCCESS');
+      expect(resultData.text).toBe('Gemini recovered response on retry');
+    });
+
+    it('should simulate permanent QUOTA_EXCEEDED stopping on attempt 1 without retry', async () => {
+      let callCount = 0;
+      const simulatedGemini = async () => {
+        callCount++;
+        const err = {
+          status: 429,
+          errorDetails: [{ reason: 'QUOTA_EXCEEDED' }],
+          message: 'You exceeded your current quota'
+        };
+        throw err;
+      };
+
+      let attempt = 0;
+      let finalOutcome = 'UNKNOWN';
+      const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
+
+      while (attempt < maxAttempts) {
+        attempt++;
+        try {
+          await simulatedGemini();
+          finalOutcome = 'SUCCESS';
+          break;
+        } catch (err: any) {
+          const classification = classifyGeminiError(err);
+          if (!classification.shouldRetry || attempt >= maxAttempts) {
+            finalOutcome = 'FALLBACK_ACADEMIC';
+            break;
+          }
+        }
+      }
+
+      expect(callCount).toBe(1); // Stopped on attempt 1
       expect(finalOutcome).toBe('FALLBACK_ACADEMIC');
     });
   });
