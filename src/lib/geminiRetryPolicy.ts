@@ -59,27 +59,47 @@ export function classifyGeminiError(err: any): RetryClassification {
   const statusMatch = message.match(/\b(503|502|504|500|408|429|400|401|403|404|413|422)\b/);
   const status = Number(err.status || err.statusCode || (statusMatch ? statusMatch[1] : undefined));
 
-  // 1. Non-retryable permanent client errors (4xx except transient 408/429)
-  if (status === 400 || status === 401 || status === 403 || status === 404 || status === 413 || status === 422) {
+  // 1. Non-retryable permanent client errors (400 Bad Request, 401/403 Auth/Permission, 404 Not Found, 413, 422)
+  const isClientError =
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 413 ||
+    status === 422 ||
+    message.includes('INVALID_ARGUMENT') ||
+    message.includes('Invalid argument') ||
+    message.includes('API_KEY_INVALID') ||
+    message.includes('API key not valid') ||
+    message.includes('PERMISSION_DENIED') ||
+    message.includes('Unauthorized') ||
+    message.includes('NOT_FOUND');
+
+  if (isClientError) {
+    let resolvedStatus = status;
+    if (!resolvedStatus) {
+      if (message.includes('INVALID_ARGUMENT') || message.includes('Invalid argument')) resolvedStatus = 400;
+      else if (message.includes('API_KEY_INVALID') || message.includes('API key not valid') || message.includes('Unauthorized')) resolvedStatus = 401;
+      else if (message.includes('PERMISSION_DENIED')) resolvedStatus = 403;
+      else if (message.includes('NOT_FOUND')) resolvedStatus = 404;
+      else resolvedStatus = 400;
+    }
     return {
       shouldRetry: false,
-      status,
+      status: resolvedStatus,
       reason: 'client_error',
       isTransient: false
     };
   }
 
-  // 2. Non-retryable quota or credential exhaustion
-  const isAuthOrQuotaExhausted =
-    message.includes('API_KEY_INVALID') ||
-    message.includes('API key not valid') ||
-    message.includes('PERMISSION_DENIED') ||
-    message.includes('INVALID_ARGUMENT') ||
+  // 2. Non-retryable quota exhaustion (explicitly 429 with RESOURCE_EXHAUSTED or Quota exceeded)
+  const isQuotaExhausted =
     message.includes('generate_content_free_tier_requests') ||
     message.includes('Quota exceeded') ||
+    message.includes('You exceeded your current quota') ||
     (message.includes('RESOURCE_EXHAUSTED') && !message.includes('rate limit'));
 
-  if (isAuthOrQuotaExhausted) {
+  if (isQuotaExhausted) {
     return {
       shouldRetry: false,
       status: status || 429,

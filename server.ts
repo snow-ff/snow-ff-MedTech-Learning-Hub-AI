@@ -653,9 +653,7 @@ export function getAcademicFallback(
 
   const isContextualFollowUp = Boolean(hasHistory && (isShortOrFollowUp || !matchedTopic) && !hasNewDistinctTopic);
   
-  const prefixNotice = isContextualFollowUp 
-    ? `*(หมายเหตุ: ระบบอยู่ในโหมดข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) เนื่องจากโควตา API เต็ม และคำถามของคุณอ้างถึงบริบทก่อนหน้าซึ่งระบบออฟไลน์ใช้ข้อมูลสำรองที่เกี่ยวข้อง)*\n\n`
-    : `*(หมายเหตุ: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว ระบบได้แสดงข้อมูลวิชาการสำรอง (Academic Fallback Mode) เพื่อให้การเรียนรู้ดำเนินต่อไปได้)*\n\n`;
+  const prefixNotice = "";
 
 
   if (matchedTopic === 'serum') {
@@ -1588,6 +1586,7 @@ ${formattedChunks}
       const totalBackendDuration = Date.now() - requestStartTime;
 
       const classification = classifyGeminiError(err);
+      console.error(`[Req ${requestId}] [RAW GEMINI ERROR] message: "${err?.message}", status: ${err?.status || err?.statusCode}, code: ${err?.code}, details:`, err?.errorDetails || err?.cause || err);
       const canRetry = classification.shouldRetry && attempt < maxAttempts;
 
       if (!canRetry) {
@@ -1641,18 +1640,27 @@ ${formattedChunks}
 
   let serviceNoticeText = "";
   if (lastError) {
-    const is503OrUnavailable =
-      lastError.message?.includes("503") ||
-      lastError.message?.includes("UNAVAILABLE") ||
-      lastError.message?.includes("overloaded");
-    if (isDocumentGrounding) {
-      serviceNoticeText = is503OrUnavailable
-        ? `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503) — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ)*\n\n`
-        : `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ)*\n\n`;
+    const classification = classifyGeminiError(lastError);
+    const modeNotice = isDocumentGrounding
+      ? "ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ"
+      : "ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ";
+
+    if (classification.status === 429) {
+      if (classification.reason === 'quota_or_credential_exhausted') {
+        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว (HTTP 429 Quota Exceeded) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP 429 Rate Limit) — ${modeNotice})*\n\n`;
+      }
+    } else if (classification.status === 503 || classification.reason === 'transient_service_unavailable') {
+      serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+    } else if (classification.reason === 'transient_timeout_or_network') {
+      serviceNoticeText = `*(แจ้งเตือน: การเชื่อมต่อไปยัง Gemini AI หมดเวลาหรือขาดการเชื่อมต่อชั่วคราว (Network/Timeout) — ${modeNotice})*\n\n`;
+    } else if (classification.status === 401 || classification.status === 403) {
+      serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP ${classification.status}) — ${modeNotice})*\n\n`;
+    } else if (classification.status === 400) {
+      serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
     } else {
-      serviceNoticeText = is503OrUnavailable
-        ? `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503) — ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ)*\n\n`
-        : `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ)*\n\n`;
+      serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ${modeNotice})*\n\n`;
     }
   }
 
@@ -1667,6 +1675,7 @@ ${formattedChunks}
       isApiUnavailable: true,
       lastErrorStatus: lastError ? classifyGeminiError(lastError).status : undefined,
       reason: lastError ? classifyGeminiError(lastError).reason : undefined,
+      rawErrorMessage: lastError ? String(lastError.message || '') : undefined,
       attemptsRun: attempt,
       servedMode: "academic_fallback"
     },

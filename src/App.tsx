@@ -202,7 +202,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
-  const [searchMode, setSearchMode] = useState<'document' | 'web_search'>('document');
+  const [searchMode, setSearchMode] = useState<'document' | 'web_search'>('web_search');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -905,7 +905,10 @@ export default function App() {
                     เปลี่ยนเอกสาร
                   </button>
                   <button
-                    onClick={() => setActiveDocument(null)}
+                    onClick={() => {
+                      setActiveDocument(null);
+                      setSearchMode('web_search');
+                    }}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs min-h-[36px] flex items-center transition-colors"
                     title="ปลดเอกสารออก เพื่อกลับสู่โหมด AI ทั่วไป"
                   >
