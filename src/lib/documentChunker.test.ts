@@ -270,10 +270,26 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       expect(res.locator).toBe('ส่วนที่ 3');
     });
 
-    it('Case 8: HTML entity encoded locators with &#xE49; and &#x32; correctly decode and clean without unverified artifacts', () => {
-      const htmlEntityLocator = 'หน้า &#xE49;&#x32;'; // e.g. mai tho + 2 -> decoded or cleaned
+    it('Case 8: HTML entity encoded locators with &#xE49; (Thai tone mark) and &#x32; (2) are decoded safely but rejected as valid page numbers', () => {
+      const htmlEntityLocator = 'หน้า &#xE49;&#x32;';
+      const decodedRaw = decodeHtmlEntities(htmlEntityLocator);
+      // Verify Thai HTML entity &#xE49; decodes to tone mark '้' and &#x32; to '2'
+      expect(decodedRaw).toBe('หน้า ้2');
+      expect(decodedRaw).not.toContain('&#');
+
+      // Verify that cleanChunkLocator rejects non-numeric page numbers containing tone marks / non-digits
       const cleaned = cleanChunkLocator(undefined, htmlEntityLocator);
-      expect(cleaned).not.toContain('&#');
+      expect(cleaned).toBe(''); // Must not be treated as page 1 or any valid page
+
+      // Verify validateAndResolveLocator rejects unverified entity locators
+      const chunk = {
+        text: '=== ส่วนที่ 1 ===\nเนื้อหา',
+        sourceLocator: htmlEntityLocator,
+        sourceLocatorProvenance: 'source_heading'
+      };
+      const res = validateAndResolveLocator(chunk, false);
+      expect(res.isVerified).toBe(false);
+      expect(res.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
     });
   });
 });

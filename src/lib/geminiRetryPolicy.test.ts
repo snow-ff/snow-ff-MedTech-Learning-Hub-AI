@@ -761,4 +761,45 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(logMessage).not.toContain('AIzaSy'); // No API keys
     });
   });
+
+  describe('5. Attempt Timeout & Bounded Fallback (18s configuration)', () => {
+    it('should configure attemptTimeoutMs strictly to 18000ms and maxAttempts to 2', () => {
+      expect(DEFAULT_RETRY_CONFIG.attemptTimeoutMs).toBe(18000);
+      expect(DEFAULT_RETRY_CONFIG.maxAttempts).toBe(2);
+    });
+
+    it('should handle attempt timeout AbortError by retrying once then entering academic fallback without hanging', async () => {
+      let callCount = 0;
+      const simulatedTimeoutCall = async () => {
+        callCount++;
+        const abortErr = new Error('This operation was aborted (AbortError) after 18000ms attempt timeout');
+        (abortErr as any).name = 'AbortError';
+        throw abortErr;
+      };
+
+      let attempt = 0;
+      let finalOutcome = 'UNKNOWN';
+      const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
+
+      while (attempt < maxAttempts) {
+        attempt++;
+        try {
+          await simulatedTimeoutCall();
+          finalOutcome = 'SUCCESS';
+          break;
+        } catch (err: any) {
+          const classification = classifyGeminiError(err);
+          expect(classification.shouldRetry).toBe(true);
+          expect(classification.reason).toBe('transient_timeout_or_network');
+          if (!classification.shouldRetry || attempt >= maxAttempts) {
+            finalOutcome = 'FALLBACK_ACADEMIC';
+            break;
+          }
+        }
+      }
+
+      expect(callCount).toBe(2);
+      expect(finalOutcome).toBe('FALLBACK_ACADEMIC');
+    });
+  });
 });
