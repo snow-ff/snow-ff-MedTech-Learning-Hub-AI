@@ -1155,13 +1155,11 @@ app.post("/api/gemini/generate", async (req, res) => {
           sourceProv = 'native_page';
         }
       } else if (!sourceProv || sourceProv === 'unconfirmed') {
-        const headingMatch = (c.text || '').match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
-        if (headingMatch && headingMatch[1]) {
-          const num = parseInt(headingMatch[1], 10);
-          if (!isNaN(num) && num > 0) {
-            sourceLoc = `ชิ้นส่วนที่ ${num}`;
-            sourceProv = 'source_heading';
-          }
+        const genuine = extractGenuineHeadings(c.text || '');
+        if (genuine.headings.length > 0) {
+          const firstH = genuine.headings[0];
+          sourceLoc = `ชิ้นส่วนที่ ${firstH.number}`;
+          sourceProv = 'source_heading';
         }
       }
 

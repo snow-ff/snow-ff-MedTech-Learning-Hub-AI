@@ -293,4 +293,41 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(ref.verificationStatus).toBe('unverified');
     }
   });
+
+  // Scenario 8: activeChunksForGrounding backend path: inline delimiters in sentences do not fabricate verified heading locators
+  it('8. activeChunksForGrounding backend path: inline delimiters in sentences do not fabricate verified heading locators', async () => {
+    const docWithInlineDelim = {
+      title: 'เอกสารทดสอบตัวคั่นกลางประโยค',
+      hasNativePages: false,
+      totalPages: 1,
+      chunks: [
+        {
+          id: 'chunk-inline-test',
+          chunkIndex: 1,
+          pageNumber: undefined,
+          hasNativePage: false,
+          text: 'ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค โดย Suffix -itis คือการอักเสบ'
+        }
+      ]
+    };
+
+    const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'Suffix -itis คืออะไร' }],
+        searchMode: 'document',
+        documentContext: docWithInlineDelim
+      })
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.references).toBeDefined();
+    for (const ref of data.references) {
+      expect(ref.evidenceLocator).not.toBe('บทที่ 3');
+      expect(ref.evidenceLocator).not.toBe('ชิ้นส่วนที่ 3');
+      expect(ref.evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+    }
+  });
 });

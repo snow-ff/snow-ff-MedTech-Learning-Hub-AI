@@ -1643,6 +1643,88 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(resChunkPos3.isVerified).toBe(true);
     expect(resChunkPos3.locator).toBe('ส่วนที่ 3');
   });
+
+  it('Backend Path (server.ts): Delimiters in sentences do not create verified headings, genuine headings and native pages preserved', () => {
+    // 1. Delimiter กลางประโยคต้องไม่สร้าง Locator ที่ยืนยันแล้ว
+    const docInlineDelimiter = {
+      title: 'เอกสารทดสอบตัวคั่นกลางประโยค',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: 'chunk-inline-1',
+          chunkIndex: 1,
+          sourceLocatorProvenance: 'unconfirmed' as const,
+          text: 'ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค โดย Suffix -itis คือการอักเสบ'
+        }
+      ]
+    };
+    const fallbackInline = getAcademicFallback('Suffix -itis คืออะไร', [], docInlineDelimiter);
+    expect(fallbackInline.references.length).toBeGreaterThan(0);
+    const refInline = fallbackInline.references[0];
+    expect(refInline.evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+    expect(refInline.evidenceLocator).not.toBe('บทที่ 3');
+    expect(refInline.evidenceLocator).not.toBe('ชิ้นส่วนที่ 3');
+    expect((refInline as any).sourceLocatorProvenance).not.toBe('source_heading');
+
+    // 2. หัวข้อจริงที่ขึ้นต้นบรรทัดยังทำงานได้
+    const docRealHeading = {
+      title: 'เอกสารทดสอบหัวข้อจริง',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: 'chunk-real-1',
+          chunkIndex: 1,
+          sourceLocatorProvenance: 'unconfirmed' as const,
+          text: '=== บทที่ 3: Suffix ===\nSuffix -itis หมายถึงการอักเสบ เช่น appendicitis'
+        }
+      ]
+    };
+    const fallbackReal = getAcademicFallback('Suffix -itis คืออะไร', [], docRealHeading);
+    expect(fallbackReal.references.length).toBeGreaterThan(0);
+    const refReal = fallbackReal.references[0];
+    expect(refReal.evidenceLocator).toBe('บทที่ 3');
+    expect(refReal.verificationStatus).toBe('source_grounded');
+
+    // 3. เลขหน้าต้นฉบับที่ถูกต้องยังคงมีลำดับความสำคัญ (ไม่ถูกเขียนทับด้วย source_heading)
+    const docPagedWithHeading = {
+      title: 'ตำราโลหิตวิทยาฉบับเต็ม',
+      hasNativePages: true,
+      totalPages: 10,
+      chunks: [
+        {
+          id: 'chunk-paged-1',
+          pageNumber: 5,
+          hasNativePage: true,
+          sourceLocatorProvenance: 'unconfirmed' as const,
+          text: '=== บทที่ 3: Complete Blood Count ===\nการตรวจ CBC ในหน้า 5'
+        }
+      ]
+    };
+    const fallbackPaged = getAcademicFallback('การตรวจ CBC', [], docPagedWithHeading);
+    expect(fallbackPaged.references.length).toBeGreaterThan(0);
+    const refPaged = fallbackPaged.references[0];
+    expect(refPaged.evidenceLocator).toBe('หน้า 5');
+    expect((refPaged as any).sourceLocatorProvenance).toBe('native_page');
+
+    // 4. Chunk ที่ไม่มีหัวข้อจริงต้องไม่กลายเป็น source_heading
+    const docNoHeading = {
+      title: 'เอกสารข้อความธรรมดา',
+      hasNativePages: false,
+      chunks: [
+        {
+          id: 'chunk-plain-1',
+          chunkIndex: 1,
+          sourceLocatorProvenance: 'unconfirmed' as const,
+          text: 'ข้อความบทเรียนธรรมดาไม่มีหัวข้อตัวเลขใดๆ กล่าวถึง Suffix -itis'
+        }
+      ]
+    };
+    const fallbackNoHeading = getAcademicFallback('Suffix -itis', [], docNoHeading);
+    expect(fallbackNoHeading.references.length).toBeGreaterThan(0);
+    const refPlain = fallbackNoHeading.references[0];
+    expect(refPlain.evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+    expect((refPlain as any).sourceLocatorProvenance).not.toBe('source_heading');
+  });
 });
 
 
