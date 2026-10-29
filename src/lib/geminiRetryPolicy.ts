@@ -46,6 +46,38 @@ export const DEFAULT_RETRY_CONFIG: RetryPolicyConfig = {
  * Classifies an error from Gemini API call to determine whether it is transient
  * and safe to retry, or permanent (must fail immediately).
  */
+// Helper to safely parse HTTP status without type-coercion bugs
+function parseCandidateStatus(val: unknown): number | undefined {
+  if (typeof val === 'number') {
+    if (Number.isInteger(val) && val >= 100 && val <= 599) {
+      return val;
+    }
+    return undefined;
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^[1-5]\d{2}$/.test(trimmed)) {
+      const parsed = Number(trimmed);
+      if (Number.isInteger(parsed) && parsed >= 100 && parsed <= 599) {
+        return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+const KNOWN_STRUCTURED_REASONS = [
+  'RATE_LIMIT_EXCEEDED',
+  'QUOTA_EXCEEDED',
+  'API_KEY_INVALID',
+  'PERMISSION_DENIED',
+  'INVALID_ARGUMENT'
+] as const;
+
+/**
+ * Classifies an error from Gemini API call to determine whether it is transient
+ * and safe to retry, or permanent (must fail immediately).
+ */
 export function classifyGeminiError(err: any): RetryClassification {
   if (!err) {
     return {
@@ -55,53 +87,79 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 1. Structured error fields extraction
-  const errorObj = err.error || err;
-  const statusMatch = String(err.message || '').match(/\b(503|502|504|500|408|429|400|401|403|404|413|422)\b/);
+  // 1. Independent and safe candidate HTTP status extraction
+  const errorObj = (err && typeof err === 'object' && err.error) ? err.error : err;
 
-  // Safely extract numeric status without letting string codes (e.g. 'RESOURCE_EXHAUSTED') turn it into NaN
+  const statusCandidates = [
+    err.status,
+    err.statusCode,
+    err.code,
+    err.response?.status,
+    errorObj.status,
+    errorObj.statusCode,
+    errorObj.code
+  ];
+
   let status: number | undefined;
-  for (const candidate of [err.status, err.statusCode, errorObj.status, errorObj.statusCode, errorObj.code]) {
-    if (typeof candidate === 'number' && Number.isInteger(candidate) && candidate > 0) {
-      status = candidate;
-      break;
-    }
-    if (typeof candidate === 'string' && /^\d{3}$/.test(candidate.trim())) {
-      status = Number(candidate.trim());
+  for (const cand of statusCandidates) {
+    const parsed = parseCandidateStatus(cand);
+    if (parsed !== undefined) {
+      status = parsed;
       break;
     }
   }
-  if (!status && statusMatch) {
-    status = Number(statusMatch[1]);
+
+  // If no numeric status found from properties, inspect message only for explicit HTTP status patterns
+  if (status === undefined && typeof err.message === 'string') {
+    const msg = err.message;
+    const explicitPattern =
+      msg.match(/(?:HTTP|status|code)\s*[:=-]?\s*([1-5]\d{2})\b/i) ||
+      msg.match(/^\s*([1-5]\d{2})\b/) ||
+      msg.match(/\b([1-5]\d{2})\s+(?:Service Unavailable|Bad Gateway|Gateway Timeout|Internal Server Error|Too Many Requests|Bad Request|Unauthorized|Forbidden|Not Found)\b/i);
+
+    if (explicitPattern) {
+      const parsed = parseCandidateStatus(explicitPattern[1]);
+      if (parsed !== undefined) {
+        status = parsed;
+      }
+    }
   }
 
   const statusString = String(errorObj.status || err.code || '').toUpperCase();
 
-  // Search structured reason across ALL items in errorDetails or details array
-  const detailsArray = Array.isArray(err.errorDetails)
-    ? err.errorDetails
-    : Array.isArray(errorObj.details)
-    ? errorObj.details
-    : [];
+  // 2. Comprehensive Structured Reason collection without shadowing
+  const collectedReasons: string[] = [];
 
-  const KNOWN_REASONS = ['RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED', 'API_KEY_INVALID', 'PERMISSION_DENIED', 'INVALID_ARGUMENT'];
-  let foundDetailReason = '';
-  for (const d of detailsArray) {
-    if (d && typeof d.reason === 'string') {
-      const candidate = d.reason.toUpperCase();
-      if (KNOWN_REASONS.includes(candidate)) {
-        foundDetailReason = candidate;
-        break;
-      }
+  // Inspect direct reason properties
+  if (typeof err.reason === 'string' && err.reason.trim()) {
+    collectedReasons.push(err.reason.trim().toUpperCase());
+  }
+  if (typeof errorObj.reason === 'string' && errorObj.reason.trim()) {
+    collectedReasons.push(errorObj.reason.trim().toUpperCase());
+  }
+
+  // Combine all detail containers so empty arrays never shadow non-empty arrays
+  const allDetailContainers: any[] = [];
+  if (Array.isArray(err.errorDetails)) allDetailContainers.push(...err.errorDetails);
+  if (Array.isArray(errorObj.details)) allDetailContainers.push(...errorObj.details);
+  if (Array.isArray(err.details)) allDetailContainers.push(...err.details);
+
+  for (const d of allDetailContainers) {
+    if (d && typeof d.reason === 'string' && d.reason.trim()) {
+      collectedReasons.push(d.reason.trim().toUpperCase());
     }
   }
-  if (!foundDetailReason) {
-    const anyReason = detailsArray.find((d: any) => d && typeof d.reason === 'string');
-    if (anyReason) foundDetailReason = String(anyReason.reason).toUpperCase();
-  }
-  const structuredReason = String(err.reason || foundDetailReason || '').toUpperCase();
 
-  // 2. Structured Reason & Status classification (Checked FIRST before text searching)
+  // Prioritize recognized standard reasons over unknown reasons
+  let structuredReason = '';
+  const matchedKnownReason = collectedReasons.find(r => (KNOWN_STRUCTURED_REASONS as readonly string[]).includes(r));
+  if (matchedKnownReason) {
+    structuredReason = matchedKnownReason;
+  } else if (collectedReasons.length > 0) {
+    structuredReason = collectedReasons[0];
+  }
+
+  // 3. Rule 1: Recognized Structured Reason has highest priority
   if (structuredReason === 'RATE_LIMIT_EXCEEDED') {
     return {
       shouldRetry: true,
@@ -142,31 +200,28 @@ export function classifyGeminiError(err: any): RetryClassification {
   // Strip URLs so help documentation links (e.g. https://.../rate-limits) do not pollute keyword matching
   const messageWithoutUrls = message.replace(/https?:\/\/[^\s)]+/g, '');
 
-  // 3. HTTP 5xx / Transient Server Errors (HTTP Semantics Priority over message keywords)
-  // A server error 503/500/502/504 or UNAVAILABLE/overloaded must NOT be misclassified as quota exhaustion,
-  // even if the message mentions quota checks or backend capacity.
+  // 4. Rule 2: HTTP 5xx / Transient Server Errors take precedence over general message keywords
+  const explicit5xxMatch =
+    message.match(/(?:HTTP|status|code)\s*[:=-]?\s*(500|502|503|504)\b/i) ||
+    message.match(/^\s*(500|502|503|504)\b/) ||
+    message.match(/\b(500|502|503|504)\s+(?:Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i);
+
   const isTransient5xx =
-    status === 503 ||
-    status === 500 ||
-    status === 502 ||
-    status === 504 ||
     (typeof status === 'number' && status >= 500 && status < 600) ||
     (!status && (
-      message.includes('503') ||
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('504') ||
-      message.includes('UNAVAILABLE') ||
-      message.includes('overloaded')
+      Boolean(explicit5xxMatch) ||
+      /\bUNAVAILABLE\b/i.test(message) ||
+      /\boverloaded\b/i.test(message)
     ));
 
   if (isTransient5xx) {
     let resolved5xx = status;
     if (!resolved5xx) {
-      if (message.includes('500')) resolved5xx = 500;
-      else if (message.includes('502')) resolved5xx = 502;
-      else if (message.includes('504')) resolved5xx = 504;
-      else resolved5xx = 503;
+      if (explicit5xxMatch) {
+        resolved5xx = Number(explicit5xxMatch[1]);
+      } else {
+        resolved5xx = 503;
+      }
     }
     return {
       shouldRetry: true,
@@ -176,7 +231,30 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 4. Non-retryable permanent client errors (400 Bad Request, 401/403 Auth/Permission, 404 Not Found, 413, 422)
+  // 5. Transient transport connection drops / timeouts
+  const isTransientTimeoutOrNetwork =
+    status === 408 ||
+    /(?:HTTP|status|code)\s*[:=-]?\s*408\b/i.test(message) ||
+    /^\s*408\b/.test(message) ||
+    /\b408\s+Request Timeout\b/i.test(message) ||
+    message.includes('deadline') ||
+    message.includes('timeout') ||
+    message.includes('AbortError') ||
+    message.includes('fetch failed') ||
+    message.includes('ECONNRESET') ||
+    message.includes('ETIMEDOUT') ||
+    message.includes('UND_ERR_SOCKET');
+
+  if (isTransientTimeoutOrNetwork) {
+    return {
+      shouldRetry: true,
+      status: status || 408,
+      reason: 'transient_timeout_or_network',
+      isTransient: true
+    };
+  }
+
+  // 6. Non-retryable permanent client errors (400 Bad Request, 401/403 Auth/Permission, 404 Not Found, 413, 422)
   const isClientError =
     status === 400 ||
     status === 401 ||
@@ -209,8 +287,7 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 5. Rate Limit vs Quota Exhaustion (resolving co-occurrence cleanly)
-  // Daily / Billing / Permanent Quota signals take priority over burst rate limits:
+  // 7. Rate Limit vs Quota Exhaustion for HTTP 429 or quota/rate limit error text
   const isDailyOrPlanQuota =
     /exceeded your current quota/i.test(messageWithoutUrls) ||
     /check your plan and billing/i.test(messageWithoutUrls) ||
@@ -218,14 +295,13 @@ export function classifyGeminiError(err: any): RetryClassification {
     /daily[\s_-]?quota/i.test(messageWithoutUrls) ||
     /quota metric '.*' and limit '.*per day'/i.test(messageWithoutUrls);
 
-  // Rate Limit signals (per-minute, RPM, burst, or explicit rate limit phrase)
   const isRateLimitMentioned =
     /rate[\s_-]?limit/i.test(messageWithoutUrls) ||
     /per[\s_-]?minute/i.test(messageWithoutUrls) ||
     /\bRPM\b/i.test(messageWithoutUrls) ||
     /too many requests/i.test(messageWithoutUrls);
 
-  // If daily/plan quota is exceeded, it cannot be retried even if rate limit is mentioned:
+  // Daily/plan quota takes precedence over burst rate limits:
   if (isDailyOrPlanQuota) {
     return {
       shouldRetry: false,
@@ -235,8 +311,7 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // If rate limit is mentioned (even alongside generate_content_free_tier_requests or RESOURCE_EXHAUSTED):
-  // e.g. "generate_content_free_tier_requests per minute Rate Limit exceeded" -> this is transient per-minute rate limit!
+  // If rate limit per minute or RPM is specified (even with generate_content_free_tier_requests):
   if (isRateLimitMentioned) {
     return {
       shouldRetry: true,
@@ -246,7 +321,7 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // If free tier or quota is mentioned without rate limit or per-minute burst:
+  // Generic quota exhaustion without rate limit per minute:
   const isGenericQuotaExhausted =
     messageWithoutUrls.includes('generate_content_free_tier_requests') ||
     /quota\s*exceeded/i.test(messageWithoutUrls) ||
@@ -261,30 +336,13 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 6. Retryable transient timeout or transport connection drops (408, AbortError, fetch failed, socket drops)
-  const isTransientTimeoutOrNetwork =
-    status === 408 ||
-    message.includes('408') ||
-    message.includes('deadline') ||
-    message.includes('timeout') ||
-    message.includes('AbortError') ||
-    message.includes('fetch failed') ||
-    message.includes('ECONNRESET') ||
-    message.includes('ETIMEDOUT') ||
-    message.includes('UND_ERR_SOCKET');
+  // Generic HTTP 429 without quota text:
+  const explicit429Match =
+    /(?:HTTP|status|code)\s*[:=-]?\s*429\b/i.test(message) ||
+    /^\s*429\b/.test(message) ||
+    /\b429\s+Too Many Requests\b/i.test(message);
 
-  if (isTransientTimeoutOrNetwork) {
-    return {
-      shouldRetry: true,
-      status: status || 408,
-      reason: 'transient_timeout_or_network',
-      isTransient: true
-    };
-  }
-
-  // 5. Retryable transient rate limit (temporary burst 429 or rate limit keyword)
-  const isTransient429 = status === 429 || message.includes('429') || isRateLimitMentioned;
-  if (isTransient429) {
+  if (status === 429 || explicit429Match) {
     return {
       shouldRetry: true,
       status: 429,
@@ -293,7 +351,7 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // Default: do not retry unknown errors
+  // Default: unclassified error
   return {
     shouldRetry: false,
     status: typeof status === 'number' && !Number.isNaN(status) ? status : undefined,

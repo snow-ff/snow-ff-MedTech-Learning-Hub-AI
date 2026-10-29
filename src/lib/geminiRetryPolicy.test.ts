@@ -307,6 +307,76 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(res3.status).toBe(401);
       expect(res3.reason).toBe('client_error');
     });
+
+    // Acceptance Criteria: Candidate status independence and message number isolation
+    it('should independently evaluate candidate status and not misinterpret loose numbers in message', () => {
+      // 1. Non-numeric code does not block inspection of statusCode
+      const errWithUnparseableCode = {
+        code: 'RESOURCE_EXHAUSTED',
+        statusCode: 503,
+        message: 'Backend server failure'
+      };
+      const res1 = classifyGeminiError(errWithUnparseableCode);
+      expect(res1.status).toBe(503);
+      expect(res1.reason).toBe('transient_service_unavailable');
+
+      // 2. String 3-digit status is parsed safely
+      const errWithStringStatus = {
+        status: '429',
+        message: 'Rate limit exceeded'
+      };
+      const res2 = classifyGeminiError(errWithStringStatus);
+      expect(res2.status).toBe(429);
+      expect(res2.reason).toBe('transient_rate_limit');
+
+      // 3. Loose number in message (without HTTP/status pattern) is NOT interpreted as HTTP status
+      const errWithLooseNumber = {
+        message: 'Processed 500 patient records successfully before encountering generic problem'
+      };
+      const res3 = classifyGeminiError(errWithLooseNumber);
+      // Should NOT assume 500 server error just because 500 was in the sentence
+      expect(res3.status).toBeUndefined();
+      expect(res3.shouldRetry).toBe(false);
+      expect(res3.reason).toBe('unclassified_non_transient');
+    });
+
+    // Acceptance Criteria: Empty errorDetails array does not shadow errorObj.details, and unknown err.reason does not shadow known reason
+    it('should not allow empty errorDetails to discard details, and unknown err.reason must not shadow known reason', () => {
+      // Empty err.errorDetails [] must not shadow errorObj.details
+      const errWithEmptyErrorDetails = {
+        errorDetails: [],
+        error: {
+          details: [{ reason: 'RATE_LIMIT_EXCEEDED' }]
+        },
+        message: 'API error occurred'
+      };
+      const res1 = classifyGeminiError(errWithEmptyErrorDetails);
+      expect(res1.status).toBe(429);
+      expect(res1.reason).toBe('transient_rate_limit');
+      expect(res1.shouldRetry).toBe(true);
+
+      // Unknown err.reason must NOT shadow RATE_LIMIT_EXCEEDED in details
+      const errWithUnknownReason = {
+        reason: 'CUSTOM_UNEXPECTED_STRING',
+        errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }],
+        message: 'Temporary rate limit'
+      };
+      const res2 = classifyGeminiError(errWithUnknownReason);
+      expect(res2.status).toBe(429);
+      expect(res2.reason).toBe('transient_rate_limit');
+      expect(res2.shouldRetry).toBe(true);
+
+      // Unknown err.reason must NOT shadow QUOTA_EXCEEDED in details
+      const errWithUnknownReasonQuota = {
+        reason: 'SOME_INTERNAL_DEBUG_FLAG',
+        errorDetails: [{ reason: 'QUOTA_EXCEEDED' }],
+        message: 'Quota reached'
+      };
+      const res3 = classifyGeminiError(errWithUnknownReasonQuota);
+      expect(res3.status).toBe(429);
+      expect(res3.reason).toBe('quota_or_credential_exhausted');
+      expect(res3.shouldRetry).toBe(false);
+    });
   });
 
   describe('2. Exponential Backoff & Jitter Calculation', () => {

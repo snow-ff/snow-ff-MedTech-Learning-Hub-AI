@@ -1647,7 +1647,7 @@ ${formattedChunks}
 
     if (classification.status === 429) {
       if (classification.reason === 'quota_or_credential_exhausted') {
-        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งานฟรีของ Gemini API เต็มชั่วคราว (HTTP 429 Quota Exceeded) — ${modeNotice})*\n\n`;
+        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งาน Gemini API เต็มหรือถูกจำกัด (HTTP 429 Quota Exceeded) — ${modeNotice})*\n\n`;
       } else {
         serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP 429 Rate Limit) — ${modeNotice})*\n\n`;
       }
