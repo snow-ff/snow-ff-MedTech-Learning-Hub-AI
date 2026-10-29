@@ -841,7 +841,7 @@ export function validateAndResolveLocator(
   isDocUnpaged: boolean = false
 ): VerifiedLocatorResult {
   const prov = chunk.sourceLocatorProvenance;
-  const rawLocator = chunk.sourceLocator;
+  const rawLocator = decodeHtmlEntities(chunk.sourceLocator || '');
 
   const ALLOWED_PROVENANCES = new Set<string>(['native_page', 'source_heading', 'explicit_provenance']);
 

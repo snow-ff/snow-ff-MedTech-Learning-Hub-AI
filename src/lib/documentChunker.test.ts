@@ -255,6 +255,19 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       expect(renderedCardLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
       expect(renderedCardLocator).not.toBe('ไม่ระบุหมายเลข');
     });
+
+    it('Case 7: HTML entity decoding in sourceLocator (e.g. &#x33; for 3) correctly resolves and decodes without failing validation', () => {
+      const encodedChunk = {
+        text: '=== ส่วนที่ 3: Prefix ในการแพทย์ ===\nเนื้อหา',
+        sourceLocator: 'ชิ้นส่วนที่ &#x33;',
+        sourceLocatorProvenance: 'source_heading'
+      };
+      const decodedLocator = decodeHtmlEntities(encodedChunk.sourceLocator);
+      expect(decodedLocator).toContain('3');
+      const res = validateAndResolveLocator(encodedChunk, true);
+      expect(res.isVerified).toBe(true);
+      expect(res.locator).toBe('ส่วนที่ 3');
+    });
   });
 });
 
