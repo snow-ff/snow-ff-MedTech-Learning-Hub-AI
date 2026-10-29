@@ -274,20 +274,23 @@ export default function App() {
   // Filtered courses based on search & category (Track A4)
   const filteredCourses = React.useMemo(() => {
     return OFFICIAL_COURSES_2567.filter((course) => {
-      if (onlyNonCredit && !course.isNonCredit) {
-        return false;
-      }
       if (curriculumSearch.trim()) {
         const q = curriculumSearch.toLowerCase().trim();
+        const isCoreCurriculumQuery = q.includes('dtm2567') || q.includes('dtm 2567') || q.includes('วิทยาศาสตรบัณฑิต') || q.includes('เทคโนโลยีดิจิทัลทางการแพทย์') || q.includes('หลักสูตร');
+        if (isCoreCurriculumQuery) {
+          return true; // Macro overview search returns all courses, bypassing category/sub-category/non-credit filters
+        }
         const code = (course.code || '').toLowerCase();
         const th = (course.titleThai || '').toLowerCase();
         const en = (course.titleEnglish || '').toLowerCase();
         const sub = (course.subCategory || '').toLowerCase();
         const hours = (course.hours || '').toLowerCase();
-        const isCoreCurriculumQuery = q.includes('dtm2567') || q.includes('dtm 2567') || q.includes('วิทยาศาสตรบัณฑิต') || q.includes('เทคโนโลยีดิจิทัลทางการแพทย์') || q.includes('หลักสูตร');
-        if (!isCoreCurriculumQuery && !code.includes(q) && !th.includes(q) && !en.includes(q) && !sub.includes(q) && !hours.includes(q)) {
+        if (!code.includes(q) && !th.includes(q) && !en.includes(q) && !sub.includes(q) && !hours.includes(q)) {
           return false;
         }
+      }
+      if (onlyNonCredit && !course.isNonCredit) {
+        return false;
       }
       if (curriculumCategory !== 'all') {
         const tab = CURRICULUM_FILTER_TABS.find((t) => t.id === curriculumCategory);
