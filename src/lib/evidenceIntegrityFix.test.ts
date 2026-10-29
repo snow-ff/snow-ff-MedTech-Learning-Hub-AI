@@ -1587,6 +1587,62 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     expect(resMatch.isVerified).toBe(true);
     expect(resMatch.locator).toBe('บทที่ 3');
   });
+
+  it('chunkText Heading Extraction: Negative cases for inline delimiters vs Positive cases for real headings', () => {
+    // 1. Negative Case: ข้อความธรรมดาที่มี delimiter กลางประโยค ต้องไม่ถูกกำหนด sourceLocator หรือ source_heading provenance
+    const textInline1 = 'ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค';
+    const chunksInline1 = chunkText(textInline1, { documentId: 'doc-neg-1' });
+    expect(chunksInline1.length).toBeGreaterThan(0);
+    expect(chunksInline1[0].sourceLocator).toBeUndefined();
+    expect(chunksInline1[0].sourceLocatorProvenance).toBe('unconfirmed');
+
+    const resChunkNeg1 = validateAndResolveLocator(chunksInline1[0], true);
+    expect(resChunkNeg1.isVerified).toBe(false);
+    expect(resChunkNeg1.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+
+    const textInline2 = 'ข้อความธรรมดาที่กล่าวถึง --- ส่วนที่ 3 ภายในประโยค';
+    const chunksInline2 = chunkText(textInline2, { documentId: 'doc-neg-2' });
+    expect(chunksInline2.length).toBeGreaterThan(0);
+    expect(chunksInline2[0].sourceLocator).toBeUndefined();
+    expect(chunksInline2[0].sourceLocatorProvenance).toBe('unconfirmed');
+
+    const resChunkNeg2 = validateAndResolveLocator(chunksInline2[0], true);
+    expect(resChunkNeg2.isVerified).toBe(false);
+    expect(resChunkNeg2.locator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+
+    // 2. Positive Case: Heading จริงที่อยู่ต้นบรรทัด ต้องกำหนด sourceLocator และได้รับการยืนยันอย่างถูกต้อง
+    const textStart1 = '=== บทที่ 3: Suffix ===\nเนื้อหาบทเรียนเกี่ยวกับปัจจัยท้ายทางการแพทย์';
+    const chunksStart1 = chunkText(textStart1, { documentId: 'doc-pos-1' });
+    expect(chunksStart1.length).toBeGreaterThan(0);
+    expect(chunksStart1[0].sourceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(chunksStart1[0].sourceLocatorProvenance).toBe('source_heading');
+
+    const resChunkPos1 = validateAndResolveLocator(chunksStart1[0], true);
+    expect(resChunkPos1.isVerified).toBe(true);
+    expect(resChunkPos1.locator).toBe('บทที่ 3');
+
+    // 3. Positive Case: Markdown heading # ที่อยู่ต้นบรรทัด
+    const textStart2 = '# บทที่ 3 ระบบต่อมไร้ท่อ\nเนื้อหาการเรียนรู้';
+    const chunksStart2 = chunkText(textStart2, { documentId: 'doc-pos-2' });
+    expect(chunksStart2.length).toBeGreaterThan(0);
+    expect(chunksStart2[0].sourceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(chunksStart2[0].sourceLocatorProvenance).toBe('source_heading');
+
+    const resChunkPos2 = validateAndResolveLocator(chunksStart2[0], true);
+    expect(resChunkPos2.isVerified).toBe(true);
+    expect(resChunkPos2.locator).toBe('บทที่ 3');
+
+    // 4. Positive Case: Section heading with --- ที่อยู่ต้นบรรทัด
+    const textStart3 = '--- ส่วนที่ 3 ---\nเนื้อหา';
+    const chunksStart3 = chunkText(textStart3, { documentId: 'doc-pos-3' });
+    expect(chunksStart3.length).toBeGreaterThan(0);
+    expect(chunksStart3[0].sourceLocator).toBe('ชิ้นส่วนที่ 3');
+    expect(chunksStart3[0].sourceLocatorProvenance).toBe('source_heading');
+
+    const resChunkPos3 = validateAndResolveLocator(chunksStart3[0], true);
+    expect(resChunkPos3.isVerified).toBe(true);
+    expect(resChunkPos3.locator).toBe('ส่วนที่ 3');
+  });
 });
 
 

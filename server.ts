@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
-import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS, validateAndResolveLocator } from "./src/lib/documentChunker";
+import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS, validateAndResolveLocator, extractGenuineHeadings } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
 import { AcademicVerificationReport } from "./src/models/coreModel";
 import {
@@ -139,7 +139,7 @@ function getCleanSectionTitle(text: string, chunkIndex: number | string): string
       /^===+\s*/.test(line) ||
       /^===.*\s*===$/.test(line) ||
       /^(?:---|\*\*\*)\s*(?:ส่วนที่|บทที่|section|chapter)/i.test(line) ||
-      /^(ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*[:#\-]?/i.test(line);
+      /^(?:ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*(?:\d+\s*(?:[:#\-–—]|$)|\s*[:#\-–—])/i.test(line);
 
     if (isGenuineHeading) {
       const cleaned = line.replace(/^[===#*\-\s]+/, '').replace(/[===#*\s\)]+$/, '').trim();
@@ -452,13 +452,11 @@ export function getAcademicFallback(
           sourceProv = 'native_page';
         }
       } else if (!sourceProv || sourceProv === 'unconfirmed') {
-        const headingMatch = (c.text || '').match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
-        if (headingMatch && headingMatch[1]) {
-          const num = parseInt(headingMatch[1], 10);
-          if (!isNaN(num) && num > 0) {
-            sourceLoc = `ชิ้นส่วนที่ ${num}`;
-            sourceProv = 'source_heading';
-          }
+        const genuine = extractGenuineHeadings(c.text || '');
+        if (genuine.headings.length > 0) {
+          const firstH = genuine.headings[0];
+          sourceLoc = `ชิ้นส่วนที่ ${firstH.number}`;
+          sourceProv = 'source_heading';
         }
       }
 

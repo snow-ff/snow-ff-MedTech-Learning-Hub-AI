@@ -187,13 +187,11 @@ export function chunkText(rawText: string, options: ChunkOptions = {}): Document
     let explicitLocator: string | undefined = undefined;
     let explicitProvenance: 'native_page' | 'source_heading' | 'explicit_provenance' | 'unconfirmed' = 'unconfirmed';
 
-    const headingMatch = blockText.match(/(?:===+|---+|\*\*\*+|#+|^|\n)\s*(?:ส่วนที่|บทที่|section|chapter)\s*(\d+)/i);
-    if (headingMatch && headingMatch[1]) {
-      const headingNum = parseInt(headingMatch[1], 10);
-      if (!isNaN(headingNum) && headingNum > 0) {
-        explicitLocator = `ชิ้นส่วนที่ ${headingNum}`;
-        explicitProvenance = 'source_heading';
-      }
+    const genuine = extractGenuineHeadings(blockText);
+    if (genuine.headings.length > 0) {
+      const firstH = genuine.headings[0];
+      explicitLocator = `ชิ้นส่วนที่ ${firstH.number}`;
+      explicitProvenance = 'source_heading';
     }
 
     chunks.push({
@@ -787,10 +785,10 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
       /^===.*\s*===$/.test(line) ||
       /^(?:---|\*\*\*)\s*(?:ส่วนที่|บทที่|section|chapter)/i.test(line) ||
       /^(?:ส่วนที่|บทที่|หัวข้อ|chapter|section|title)\s*\d+\s*(?:[:#\-–—]|$)/i.test(line) ||
-      /(?:เนื้อหาสำคัญ|เนื้อหาหลัก|เนื้อหาชิ้นส่วนที่|ส่วนอ้างอิง)\s*[:#\-]?/i.test(line);
+      /^(?:เนื้อหาสำคัญ|เนื้อหาหลัก|เนื้อหาชิ้นส่วนที่|ส่วนอ้างอิง)\s*[:#\-–—\d]?/i.test(line);
 
     if (isHeadingLine) {
-      const matchNum = line.match(/(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/i);
+      const matchNum = line.match(/^[===#*\-\s\[]*(?:(?:ส่วนอ้างอิง|เนื้อหาสำคัญ|เนื้อหาหลัก):?\s*)?(?:เนื้อหา)?(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/i);
       if (matchNum && matchNum[2]) {
         const prefix = matchNum[1];
         const n = parseInt(matchNum[2], 10);
