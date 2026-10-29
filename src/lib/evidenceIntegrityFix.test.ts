@@ -1532,13 +1532,60 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
   });
 
   it('Edge Case: === บทที่ 3 หรือ --- ส่วนที่ 3 กลางประโยคธรรมดาต้องไม่ถูกดึงเป็น Genuine Heading', () => {
+    // 1. ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค ต้องไม่ถูกดึงเป็น Heading 3
     const textInline1 = 'ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค';
     const headingsInline1 = extractGenuineHeadings(textInline1);
     expect(headingsInline1.numbers).not.toContain(3);
+    const resInline1 = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: textInline1
+    });
+    expect(resInline1.isVerified).toBe(false);
 
+    // 2. ข้อความธรรมดาที่กล่าวถึง --- ส่วนที่ 3 ภายในประโยค ต้องไม่ถูกดึงเป็น Heading 3
     const textInline2 = 'ข้อความธรรมดาที่กล่าวถึง --- ส่วนที่ 3 ภายในประโยค';
     const headingsInline2 = extractGenuineHeadings(textInline2);
     expect(headingsInline2.numbers).not.toContain(3);
+    const resInline2 = validateAndResolveLocator({
+      sourceLocator: 'ส่วนที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: textInline2
+    });
+    expect(resInline2.isVerified).toBe(false);
+
+    // 3. Heading ที่อยู่ต้นบรรทัดจริงยังคงต้องถูกดึงได้ตามปกติ
+    const textStart1 = '=== บทที่ 3: Suffix ===\nเนื้อหาบทเรียน';
+    const headingsStart1 = extractGenuineHeadings(textStart1);
+    expect(headingsStart1.numbers).toContain(3);
+    expect(headingsStart1.headings).toContainEqual({ prefix: 'บทที่', number: 3 });
+
+    const textStart2 = 'บทนำ\n--- ส่วนที่ 3 ---\nเนื้อหา';
+    const headingsStart2 = extractGenuineHeadings(textStart2);
+    expect(headingsStart2.numbers).toContain(3);
+    expect(headingsStart2.headings).toContainEqual({ prefix: 'ส่วนที่', number: 3 });
+
+    const textStart3 = '# บทที่ 3 ระบบต่อมไร้ท่อ';
+    const headingsStart3 = extractGenuineHeadings(textStart3);
+    expect(headingsStart3.numbers).toContain(3);
+    expect(headingsStart3.headings).toContainEqual({ prefix: 'บทที่', number: 3 });
+
+    // 4. Locator ที่ไม่มี Heading ใน chunk ตรงกันจริง ต้องได้ isVerified: false
+    const resNoMatch = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 99',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: textStart1
+    });
+    expect(resNoMatch.isVerified).toBe(false);
+
+    // 5. Locator ที่มี Prefix และ Number ตรงกับ Genuine Heading จริง ต้องได้ isVerified: true
+    const resMatch = validateAndResolveLocator({
+      sourceLocator: 'บทที่ 3',
+      sourceLocatorProvenance: 'explicit_provenance',
+      text: textStart1
+    });
+    expect(resMatch.isVerified).toBe(true);
+    expect(resMatch.locator).toBe('บทที่ 3');
   });
 });
 

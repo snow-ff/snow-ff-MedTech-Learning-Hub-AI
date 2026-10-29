@@ -808,7 +808,7 @@ export function extractGenuineHeadings(text: string): { numbers: number[]; headi
     }
   }
 
-  const globalMatches = Array.from(decoded.matchAll(/(?:===+|---+|\*\*\*+|#+|^)\s*(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/gi));
+  const globalMatches = Array.from(decoded.matchAll(/(?:^|\n)\s*(?:===+|---+|\*\*\*+|#+)\s*(ส่วนที่|บทที่|section|chapter|ชิ้นส่วนที่)\s*(\d+)/gi));
   for (const m of globalMatches) {
     if (m[2]) {
       const prefix = m[1];
