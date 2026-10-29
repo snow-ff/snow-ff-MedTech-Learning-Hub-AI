@@ -1646,19 +1646,37 @@ ${formattedChunks}
       : "ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ";
 
     if (classification.reason === 'client_error') {
-      const errStr = String(lastError?.message || '').toUpperCase();
-      const isArgError = classification.status === 400 || errStr.includes('INVALID_ARGUMENT');
+      const errorObj = lastError?.error || lastError;
+      const allDetailContainers = [
+        ...(Array.isArray(lastError?.errorDetails) ? lastError.errorDetails : []),
+        ...(Array.isArray(errorObj?.errorDetails) ? errorObj.errorDetails : []),
+        ...(Array.isArray(errorObj?.details) ? errorObj.details : []),
+        ...(Array.isArray(lastError?.details) ? lastError.details : [])
+      ];
+      const hasStructuredArgError =
+        String(errorObj?.status || '').toUpperCase() === 'INVALID_ARGUMENT' ||
+        String(lastError?.reason || errorObj?.reason || '').toUpperCase() === 'INVALID_ARGUMENT' ||
+        allDetailContainers.some(d => d && String(d.reason || '').toUpperCase() === 'INVALID_ARGUMENT') ||
+        String(lastError?.message || '').toUpperCase().includes('INVALID_ARGUMENT');
 
       if (classification.status === 503) {
         serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
       } else if (classification.status && classification.status >= 500 && classification.status < 600) {
         serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
-      } else if (isArgError) {
-        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP ${classification.status || 400} Bad Request) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 401 || classification.status === 403) {
-        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP ${classification.status}) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 400) {
+        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 401) {
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 401 Unauthorized) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 403) {
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 403 Forbidden) — ${modeNotice})*\n\n`;
       } else if (classification.status === 429) {
-        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคำขอขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        if (hasStructuredArgError) {
+          serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการหรือพารามิเตอร์ไม่ถูกต้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        } else {
+          serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคำขอขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        }
+      } else if (hasStructuredArgError) {
+        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP ${classification.status || 400} Bad Request) — ${modeNotice})*\n\n`;
       } else {
         serviceNoticeText = `*(แจ้งเตือน: คำขอหรือการตั้งค่าสิทธิ์ไม่ถูกต้อง (HTTP ${classification.status || 400}) — ${modeNotice})*\n\n`;
       }

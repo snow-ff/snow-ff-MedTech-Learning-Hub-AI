@@ -550,6 +550,17 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(resRate503.status).toBe(503);
       expect(resRate503.reason).toBe('transient_rate_limit');
       expect(resRate503.shouldRetry).toBe(true);
+
+      // 8. INVALID_ARGUMENT strictly inside errorDetails without message keywords preserves authentic 429 status
+      const argOnlyInDetails = {
+        status: 429,
+        errorDetails: [{ reason: 'INVALID_ARGUMENT' }],
+        message: 'Upstream rejection on custom payload'
+      };
+      const resArgDetails = classifyGeminiError(argOnlyInDetails);
+      expect(resArgDetails.status).toBe(429);
+      expect(resArgDetails.reason).toBe('client_error');
+      expect(resArgDetails.shouldRetry).toBe(false);
     });
   });
 
