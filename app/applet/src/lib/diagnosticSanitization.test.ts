@@ -70,6 +70,6 @@ describe('Diagnostic Sanitization & Error Meta Extraction', () => {
     expect(() => extractSafeGeminiErrorMeta({ errorDetails: [{ metadata: 'not-an-object' }] })).not.toThrow();
 
     const metaNull = extractSafeGeminiErrorMeta(null);
-    expect(metaNull.message).toBe('null');
+    expect(metaNull.message).toBe('ไม่มี message ใน Error object');
   });
 });

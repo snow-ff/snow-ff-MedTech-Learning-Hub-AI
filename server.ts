@@ -1225,8 +1225,8 @@ app.post("/api/gemini/generate", async (req, res) => {
     documentContext.chunks.length > 0
   );
 
-  // 1. If user explicitly selected 'document' mode, but no active document is provided or active document has no chunks
-  if (searchMode === 'document' && !isDocumentGrounding) {
+  // 1. If user explicitly selected 'document' mode, but no active document is provided or active document has no chunks (unless it's a curriculum query)
+  if (searchMode === 'document' && !isDocumentGrounding && !isCurriculumQuery) {
     return res.json({
       text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"** หรือสลับเป็น **"ค้นหาเว็บ AI"** เพื่อค้นคว้าข้อมูลทั่วไป`,
       source: "academic_fallback",
@@ -1235,7 +1235,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     });
   }
 
-  const explicitDocRequest = searchMode !== 'web_search' && (
+  const explicitDocRequest = searchMode !== 'web_search' && !isCurriculumQuery && (
     latestPrompt.toLowerCase().includes('จากเอกสาร') ||
     latestPrompt.toLowerCase().includes('ในเอกสาร') ||
     latestPrompt.toLowerCase().includes('เอกสารนี้') ||
@@ -1244,7 +1244,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     (/หน้า|page/i.test(latestPrompt) && !isDocumentGrounding)
   );
 
-  if (!isDocumentGrounding && explicitDocRequest && searchMode !== 'web_search') {
+  if (!isDocumentGrounding && explicitDocRequest && searchMode !== 'web_search' && !isCurriculumQuery) {
     return res.json({
       text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Offline Document Grounding อย่างแม่นยำ`,
       source: "academic_fallback",

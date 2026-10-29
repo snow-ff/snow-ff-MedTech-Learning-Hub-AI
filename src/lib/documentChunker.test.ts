@@ -173,7 +173,7 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
   });
 
   describe('validateAndResolveLocator direct unit tests', () => {
-    it('Case 1: หัวข้อจริง ส่วนที่ 3 และ Locator ชิ้นส่วนที่ 3 — ผ่าน (isVerified: true, locator: ชิ้นส่วนที่ 3)', () => {
+    it('Case 1: หัวข้อจริง ส่วนที่ 3 และ Locator ชิ้นส่วนที่ 3 — ผ่าน (isVerified: true, locator: ส่วนที่ 3)', () => {
       const chunk = {
         text: '=== ส่วนที่ 3: Prefix ในการแพทย์ ===\nPrefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำหลัก',
         sourceLocator: 'ชิ้นส่วนที่ 3',
@@ -181,7 +181,7 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       };
       const res = validateAndResolveLocator(chunk, true);
       expect(res.isVerified).toBe(true);
-      expect(res.locator).toBe('ชิ้นส่วนที่ 3');
+      expect(res.locator).toBe('ส่วนที่ 3');
       expect(res.provenance).toBe('source_heading');
     });
 
