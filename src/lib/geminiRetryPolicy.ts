@@ -127,45 +127,43 @@ export function classifyGeminiError(err: any): RetryClassification {
 
   const statusString = String(errorObj.status || err.code || '').toUpperCase();
 
-  // 2. Comprehensive Structured Reason collection with Source Authority & Conflict Resolution
+  // 2. Comprehensive Structured Reason collection across ALL genuine SDK containers without shadowing
   interface ScoredReason {
     reason: string;
     sourceWeight: number; // 3: Primary Google RPC ErrorInfo, 2: Direct property, 1: Generic details
   }
   const scoredReasons: ScoredReason[] = [];
 
-  // Source Level 3: Primary Google RPC ErrorInfo (err.errorDetails or errorObj.errorDetails)
-  const primaryErrorDetails = Array.isArray(err.errorDetails) && err.errorDetails.length > 0
-    ? err.errorDetails
-    : Array.isArray(errorObj.errorDetails) && errorObj.errorDetails.length > 0
-    ? errorObj.errorDetails
-    : [];
-
-  for (const d of primaryErrorDetails) {
-    if (d && typeof d.reason === 'string' && d.reason.trim()) {
-      scoredReasons.push({ reason: d.reason.trim().toUpperCase(), sourceWeight: 3 });
+  const pushDetailItems = (items: unknown, weight: number) => {
+    if (Array.isArray(items)) {
+      for (const d of items) {
+        if (d && typeof d.reason === 'string' && d.reason.trim()) {
+          scoredReasons.push({ reason: d.reason.trim().toUpperCase(), sourceWeight: weight });
+        }
+      }
     }
+  };
+
+  // Source Level 3: Primary Google RPC ErrorInfo (include both err.errorDetails and errorObj.errorDetails)
+  pushDetailItems(err.errorDetails, 3);
+  if (errorObj && errorObj.errorDetails !== err.errorDetails) {
+    pushDetailItems(errorObj.errorDetails, 3);
   }
 
   // Source Level 2: Direct reason properties
   if (typeof err.reason === 'string' && err.reason.trim()) {
     scoredReasons.push({ reason: err.reason.trim().toUpperCase(), sourceWeight: 2 });
   }
-  if (typeof errorObj.reason === 'string' && errorObj.reason.trim()) {
+  if (errorObj && typeof errorObj.reason === 'string' && errorObj.reason.trim() && errorObj.reason !== err.reason) {
     scoredReasons.push({ reason: errorObj.reason.trim().toUpperCase(), sourceWeight: 2 });
   }
 
-  // Source Level 1: Generic detail containers
-  const genericDetails = Array.isArray(errorObj.details) && errorObj.details.length > 0
-    ? errorObj.details
-    : Array.isArray(err.details) && err.details.length > 0
-    ? err.details
-    : [];
-
-  for (const d of genericDetails) {
-    if (d && typeof d.reason === 'string' && d.reason.trim()) {
-      scoredReasons.push({ reason: d.reason.trim().toUpperCase(), sourceWeight: 1 });
-    }
+  // Source Level 1: Generic detail containers (include both errorObj.details and err.details)
+  if (errorObj) {
+    pushDetailItems(errorObj.details, 1);
+  }
+  if (err.details !== (errorObj && errorObj.details)) {
+    pushDetailItems(err.details, 1);
   }
 
   // Conflict Resolution among Structured Reasons
@@ -226,10 +224,11 @@ export function classifyGeminiError(err: any): RetryClassification {
   }
 
   // 3. Rule 1: Recognized Structured Reason has highest priority
+  // Preserve genuine detected HTTP status (do not invent or override status unless absent)
   if (structuredReason === 'API_KEY_INVALID' || statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED') {
     return {
       shouldRetry: false,
-      status: (status && status >= 400 && status <= 403) ? status : (statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED' ? 403 : 401),
+      status: status !== undefined ? status : (statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED' ? 403 : 401),
       reason: 'client_error',
       isTransient: false
     };
@@ -238,7 +237,7 @@ export function classifyGeminiError(err: any): RetryClassification {
   if (statusString === 'INVALID_ARGUMENT' || structuredReason === 'INVALID_ARGUMENT') {
     return {
       shouldRetry: false,
-      status: 400,
+      status: status !== undefined ? status : 400,
       reason: 'client_error',
       isTransient: false
     };
@@ -247,7 +246,7 @@ export function classifyGeminiError(err: any): RetryClassification {
   if (structuredReason === 'RATE_LIMIT_EXCEEDED') {
     return {
       shouldRetry: true,
-      status: 429,
+      status: status !== undefined ? status : 429,
       reason: 'transient_rate_limit',
       isTransient: true
     };
@@ -256,7 +255,7 @@ export function classifyGeminiError(err: any): RetryClassification {
   if (structuredReason === 'QUOTA_EXCEEDED' || structuredReason === 'CONFLICTING_QUOTA_OR_RATE_LIMIT') {
     return {
       shouldRetry: false,
-      status: status || 429,
+      status: status !== undefined ? status : 429,
       reason: 'quota_or_credential_exhausted',
       isTransient: false
     };

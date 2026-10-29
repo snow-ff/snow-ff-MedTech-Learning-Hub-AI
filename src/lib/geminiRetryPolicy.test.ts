@@ -399,7 +399,7 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       };
       const res2 = classifyGeminiError(errWithAuthConflict);
       expect(res2.reason).toBe('client_error');
-      expect(res2.status).toBe(401);
+      expect(res2.status).toBe(429); // Preserves authentic detected status without synthetic tampering
       expect(res2.shouldRetry).toBe(false); // MUST NOT retry an invalid API key!
 
       // 3. Irreconcilable conflict between RATE_LIMIT_EXCEEDED and QUOTA_EXCEEDED falls back safely to non-retryable
@@ -437,6 +437,66 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       const res3 = classifyGeminiError(errWithSocketDrop);
       expect(res3.shouldRetry).toBe(true);
       expect(res3.reason).toBe('transient_timeout_or_network');
+    });
+
+    // Final Targeted Fix: Container Integrity & Authentic Status Preservation
+    it('should aggregate reasons across err.errorDetails, errorObj.errorDetails, errorObj.details, and err.details without ternary dropping', () => {
+      // Both err.errorDetails AND errorObj.errorDetails are present with different reasons
+      const multiSourceError = {
+        errorDetails: [{ reason: 'UNKNOWN_DIAGNOSTIC' }],
+        error: {
+          errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }]
+        },
+        message: 'API issue'
+      };
+      const res1 = classifyGeminiError(multiSourceError);
+      expect(res1.reason).toBe('transient_rate_limit');
+      expect(res1.shouldRetry).toBe(true);
+
+      // Both errorObj.details AND err.details are present without being shadowed
+      const multiGenericDetails = {
+        details: [{ reason: 'UNKNOWN_NOTE' }],
+        error: {
+          details: [{ reason: 'QUOTA_EXCEEDED' }]
+        },
+        status: 429,
+        message: 'Usage problem'
+      };
+      const res2 = classifyGeminiError(multiGenericDetails);
+      expect(res2.reason).toBe('quota_or_credential_exhausted');
+      expect(res2.shouldRetry).toBe(false);
+    });
+
+    it('should preserve authentic HTTP status for non-standard 5xx and cross combinations without tampering', () => {
+      // 1. QUOTA_EXCEEDED together with HTTP 503 preserves 503 status
+      const quotaWith503 = {
+        status: 503,
+        errorDetails: [{ reason: 'QUOTA_EXCEEDED' }],
+        message: 'Backend unavailable while checking quota'
+      };
+      const resQuota503 = classifyGeminiError(quotaWith503);
+      expect(resQuota503.status).toBe(503);
+      expect(resQuota503.reason).toBe('quota_or_credential_exhausted');
+      expect(resQuota503.shouldRetry).toBe(false);
+
+      // 2. Non-standard 5xx (e.g. HTTP 529 or 521) is recognized as transient_service_unavailable with genuine status
+      const nonStandard5xx = {
+        status: 529,
+        message: 'Site is overloaded'
+      };
+      const res529 = classifyGeminiError(nonStandard5xx);
+      expect(res529.status).toBe(529);
+      expect(res529.reason).toBe('transient_service_unavailable');
+      expect(res529.shouldRetry).toBe(true);
+
+      // 3. Fallback default status 401/403 when no HTTP status exists
+      const authWithoutStatus = {
+        errorDetails: [{ reason: 'API_KEY_INVALID' }],
+        message: 'Expired key'
+      };
+      const resAuth = classifyGeminiError(authWithoutStatus);
+      expect(resAuth.status).toBe(401);
+      expect(resAuth.reason).toBe('client_error');
     });
   });
 

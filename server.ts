@@ -1650,6 +1650,8 @@ ${formattedChunks}
         serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP ${classification.status}) — ${modeNotice})*\n\n`;
       } else if (classification.status === 400) {
         serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 429) {
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคีย์ API ขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
       } else {
         serviceNoticeText = `*(แจ้งเตือน: คำขอหรือการตั้งค่าสิทธิ์ไม่ถูกต้อง (HTTP ${classification.status || 400}) — ${modeNotice})*\n\n`;
       }
@@ -1658,17 +1660,31 @@ ${formattedChunks}
         serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 500 Internal Server Error) — ${modeNotice})*\n\n`;
       } else if (classification.status === 502) {
         serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 502 Bad Gateway) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
       } else if (classification.status === 504) {
         serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 504 Gateway Timeout) — ${modeNotice})*\n\n`;
       } else {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP ${classification.status || 503} Service Unavailable) — ${modeNotice})*\n\n`;
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status || '5xx'} Server Error) — ${modeNotice})*\n\n`;
       }
     } else if (classification.reason === 'transient_timeout_or_network') {
       serviceNoticeText = `*(แจ้งเตือน: การเชื่อมต่อไปยัง Gemini AI หมดเวลาหรือขาดการเชื่อมต่อชั่วคราว (Network/Timeout) — ${modeNotice})*\n\n`;
     } else if (classification.reason === 'quota_or_credential_exhausted') {
-      serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งาน Gemini API เต็มหรือถูกจำกัด (HTTP ${classification.status || 429} Quota Exceeded) — ${modeNotice})*\n\n`;
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งาน Gemini API เต็มหรือถูกจำกัด (HTTP ${classification.status || 429} Quota Exceeded) — ${modeNotice})*\n\n`;
+      }
     } else if (classification.reason === 'transient_rate_limit') {
-      serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP ${classification.status || 429} Rate Limit) — ${modeNotice})*\n\n`;
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP ${classification.status || 429} Rate Limit) — ${modeNotice})*\n\n`;
+      }
     } else {
       serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ${modeNotice})*\n\n`;
     }
