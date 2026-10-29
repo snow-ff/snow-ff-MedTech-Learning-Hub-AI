@@ -29,7 +29,8 @@ import {
   ChevronUp,
   Layers,
   Check,
-  Globe
+  Globe,
+  History
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
@@ -212,6 +213,20 @@ export default function App() {
       timestamp: new Date()
     }
   ]);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('medtech_search_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(0, 10);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  });
   const [inputQuery, setInputQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingStatus, setGeneratingStatus] = useState('กำลังเตรียมข้อมูลและวิเคราะห์คำถาม...');
@@ -367,10 +382,20 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, queryOverride?: string) => {
     if (e) e.preventDefault();
-    const queryText = inputQuery.trim();
+    const queryText = (queryOverride !== undefined ? queryOverride : inputQuery).trim();
     if (!queryText || isGenerating) return;
+
+    setSearchHistory((prev) => {
+      const updated = [queryText, ...prev.filter((q) => q !== queryText)].slice(0, 10);
+      try {
+        localStorage.setItem('medtech_search_history', JSON.stringify(updated));
+      } catch (err) {
+        // ignore
+      }
+      return updated;
+    });
 
     abortControllerRef.current = new AbortController();
     const currentSessionId = chatSessionIdRef.current;
@@ -1398,6 +1423,49 @@ export default function App() {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {/* Search History Bar (Track: Last 10 queries) */}
+            {searchHistory.length > 0 && (
+              <div className="px-3.5 sm:px-4 py-2 bg-slate-900/95 border-t border-slate-800 flex items-center gap-2 overflow-x-auto text-xs">
+                <span className="text-slate-400 font-medium shrink-0 flex items-center gap-1">
+                  <History className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>ค้นหาล่าสุด:</span>
+                </span>
+                <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 min-w-0">
+                  {searchHistory.map((query, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isGenerating}
+                      onClick={() => {
+                        if (!isGenerating) {
+                          handleSendMessage(undefined, query);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 hover:text-white border border-slate-700/80 shrink-0 truncate max-w-[220px] transition-colors flex items-center gap-1 cursor-pointer"
+                      title={`คลิกเพื่อทำซ้ำการค้นหา: "${query}"`}
+                    >
+                      <span className="truncate">{query}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchHistory([]);
+                    try {
+                      localStorage.removeItem('medtech_search_history');
+                    } catch (err) {
+                      // ignore
+                    }
+                  }}
+                  className="ml-auto text-slate-500 hover:text-rose-400 text-[11px] shrink-0 px-2 py-1 transition-colors cursor-pointer"
+                  title="ล้างประวัติการค้นหาทั้งหมด"
+                >
+                  ล้างประวัติ
+                </button>
+              </div>
+            )}
 
             {/* Responsive Chat Input Form */}
             <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900 border-t border-slate-800 flex flex-col gap-2.5">
