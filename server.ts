@@ -1215,7 +1215,9 @@ app.post("/api/gemini/generate", async (req, res) => {
 หมายเหตุสำคัญ: บริบทรายวิชานี้เป็นเป้าหมายการเรียนรู้ของผู้เรียน ไม่ใช่เอกสารอ้างอิงหรือหลักฐานทางวิชาการ หากไม่มีเอกสารอัปโหลดใน documentContext ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็นความรู้ทั่วไป และห้ามสร้างเลขหน้าหรืออ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`;
   }
 
+  const isCurriculumQuery = determineTopic(latestPrompt, validatedMessages) === 'dtm';
   const isDocumentGrounding = Boolean(
+    !isCurriculumQuery &&
     searchMode !== 'web_search' &&
     documentContext &&
     typeof documentContext === 'object' &&
