@@ -106,6 +106,95 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       }
     });
 
+    it('should classify co-occurrence of generate_content_free_tier_requests AND Rate Limit (various casings) as retryable transient_rate_limit', () => {
+      const coOccurrenceCases = [
+        'Resource has been exhausted (e.g. check quota): generate_content_free_tier_requests per minute rate limit exceeded',
+        'Resource has been exhausted: generate_content_free_tier_requests Rate Limit exceeded',
+        'Resource has been exhausted: generate_content_free_tier_requests RATE_LIMIT',
+        'Resource has been exhausted: generate_content_free_tier_requests Rate-Limit reached',
+        'generate_content_free_tier_requests: Requests per minute limit exceeded'
+      ];
+
+      for (const msg of coOccurrenceCases) {
+        const classification = classifyGeminiError({ message: msg });
+        expect(classification.shouldRetry).toBe(true);
+        expect(classification.isTransient).toBe(true);
+        expect(classification.status).toBe(429);
+        expect(classification.reason).toBe('transient_rate_limit');
+      }
+    });
+
+    it('should classify generate_content_free_tier_requests with daily quota or without rate limit as non-retryable quota exhaustion', () => {
+      const dailyOrStandaloneCases = [
+        'Resource has been exhausted (e.g. check quota): generate_content_free_tier_requests',
+        'Quota exceeded for quota metric generate_content_free_tier_requests and limit Requests per day',
+        'generate_content_free_tier_requests: daily quota reached'
+      ];
+
+      for (const msg of dailyOrStandaloneCases) {
+        const classification = classifyGeminiError({ message: msg });
+        expect(classification.shouldRetry).toBe(false);
+        expect(classification.isTransient).toBe(false);
+        expect(classification.status).toBe(429);
+        expect(classification.reason).toBe('quota_or_credential_exhausted');
+      }
+    });
+
+    it('should NOT treat help URLs containing rate-limits as a rate limit keyword when quota is exhausted', () => {
+      const liveGoogleQuotaError = {
+        status: 429,
+        message: 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit.'
+      };
+
+      const classification = classifyGeminiError(liveGoogleQuotaError);
+      expect(classification.shouldRetry).toBe(false);
+      expect(classification.isTransient).toBe(false);
+      expect(classification.status).toBe(429);
+      expect(classification.reason).toBe('quota_or_credential_exhausted');
+    });
+
+    it('should prioritize structured reason and status before text search', () => {
+      // 1. Structured RATE_LIMIT_EXCEEDED over conflicting text containing Quota
+      const structuredRateLimit = {
+        status: 429,
+        errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }],
+        message: 'Quota exceeded for metric generate_content_free_tier_requests'
+      };
+      const res1 = classifyGeminiError(structuredRateLimit);
+      expect(res1.shouldRetry).toBe(true);
+      expect(res1.reason).toBe('transient_rate_limit');
+
+      // 2. Structured QUOTA_EXCEEDED over conflicting text containing Rate Limit
+      const structuredQuota = {
+        status: 429,
+        errorDetails: [{ reason: 'QUOTA_EXCEEDED' }],
+        message: 'Rate limit encountered on endpoint'
+      };
+      const res2 = classifyGeminiError(structuredQuota);
+      expect(res2.shouldRetry).toBe(false);
+      expect(res2.reason).toBe('quota_or_credential_exhausted');
+
+      // 3. Structured INVALID_ARGUMENT
+      const structuredBadArg = {
+        error: { status: 'INVALID_ARGUMENT' },
+        message: 'Bad argument provided'
+      };
+      const res3 = classifyGeminiError(structuredBadArg);
+      expect(res3.shouldRetry).toBe(false);
+      expect(res3.status).toBe(400);
+      expect(res3.reason).toBe('client_error');
+
+      // 4. Structured PERMISSION_DENIED
+      const structuredPerm = {
+        error: { status: 'PERMISSION_DENIED' },
+        message: 'Forbidden call'
+      };
+      const res4 = classifyGeminiError(structuredPerm);
+      expect(res4.shouldRetry).toBe(false);
+      expect(res4.status).toBe(403);
+      expect(res4.reason).toBe('client_error');
+    });
+
     it('should resolve specific 5xx status from message when status property is absent', () => {
       expect(classifyGeminiError({ message: '500 Internal Server Error' }).status).toBe(500);
       expect(classifyGeminiError({ message: '502 Bad Gateway' }).status).toBe(502);

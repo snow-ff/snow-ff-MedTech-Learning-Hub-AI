@@ -55,11 +55,63 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  const message = String(err.message || '');
-  const statusMatch = message.match(/\b(503|502|504|500|408|429|400|401|403|404|413|422)\b/);
-  const status = Number(err.status || err.statusCode || (statusMatch ? statusMatch[1] : undefined));
+  // 1. Structured error fields extraction
+  const errorObj = err.error || err;
+  const statusMatch = String(err.message || '').match(/\b(503|502|504|500|408|429|400|401|403|404|413|422)\b/);
+  const status = Number(err.status || err.statusCode || errorObj.code || (statusMatch ? statusMatch[1] : undefined));
+  const statusString = String(errorObj.status || err.code || '').toUpperCase();
 
-  // 1. Non-retryable permanent client errors (400 Bad Request, 401/403 Auth/Permission, 404 Not Found, 413, 422)
+  // Search structured reason from errorDetails or details array
+  const detailsArray = Array.isArray(err.errorDetails)
+    ? err.errorDetails
+    : Array.isArray(errorObj.details)
+    ? errorObj.details
+    : [];
+  const detailReasonItem = detailsArray.find((d: any) => d && typeof d.reason === 'string');
+  const structuredReason = String(err.reason || (detailReasonItem ? detailReasonItem.reason : '')).toUpperCase();
+
+  // 2. Structured Reason & Status classification (Checked FIRST before text searching)
+  if (structuredReason === 'RATE_LIMIT_EXCEEDED') {
+    return {
+      shouldRetry: true,
+      status: 429,
+      reason: 'transient_rate_limit',
+      isTransient: true
+    };
+  }
+
+  if (structuredReason === 'QUOTA_EXCEEDED') {
+    return {
+      shouldRetry: false,
+      status: 429,
+      reason: 'quota_or_credential_exhausted',
+      isTransient: false
+    };
+  }
+
+  if (structuredReason === 'API_KEY_INVALID' || statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED') {
+    return {
+      shouldRetry: false,
+      status: status || (statusString === 'PERMISSION_DENIED' || structuredReason === 'PERMISSION_DENIED' ? 403 : 401),
+      reason: 'client_error',
+      isTransient: false
+    };
+  }
+
+  if (statusString === 'INVALID_ARGUMENT' || structuredReason === 'INVALID_ARGUMENT') {
+    return {
+      shouldRetry: false,
+      status: 400,
+      reason: 'client_error',
+      isTransient: false
+    };
+  }
+
+  const message = String(err.message || '');
+  // Strip URLs so help documentation links (e.g. https://.../rate-limits) do not pollute keyword matching
+  const messageWithoutUrls = message.replace(/https?:\/\/[^\s)]+/g, '');
+
+  // 3. Non-retryable permanent client errors (400 Bad Request, 401/403 Auth/Permission, 404 Not Found, 413, 422)
   const isClientError =
     status === 400 ||
     status === 401 ||
@@ -67,21 +119,21 @@ export function classifyGeminiError(err: any): RetryClassification {
     status === 404 ||
     status === 413 ||
     status === 422 ||
-    message.includes('INVALID_ARGUMENT') ||
-    message.includes('Invalid argument') ||
-    message.includes('API_KEY_INVALID') ||
-    message.includes('API key not valid') ||
-    message.includes('PERMISSION_DENIED') ||
-    message.includes('Unauthorized') ||
-    message.includes('NOT_FOUND');
+    messageWithoutUrls.includes('INVALID_ARGUMENT') ||
+    messageWithoutUrls.includes('Invalid argument') ||
+    messageWithoutUrls.includes('API_KEY_INVALID') ||
+    messageWithoutUrls.includes('API key not valid') ||
+    messageWithoutUrls.includes('PERMISSION_DENIED') ||
+    messageWithoutUrls.includes('Unauthorized') ||
+    messageWithoutUrls.includes('NOT_FOUND');
 
   if (isClientError) {
     let resolvedStatus = status;
     if (!resolvedStatus) {
-      if (message.includes('INVALID_ARGUMENT') || message.includes('Invalid argument')) resolvedStatus = 400;
-      else if (message.includes('API_KEY_INVALID') || message.includes('API key not valid') || message.includes('Unauthorized')) resolvedStatus = 401;
-      else if (message.includes('PERMISSION_DENIED')) resolvedStatus = 403;
-      else if (message.includes('NOT_FOUND')) resolvedStatus = 404;
+      if (messageWithoutUrls.includes('INVALID_ARGUMENT') || messageWithoutUrls.includes('Invalid argument')) resolvedStatus = 400;
+      else if (messageWithoutUrls.includes('API_KEY_INVALID') || messageWithoutUrls.includes('API key not valid') || messageWithoutUrls.includes('Unauthorized')) resolvedStatus = 401;
+      else if (messageWithoutUrls.includes('PERMISSION_DENIED')) resolvedStatus = 403;
+      else if (messageWithoutUrls.includes('NOT_FOUND')) resolvedStatus = 404;
       else resolvedStatus = 400;
     }
     return {
@@ -92,15 +144,50 @@ export function classifyGeminiError(err: any): RetryClassification {
     };
   }
 
-  // 2. Non-retryable quota exhaustion (explicitly 429 with RESOURCE_EXHAUSTED or Quota exceeded)
-  const isRateLimitMentioned = /rate[\s_-]?limit/i.test(message);
-  const isQuotaExhausted =
-    message.includes('generate_content_free_tier_requests') ||
-    /quota\s*exceeded/i.test(message) ||
-    /exceeded your current quota/i.test(message) ||
-    (message.includes('RESOURCE_EXHAUSTED') && !isRateLimitMentioned);
+  // 4. Rate Limit vs Quota Exhaustion (resolving co-occurrence cleanly)
+  // Daily / Billing / Permanent Quota signals take priority over burst rate limits:
+  const isDailyOrPlanQuota =
+    /exceeded your current quota/i.test(messageWithoutUrls) ||
+    /check your plan and billing/i.test(messageWithoutUrls) ||
+    /per[\s_-]?day/i.test(messageWithoutUrls) ||
+    /daily[\s_-]?quota/i.test(messageWithoutUrls) ||
+    /quota metric '.*' and limit '.*per day'/i.test(messageWithoutUrls);
 
-  if (isQuotaExhausted) {
+  // Rate Limit signals (per-minute, RPM, burst, or explicit rate limit phrase)
+  const isRateLimitMentioned =
+    /rate[\s_-]?limit/i.test(messageWithoutUrls) ||
+    /per[\s_-]?minute/i.test(messageWithoutUrls) ||
+    /\bRPM\b/i.test(messageWithoutUrls) ||
+    /too many requests/i.test(messageWithoutUrls);
+
+  // If daily/plan quota is exceeded, it cannot be retried even if rate limit is mentioned:
+  if (isDailyOrPlanQuota) {
+    return {
+      shouldRetry: false,
+      status: status || 429,
+      reason: 'quota_or_credential_exhausted',
+      isTransient: false
+    };
+  }
+
+  // If rate limit is mentioned (even alongside generate_content_free_tier_requests or RESOURCE_EXHAUSTED):
+  // e.g. "generate_content_free_tier_requests per minute Rate Limit exceeded" -> this is transient per-minute rate limit!
+  if (isRateLimitMentioned) {
+    return {
+      shouldRetry: true,
+      status: 429,
+      reason: 'transient_rate_limit',
+      isTransient: true
+    };
+  }
+
+  // If free tier or quota is mentioned without rate limit or per-minute burst:
+  const isGenericQuotaExhausted =
+    messageWithoutUrls.includes('generate_content_free_tier_requests') ||
+    /quota\s*exceeded/i.test(messageWithoutUrls) ||
+    messageWithoutUrls.includes('RESOURCE_EXHAUSTED');
+
+  if (isGenericQuotaExhausted) {
     return {
       shouldRetry: false,
       status: status || 429,
