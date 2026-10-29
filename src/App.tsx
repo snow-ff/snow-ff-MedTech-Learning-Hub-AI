@@ -1895,23 +1895,60 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
               <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
                 {/* Search Bar */}
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={curriculumSearch}
-                    onChange={(e) => setCurriculumSearch(e.target.value)}
-                    placeholder="ค้นหารหัสวิชา (เช่น DTM67-111, GEN67-121) หรือชื่อวิชาภาษาไทย / ภาษาอังกฤษ..."
-                    className="w-full pl-11 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
-                  />
-                  {curriculumSearch && (
+                <div className="relative flex-1 space-y-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={curriculumSearch}
+                      onChange={(e) => setCurriculumSearch(e.target.value)}
+                      placeholder="ค้นหารหัสวิชา (เช่น DTM67-111, GEN67-121) หรือชื่อวิชาภาษาไทย / ภาษาอังกฤษ..."
+                      className="w-full pl-11 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                    />
+                    {curriculumSearch && (
+                      <button
+                        onClick={() => setCurriculumSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Core Curriculum Quick Filter Pills */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-slate-400 font-medium">คำค้นด่วนหลักสูตร (Core Filters):</span>
                     <button
-                      onClick={() => setCurriculumSearch('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs transition-colors"
+                      onClick={() => setCurriculumSearch('DTM2567')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                        curriculumSearch === 'DTM2567'
+                          ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 border border-cyan-500'
+                          : 'bg-slate-950 border border-slate-800 text-cyan-400 hover:bg-slate-800 hover:text-cyan-300'
+                      }`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>DTM2567</span>
                     </button>
-                  )}
+                    <button
+                      onClick={() => setCurriculumSearch('วิทยาศาสตรบัณฑิต')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                        curriculumSearch === 'วิทยาศาสตรบัณฑิต'
+                          ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 border border-cyan-500'
+                          : 'bg-slate-950 border border-slate-800 text-cyan-400 hover:bg-slate-800 hover:text-cyan-300'
+                      }`}
+                    >
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      <span>วิทยาศาสตรบัณฑิต</span>
+                    </button>
+                    {curriculumSearch && (
+                      <button
+                        onClick={() => setCurriculumSearch('')}
+                        className="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        ล้างคำค้น
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* View Mode Toggle */}
