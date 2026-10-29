@@ -39,7 +39,7 @@ export const DEFAULT_RETRY_CONFIG: RetryPolicyConfig = {
   baseDelayMs: 600,
   backoffFactor: 1.5,
   maxJitterMs: 250,
-  attemptTimeoutMs: 45000 // Increased to 45s to allow Google Search Grounding enough time without premature timeout (status 20 aborted)
+  attemptTimeoutMs: 18000 // Optimized to 18s per attempt to enter safe academic fallback faster without hanging
 };
 
 /**

@@ -6,7 +6,8 @@ import {
   decodeHtmlEntities,
   retrieveGroundedChunks,
   extractRelevantExcerpt,
-  validateAndResolveLocator
+  validateAndResolveLocator,
+  cleanChunkLocator
 } from './documentChunker';
 import { DocumentChunk } from '../models/coreModel';
 
@@ -267,6 +268,12 @@ Biosafety levels (BSL-1 to BSL-4) in clinical laboratories.`;
       const res = validateAndResolveLocator(encodedChunk, true);
       expect(res.isVerified).toBe(true);
       expect(res.locator).toBe('ส่วนที่ 3');
+    });
+
+    it('Case 8: HTML entity encoded locators with &#xE49; and &#x32; correctly decode and clean without unverified artifacts', () => {
+      const htmlEntityLocator = 'หน้า &#xE49;&#x32;'; // e.g. mai tho + 2 -> decoded or cleaned
+      const cleaned = cleanChunkLocator(undefined, htmlEntityLocator);
+      expect(cleaned).not.toContain('&#');
     });
   });
 });
