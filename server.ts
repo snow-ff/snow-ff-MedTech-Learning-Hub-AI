@@ -1436,13 +1436,13 @@ ${formattedChunks}
       if (process.env.VITEST) {
         console.log(`[Req ${requestId}] [Perf Backend] Using Deterministic Offline Mock (VITEST mode) - attempt: ${attempt}/${maxAttempts}`);
       } else {
-        console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-2.5-flash, thinkingLevel: LOW`);
+        console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
       }
       // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
       let response: any;
       if (process.env.VITEST && customGeminiMock) {
         const tools = isDocumentGrounding ? undefined : [{ googleSearch: {} }];
-        response = await customGeminiMock({ model: "gemini-2.5-flash", contents, systemInstruction, isDocumentGrounding, tools });
+        response = await customGeminiMock({ model: "gemini-3.8-flash", contents, systemInstruction, isDocumentGrounding, tools });
       } else if (process.env.VITEST) {
         response = {
           text: "ผลลัพธ์จำลองออฟไลน์จาก Mock Gemini สำหรับการทดสอบ (Offline Mock Response)",
@@ -1459,7 +1459,7 @@ ${formattedChunks}
         };
       } else {
         response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.8-flash",
           contents,
           config: {
             systemInstruction,
