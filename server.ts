@@ -1627,7 +1627,10 @@ ${formattedChunks}
 
       const classification = classifyGeminiError(err);
       const safeMeta = extractSafeGeminiErrorMeta(err);
-      console.error(`[Req ${requestId}] [GEMINI ERROR DIAGNOSTIC] status: ${safeMeta.status}, message: "${safeMeta.message}", details: ${JSON.stringify(safeMeta.details)}`);
+      const sanitizedMessage = typeof safeMeta.message === 'string'
+        ? safeMeta.message.replace(/AIzaSy[A-Za-z0-9_-]{33}/g, '[REDACTED_API_KEY]').substring(0, 300)
+        : '';
+      console.error(`[Req ${requestId}] [GEMINI ERROR DIAGNOSTIC v1.2] status: ${safeMeta.status || 'unknown'}, msg: "${sanitizedMessage}", detailsCount: ${safeMeta.errorDetailsCount}, details: ${JSON.stringify(safeMeta.details)}`);
       const canRetry = classification.shouldRetry && attempt < maxAttempts;
 
       if (!canRetry) {
