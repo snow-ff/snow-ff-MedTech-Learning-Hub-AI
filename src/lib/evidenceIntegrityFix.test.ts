@@ -1530,6 +1530,16 @@ describe('Evidence Integrity Fix Regression Tests (Tests A, B, C, D)', () => {
     });
     expect(res.isVerified).toBe(false);
   });
+
+  it('Edge Case: === บทที่ 3 หรือ --- ส่วนที่ 3 กลางประโยคธรรมดาต้องไม่ถูกดึงเป็น Genuine Heading', () => {
+    const textInline1 = 'ตัวอย่างข้อความทั่วไปที่มีคำว่า === บทที่ 3: Suffix === อยู่ตรงกลางประโยค';
+    const headingsInline1 = extractGenuineHeadings(textInline1);
+    expect(headingsInline1.numbers).not.toContain(3);
+
+    const textInline2 = 'ข้อความธรรมดาที่กล่าวถึง --- ส่วนที่ 3 ภายในประโยค';
+    const headingsInline2 = extractGenuineHeadings(textInline2);
+    expect(headingsInline2.numbers).not.toContain(3);
+  });
 });
 
 
