@@ -222,7 +222,7 @@ function getDirectTopic(text: string): string | null {
   if (t.includes("deep learning") || t.includes("cnn") || t.includes("ภาพถ่ายทางการแพทย์") || t.includes("u-net") || t.includes("ai ทางการแพทย์") || t.includes("ปัญญาประดิษฐ์ทางการแพทย์")) {
     return 'dtm_ai';
   }
-  if (t.includes("dtm") || t.includes("หลักสูตร") || t.includes("หน่วยกิต") || t.includes("วลัยลักษณ์") || t.includes("เทคโนโลยีดิจิทัล")) {
+  if (t.includes("dtm67") || t.includes("dtm2567") || t.includes("dtm 2567") || t.includes("วิทยาศาสตรบัณฑิต") || t.includes("dtm") || t.includes("หลักสูตร") || t.includes("หน่วยกิต") || t.includes("วลัยลักษณ์") || t.includes("เทคโนโลยีดิจิทัล")) {
     return 'dtm';
   }
   return null;

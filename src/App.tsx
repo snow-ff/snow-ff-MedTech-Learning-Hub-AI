@@ -284,7 +284,8 @@ export default function App() {
         const en = (course.titleEnglish || '').toLowerCase();
         const sub = (course.subCategory || '').toLowerCase();
         const hours = (course.hours || '').toLowerCase();
-        if (!code.includes(q) && !th.includes(q) && !en.includes(q) && !sub.includes(q) && !hours.includes(q)) {
+        const isCoreCurriculumQuery = q.includes('dtm2567') || q.includes('dtm 2567') || q.includes('วิทยาศาสตรบัณฑิต') || q.includes('เทคโนโลยีดิจิทัลทางการแพทย์') || q.includes('หลักสูตร');
+        if (!isCoreCurriculumQuery && !code.includes(q) && !th.includes(q) && !en.includes(q) && !sub.includes(q) && !hours.includes(q)) {
           return false;
         }
       }
