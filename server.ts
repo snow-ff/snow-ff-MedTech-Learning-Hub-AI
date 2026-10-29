@@ -443,19 +443,22 @@ function buildChunkReferences(
 
     const isChunkUnsupported = !isChunkTopicRelevant;
     const cleanDocTitle = decodeHtmlEntities(documentContext.title || '');
+    const decodedSectionTitle = decodeHtmlEntities(sectionTitle || '');
+    const decodedExcerpt = decodeHtmlEntities(excerpt || '');
+    const decodedLocator = decodeHtmlEntities(finalLocator || '');
 
     const chunkId = (c as any).id || c.chunkIndex || `ref-${idx}`;
     return {
-      title: `เอกสาร: ${cleanDocTitle} — ${sectionTitle}`,
+      title: decodeHtmlEntities(`เอกสาร: ${cleanDocTitle} — ${decodedSectionTitle}`),
       uri: `#chunk-${chunkId}`,
       type: "document_chunk",
       pageNumber: safePage,
       linkAccessStatus: "verified_local",
       verificationStatus: isChunkUnsupported ? ("unsupported_citation" as const) : ("source_grounded" as const),
-      evidenceLocator: finalLocator,
+      evidenceLocator: decodedLocator,
       isLocatorVerified: resolvedLocator.isVerified,
       sourceLocatorProvenance: resolvedLocator.provenance,
-      excerpt,
+      excerpt: decodedExcerpt,
       contentVersion: "1.2"
     };
   });
@@ -1604,7 +1607,7 @@ ${formattedChunks}
         groundingMetadata.groundingChunks.forEach((chunk: any, origIdx: number) => {
           if (chunk.web && chunk.web.uri && chunk.web.title) {
             const uri = chunk.web.uri.trim();
-            const title = chunk.web.title.trim();
+            const title = decodeHtmlEntities(chunk.web.title.trim());
             if (title && (uri.startsWith("http://") || uri.startsWith("https://"))) {
               const existingIdx = references.findIndex(r => r.uri === uri);
               if (existingIdx !== -1) {
