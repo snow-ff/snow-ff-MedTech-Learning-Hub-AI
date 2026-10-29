@@ -49,32 +49,72 @@ export function setCustomGeminiMock(mockFn: ((params: any) => Promise<any>) | nu
   customGeminiMock = mockFn;
 }
 
-function extractSafeGeminiErrorMeta(err: any) {
+export function sanitizeErrorText(text: unknown): string {
+  if (typeof text !== 'string') {
+    if (text === null || text === undefined) return '';
+    try {
+      text = String(text);
+    } catch {
+      return '';
+    }
+  }
+  return (text as string)
+    .replace(/AIzaSy[A-Za-z0-9_-]{33}/g, '[REDACTED_API_KEY]')
+    .replace(/Bearer\s+[A-Za-z0-9_.-]+/gi, 'Bearer [REDACTED_TOKEN]')
+    .replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, '[REDACTED_EMAIL]')
+    .substring(0, 250);
+}
+
+export function sanitizeMetadata(meta: unknown): Record<string, string | number | boolean> | undefined {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+    return undefined;
+  }
+  const allowedKeys = ['quotaMetric', 'quotaId', 'service', 'consumer', 'limit', 'actual'];
+  const sanitized: Record<string, string | number | boolean> = {};
+  for (const key of allowedKeys) {
+    if (Object.prototype.hasOwnProperty.call(meta, key)) {
+      const val = (meta as Record<string, any>)[key];
+      if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+        sanitized[key] = typeof val === 'string' ? sanitizeErrorText(val) : val;
+      }
+    }
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+export function extractSafeGeminiErrorMeta(err: any) {
   if (!err || typeof err !== 'object') {
-    return { message: String(err) };
+    return { status: undefined, message: sanitizeErrorText(String(err)), errorDetailsCount: 0, details: [] };
   }
   const errorObj = err.error && typeof err.error === 'object' ? err.error : err;
   const status = err.status || err.statusCode || err.code || errorObj.status || errorObj.statusCode || errorObj.code;
-  const message = typeof err.message === 'string' ? err.message : String(err);
+  const message = sanitizeErrorText(err.message || errorObj.message || String(err));
   
-  const detailsContainers = [
+  const rawContainers = [
     err.errorDetails,
     errorObj.errorDetails,
     errorObj.details,
     err.details
   ];
+  const detailsContainers = rawContainers.filter((c, idx, arr) => c && Array.isArray(c) && arr.indexOf(c) === idx);
 
-  const extractedDetails: Array<{ reason?: string; quotaMetric?: string; quotaId?: string; domain?: string; metadata?: any }> = [];
+  const extractedDetails: Array<{ reason?: string; quotaMetric?: string; quotaId?: string; domain?: string; metadata?: Record<string, any> }> = [];
   for (const container of detailsContainers) {
     if (Array.isArray(container)) {
       for (const item of container) {
         if (item && typeof item === 'object') {
+          const reason = typeof item.reason === 'string' ? sanitizeErrorText(item.reason) : undefined;
+          const quotaMetric = sanitizeErrorText(item.quotaMetric || item.metadata?.quotaMetric);
+          const quotaId = sanitizeErrorText(item.quotaId || item.metadata?.quotaId);
+          const domain = typeof item.domain === 'string' ? sanitizeErrorText(item.domain) : undefined;
+          const metadata = sanitizeMetadata(item.metadata);
+
           extractedDetails.push({
-            reason: item.reason,
-            quotaMetric: item.quotaMetric || item.metadata?.quotaMetric,
-            quotaId: item.quotaId || item.metadata?.quotaId,
-            domain: item.domain,
-            metadata: item.metadata
+            ...(reason ? { reason } : {}),
+            ...(quotaMetric ? { quotaMetric } : {}),
+            ...(quotaId ? { quotaId } : {}),
+            ...(domain ? { domain } : {}),
+            ...(metadata ? { metadata } : {})
           });
         }
       }
