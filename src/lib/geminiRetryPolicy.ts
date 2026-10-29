@@ -35,11 +35,11 @@ export interface RetryPolicyConfig {
 }
 
 export const DEFAULT_RETRY_CONFIG: RetryPolicyConfig = {
-  maxAttempts: 2, // 1 initial attempt + 1 retry for transient errors (avoids 15-20s waiting)
+  maxAttempts: 2, // 1 initial attempt + 1 retry for transient errors
   baseDelayMs: 600,
   backoffFactor: 1.5,
   maxJitterMs: 250,
-  attemptTimeoutMs: 12000
+  attemptTimeoutMs: 45000 // Increased to 45s to allow Google Search Grounding enough time without premature timeout (status 20 aborted)
 };
 
 /**
@@ -49,6 +49,7 @@ export const DEFAULT_RETRY_CONFIG: RetryPolicyConfig = {
 // Helper to safely parse HTTP status without type-coercion bugs
 function parseCandidateStatus(val: unknown): number | undefined {
   if (typeof val === 'number') {
+    if (val === 20) return 408; // gRPC CANCELLED/aborted maps to 408 timeout
     if (Number.isInteger(val) && val >= 100 && val <= 599) {
       return val;
     }
@@ -56,6 +57,7 @@ function parseCandidateStatus(val: unknown): number | undefined {
   }
   if (typeof val === 'string') {
     const trimmed = val.trim();
+    if (trimmed === '20') return 408;
     if (/^[1-5]\d{2}$/.test(trimmed)) {
       const parsed = Number(trimmed);
       if (Number.isInteger(parsed) && parsed >= 100 && parsed <= 599) {

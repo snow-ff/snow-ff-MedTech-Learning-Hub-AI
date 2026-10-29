@@ -324,6 +324,57 @@ export default function App() {
     return filteredCourses.reduce((sum, c) => sum + (c.isNonCredit ? 0 : c.credits), 0);
   }, [filteredCourses]);
 
+  const learningProgressSummary = React.useMemo(() => {
+    const allQueriesText = searchHistory.join(' ').toLowerCase();
+    const recommendations: Array<{ course: CourseItem; reason: string }> = [];
+
+    const keywordCourseMap = [
+      {
+        keywords: ['ehr', 'emr', 'his', 'cdss', 'เวชระเบียน', 'สารสนเทศสุขภาพ', 'telemedicine'],
+        courseCode: 'DTM67-212',
+        reason: 'จากประวัติคำค้นหาเกี่ยวกับระบบสารสนเทศสุขภาพและเวชระเบียนอิเล็กทรอนิกส์'
+      },
+      {
+        keywords: ['dicom', 'pacs', 'hl7', 'fhir', 'icd', 'loinc', 'มาตรฐาน'],
+        courseCode: 'DTM67-331',
+        reason: 'จากประวัติคำค้นหาเกี่ยวกับมาตรฐานข้อมูลสุขภาพและการแลกเปลี่ยนข้อมูล (HL7 FHIR / DICOM)'
+      },
+      {
+        keywords: ['ai', 'cnn', 'u-net', 'deep learning', 'ปัญญาประดิษฐ์', 'ภาพถ่ายทางการแพทย์'],
+        courseCode: 'DTM67-411',
+        reason: 'จากประวัติคำค้นหาเกี่ยวกับปัญญาประดิษฐ์และการวิเคราะห์ภาพทางการแพทย์'
+      },
+      {
+        keywords: ['cbc', 'เม็ดเลือด', 'flow cytometry', 'pcr', 'ซีรั่ม', 'พลาสมา'],
+        courseCode: 'DTM67-111',
+        reason: 'จากประวัติคำค้นหาเกี่ยวกับพื้นฐานห้องปฏิบัติการทางการแพทย์และโลหิตวิทยา'
+      }
+    ];
+
+    keywordCourseMap.forEach(mapping => {
+      const matched = mapping.keywords.some(kw => allQueriesText.includes(kw));
+      if (matched) {
+        const course = OFFICIAL_COURSES_2567.find(c => c.code === mapping.courseCode);
+        if (course && !recommendations.some(r => r.course.code === course.code)) {
+          recommendations.push({ course, reason: mapping.reason });
+        }
+      }
+    });
+
+    if (recommendations.length === 0 && OFFICIAL_COURSES_2567.length > 0) {
+      const defaultCourse = OFFICIAL_COURSES_2567.find(c => c.code === 'DTM67-111') || OFFICIAL_COURSES_2567[0];
+      recommendations.push({
+        course: defaultCourse,
+        reason: 'แนะนำเริ่มต้นสำรวจรายวิชาแกนหลักในหลักสูตรเทคโนโลยีดิจิทัลทางการแพทย์ DTM 2567'
+      });
+    }
+
+    return {
+      totalQueries: searchHistory.length,
+      recommendations
+    };
+  }, [searchHistory]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1667,6 +1718,51 @@ export default function App() {
 
         {activeTab === 'curriculum' && (
           <div className="space-y-6 animate-in fade-in duration-200">
+            {/* LEARNING PROGRESS SUMMARY WIDGET */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/40 border border-cyan-800/40 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white tracking-tight">สรุปความก้าวหน้าการเรียน (Learning Progress Summary)</h3>
+                    <p className="text-xs text-slate-400">วิเคราะห์จากดัชนีคำศัพท์และประวัติการค้นหาของคุณ ({learningProgressSummary.totalQueries} คำค้นหาล่าสุด)</p>
+                  </div>
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
+                  DTM 2567 AI Recommendation
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                {learningProgressSummary.recommendations.map((rec, idx) => (
+                  <div key={idx} className="bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 flex flex-col justify-between transition-all">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs px-2 py-0.5 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
+                          {rec.course.code}
+                        </span>
+                        <span className="text-xs font-mono text-slate-400">{rec.course.credits} นก.</span>
+                      </div>
+                      <h4 className="font-bold text-sm text-white">{rec.course.titleThai}</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed">{rec.reason}</p>
+                    </div>
+                    <div className="pt-3 mt-3 border-t border-slate-900 flex items-center justify-between">
+                      <span className="text-[11px] text-emerald-400 font-mono">มคอ.2 หน้า {rec.course.evidence.pageNumber}</span>
+                      <button
+                        onClick={() => handleStartCourseLearning(rec.course)}
+                        className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-cyan-600/20"
+                      >
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        <span>เริ่มเรียนวิชานี้</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* 1. CURRICULUM HEADER BANNER */}
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-slate-800">
