@@ -1646,12 +1646,19 @@ ${formattedChunks}
       : "ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ";
 
     if (classification.reason === 'client_error') {
-      if (classification.status === 401 || classification.status === 403) {
+      const errStr = String(lastError?.message || '').toUpperCase();
+      const isArgError = classification.status === 400 || errStr.includes('INVALID_ARGUMENT');
+
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else if (isArgError) {
+        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP ${classification.status || 400} Bad Request) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 401 || classification.status === 403) {
         serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP ${classification.status}) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 400) {
-        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
       } else if (classification.status === 429) {
-        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคีย์ API ขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคำขอขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
       } else {
         serviceNoticeText = `*(แจ้งเตือน: คำขอหรือการตั้งค่าสิทธิ์ไม่ถูกต้อง (HTTP ${classification.status || 400}) — ${modeNotice})*\n\n`;
       }

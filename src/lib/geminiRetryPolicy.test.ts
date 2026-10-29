@@ -489,6 +489,15 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(res529.reason).toBe('transient_service_unavailable');
       expect(res529.shouldRetry).toBe(true);
 
+      const nonStandard521 = {
+        status: 521,
+        message: 'Web server is down'
+      };
+      const res521 = classifyGeminiError(nonStandard521);
+      expect(res521.status).toBe(521);
+      expect(res521.reason).toBe('transient_service_unavailable');
+      expect(res521.shouldRetry).toBe(true);
+
       // 3. Fallback default status 401/403 when no HTTP status exists
       const authWithoutStatus = {
         errorDetails: [{ reason: 'API_KEY_INVALID' }],
@@ -497,6 +506,50 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       const resAuth = classifyGeminiError(authWithoutStatus);
       expect(resAuth.status).toBe(401);
       expect(resAuth.reason).toBe('client_error');
+
+      // 4. API_KEY_INVALID + HTTP 503 preserves 503 status without false retry
+      const apiKeyWith503 = {
+        status: 503,
+        errorDetails: [{ reason: 'API_KEY_INVALID' }],
+        message: 'Backend unavailable during authentication'
+      };
+      const resKey503 = classifyGeminiError(apiKeyWith503);
+      expect(resKey503.status).toBe(503);
+      expect(resKey503.reason).toBe('client_error');
+      expect(resKey503.shouldRetry).toBe(false);
+
+      // 5. PERMISSION_DENIED + HTTP 429 preserves 429 status without false retry
+      const permWith429 = {
+        status: 429,
+        errorDetails: [{ reason: 'PERMISSION_DENIED' }],
+        message: 'Permission denied on resource'
+      };
+      const resPerm429 = classifyGeminiError(permWith429);
+      expect(resPerm429.status).toBe(429);
+      expect(resPerm429.reason).toBe('client_error');
+      expect(resPerm429.shouldRetry).toBe(false);
+
+      // 6. INVALID_ARGUMENT + HTTP 429 preserves 429 status
+      const argWith429 = {
+        status: 429,
+        errorDetails: [{ reason: 'INVALID_ARGUMENT' }],
+        message: 'Invalid argument provided'
+      };
+      const resArg429 = classifyGeminiError(argWith429);
+      expect(resArg429.status).toBe(429);
+      expect(resArg429.reason).toBe('client_error');
+      expect(resArg429.shouldRetry).toBe(false);
+
+      // 7. RATE_LIMIT_EXCEEDED + HTTP 503 preserves 503 status with retryable transient_rate_limit
+      const rateWith503 = {
+        status: 503,
+        errorDetails: [{ reason: 'RATE_LIMIT_EXCEEDED' }],
+        message: 'Overloaded burst limit'
+      };
+      const resRate503 = classifyGeminiError(rateWith503);
+      expect(resRate503.status).toBe(503);
+      expect(resRate503.reason).toBe('transient_rate_limit');
+      expect(resRate503.shouldRetry).toBe(true);
     });
   });
 
