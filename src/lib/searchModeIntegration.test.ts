@@ -296,6 +296,20 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
 
   // Scenario 8: activeChunksForGrounding backend path: inline delimiters in sentences do not fabricate verified heading locators
   it('8. activeChunksForGrounding backend path: inline delimiters in sentences do not fabricate verified heading locators', async () => {
+    // Mock a response that answers with grounded content so verifyAcademicAnswer passes and populates references
+    setCustomGeminiMock(async (params) => {
+      return {
+        text: "Suffix -itis หมายถึงการอักเสบตามที่ระบุในเอกสาร",
+        candidates: [{
+          groundingMetadata: {
+            webSearchQueries: [],
+            groundingChunks: []
+          }
+        }]
+      };
+    });
+
+    // 8a. Negative Case: Inline delimiter in the middle of a sentence must NOT become a verified heading
     const docWithInlineDelim = {
       title: 'เอกสารทดสอบตัวคั่นกลางประโยค',
       hasNativePages: false,
@@ -324,10 +338,49 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.references).toBeDefined();
+    expect(data.references.length).toBeGreaterThan(0);
     for (const ref of data.references) {
       expect(ref.evidenceLocator).not.toBe('บทที่ 3');
       expect(ref.evidenceLocator).not.toBe('ชิ้นส่วนที่ 3');
       expect(ref.evidenceLocator).toBe('ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้');
+      expect(ref.isLocatorVerified).toBe(false);
+      expect(ref.sourceLocatorProvenance).not.toBe('source_heading');
     }
+
+    // 8b. Positive Case: Genuine heading at line start must be recognized and verified as บทที่ 3
+    const docWithRealHeading = {
+      title: 'เอกสารทดสอบหัวข้อจริง',
+      hasNativePages: false,
+      totalPages: 1,
+      chunks: [
+        {
+          id: 'chunk-real-test',
+          chunkIndex: 1,
+          pageNumber: undefined,
+          hasNativePage: false,
+          text: '=== บทที่ 3: Suffix ===\nSuffix -itis หมายถึงการอักเสบ เช่น appendicitis'
+        }
+      ]
+    };
+
+    const resReal = await fetch(`${baseUrl}/api/gemini/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'Suffix -itis คืออะไร' }],
+        searchMode: 'document',
+        documentContext: docWithRealHeading
+      })
+    });
+
+    expect(resReal.status).toBe(200);
+    const dataReal = await resReal.json();
+    expect(dataReal.references).toBeDefined();
+    expect(dataReal.references.length).toBeGreaterThan(0);
+    const refReal = dataReal.references[0];
+    expect(refReal.evidenceLocator).toBe('บทที่ 3');
+    expect(refReal.isLocatorVerified).toBe(true);
+    expect(refReal.verificationStatus).toBe('source_grounded');
+    expect(refReal.sourceLocatorProvenance).toBe('source_heading');
   });
 });
