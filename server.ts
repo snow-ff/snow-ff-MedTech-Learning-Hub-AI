@@ -545,12 +545,11 @@ function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWork
       return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ:**\n${core}\n\n**2. รายละเอียดคำอธิบายตามต้นทาง:**\n${rest}`;
     }
     case 'compare': {
-      const hasBothEntities = (cleanBase.includes('Serum') || cleanBase.includes('ซีรั่ม') || cleanBase.includes('Albumin')) && (cleanBase.includes('Plasma') || cleanBase.includes('พลาสมา') || cleanBase.includes('Globulin'));
-      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b)/i.test(cleanBase);
-      if (hasBothEntities && hasComparisonCue) {
-        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุความแตกต่างและคุณสมบัติเปรียบเทียบระหว่างสองสิ่งตามเอกสารอ้างอิง`;
+      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b|ต่างกัน|เปรียบเทียบระหว่าง|ข้อแตกต่าง)/i.test(cleanBase);
+      if (hasComparisonCue || cleanBase.length > 20) {
+        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุความแตกต่างและคุณสมบัติเปรียบเทียบตามเอกสารอ้างอิง`;
       }
-      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลเปรียบเทียบคุณสมบัติระหว่างสองสิ่งหรือข้อมูลไม่เพียงพอ)*`;
+      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ)*`;
     }
     case 'step_by_step': {
       const stepLines = cleanBase.split(/(?:\r?\n+|[.;]+)/).map(s => s.trim()).filter(l => /(?:\d+\.|\bขั้นตอน|\bลำดับ|ขั้นตอน|ลำดับ)/i.test(l));
@@ -618,40 +617,7 @@ export function getAcademicFallback(
     contentVersion?: string;
   }>;
 } {
-  const result = getAcademicFallbackInternal(prompt, messages, documentContext, studyWorkflow);
-  if (result && result.text) {
-    const originalVerification = result.verification;
-    if (studyWorkflow) {
-      result.text = applyStudyWorkflowToFallbackText(result.text, studyWorkflow);
-    }
-    if (documentContext && Array.isArray(documentContext.chunks)) {
-      const activeChunksForGrounding = documentContext.chunks.map((c: any, idx: number) => ({
-        id: c.id || `ctx-chunk-${idx + 1}`,
-        documentId: 'doc-ctx',
-        chunkIndex: c.chunkIndex,
-        pageNumber: c.pageNumber,
-        text: decodeHtmlEntities(c.text || ''),
-        charCount: (c.text || '').length
-      }));
-      const verification = verifyAcademicAnswer({
-        query: prompt,
-        candidateAnswer: result.text,
-        document: {
-          title: documentContext.title,
-          hasNativePages: documentContext.hasNativePages,
-          totalPages: documentContext.totalPages,
-          chunks: activeChunksForGrounding
-        },
-        conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
-      });
-      if (originalVerification && (originalVerification.verdict === 'WARNING' || originalVerification.verdict === 'INSUFFICIENT_EVIDENCE')) {
-        verification.verdict = originalVerification.verdict;
-        verification.isVerified = originalVerification.isVerified;
-      }
-      result.verification = verification;
-    }
-  }
-  return result;
+  return getAcademicFallbackInternal(prompt, messages, documentContext, studyWorkflow);
 }
 
 function getAcademicFallbackInternal(
@@ -813,6 +779,10 @@ function getAcademicFallbackInternal(
         }
       } else {
         finalFallbackText = `*(ค้นหาจากเอกสาร: "${cleanDocTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบหลักฐานทางวิชาการที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร ไม่พบข้อมูลที่ตอบประเด็น "${prompt}" ได้อย่างถูกต้องตามหลักวิชาการ ระบบจึงปฏิเสธการแต่งข้อมูล`;
+      }
+
+      if (studyWorkflow) {
+        finalFallbackText = applyStudyWorkflowToFallbackText(finalFallbackText, studyWorkflow);
       }
 
       const verification = verifyAcademicAnswer({
