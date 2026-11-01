@@ -924,5 +924,38 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(data.text).toContain('Serum');
       expect(data.text).toContain('Plasma');
     });
+
+    it('H7. Invalid Study Workflow: endpoint rejects invalid workflow with HTTP 400', async () => {
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'อธิบายข้อมูล' }],
+          searchMode: 'web_search',
+          studyWorkflow: 'invalid_workflow_test'
+        })
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toBeDefined();
+    });
+
+    it('H8. Document Missing Provenance: document missing state returns contentOrigin as undefined instead of local_knowledge_base', async () => {
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'สรุปเอกสาร' }],
+          searchMode: 'document',
+          documentContext: undefined
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.source).toBe('academic_fallback');
+      expect(data.contentOrigin).toBeUndefined();
+    });
   });
 });

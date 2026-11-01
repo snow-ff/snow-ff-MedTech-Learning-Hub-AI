@@ -1367,10 +1367,12 @@ export function formatFallbackResponse(params: {
     ? (isDocumentGrounding ? "offline_document_fallback" : "offline_static_fallback")
     : "academic_fallback";
 
+  const isVerifiedLocalTopic = Boolean((fallback as any).localContentMetadata && (fallback as any).localContentMetadata.contentId !== "kb-fallback-general-01" && (fallback as any).localContentMetadata.verificationStatus && (fallback as any).localContentMetadata.verificationStatus !== 'unverified');
+
   return {
     text: responseText,
     source: "academic_fallback", // Critical: MUST remain 'academic_fallback' (never misrepresent fallback as Gemini generation)
-    contentOrigin: isDocumentGrounding ? ("user_document" as const) : ("local_knowledge_base" as const),
+    contentOrigin: isDocumentGrounding ? ("user_document" as const) : (isVerifiedLocalTopic ? ("local_knowledge_base" as const) : undefined),
     localContentMetadata: !isDocumentGrounding ? (fallback as any).localContentMetadata : undefined,
     evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "sufficient" : undefined),
     verification: (fallback as any).verification,
@@ -1516,7 +1518,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     return res.json({
       text: documentMissingText,
       source: "academic_fallback",
-      contentOrigin: "local_knowledge_base",
+      contentOrigin: undefined,
       evidenceStatus: "insufficient",
       serviceStatus: {
         isApiUnavailable: false,
@@ -1545,7 +1547,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     return res.json({
       text: documentMissingText,
       source: "academic_fallback",
-      contentOrigin: "local_knowledge_base",
+      contentOrigin: undefined,
       evidenceStatus: "insufficient",
       serviceStatus: {
         isApiUnavailable: false,
@@ -1756,7 +1758,7 @@ app.post("/api/gemini/generate", async (req, res) => {
           return res.json({
             text: formattedText,
             source: "external_research",
-            contentOrigin: "gemini_live",
+            contentOrigin: "external_grounded",
             evidenceStatus: "external_research",
             verification,
             references: extReferences.map(r => ({
