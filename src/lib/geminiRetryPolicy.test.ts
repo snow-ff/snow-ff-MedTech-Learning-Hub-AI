@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyGeminiError,
   calculateRetryDelay,
+  getRetryConfigForClassification,
   DEFAULT_RETRY_CONFIG,
   formatRetryLog
 } from './geminiRetryPolicy';
@@ -151,6 +152,54 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(classification.isTransient).toBe(false);
       expect(classification.status).toBe(429);
       expect(classification.reason).toBe('quota_or_credential_exhausted');
+    });
+
+    it('should classify SDK Error shapes (string status and nested error object)', () => {
+      // 1. err.status = 'UNAVAILABLE' (string status)
+      const errStatusUnavailable = {
+        status: 'UNAVAILABLE',
+        message: 'This model is currently experiencing high demand'
+      };
+      const resUnavailable = classifyGeminiError(errStatusUnavailable);
+      expect(resUnavailable.shouldRetry).toBe(true);
+      expect(resUnavailable.status).toBe(503);
+      expect(resUnavailable.reason).toBe('transient_service_unavailable');
+
+      // 2. err.status = 'RESOURCE_EXHAUSTED' (string status)
+      const errStatusQuota = {
+        status: 'RESOURCE_EXHAUSTED',
+        message: 'Quota exceeded for project'
+      };
+      const resQuota = classifyGeminiError(errStatusQuota);
+      expect(resQuota.shouldRetry).toBe(false);
+      expect(resQuota.status).toBe(429);
+      expect(resQuota.reason).toBe('quota_or_credential_exhausted');
+
+      // 3. Nested SDK shape: err.error.status = 'UNAVAILABLE'
+      const nestedUnavailable = {
+        error: {
+          code: 503,
+          status: 'UNAVAILABLE',
+          message: 'The service is temporarily unavailable'
+        }
+      };
+      const resNestedUnavailable = classifyGeminiError(nestedUnavailable);
+      expect(resNestedUnavailable.shouldRetry).toBe(true);
+      expect(resNestedUnavailable.status).toBe(503);
+      expect(resNestedUnavailable.reason).toBe('transient_service_unavailable');
+
+      // 4. Nested SDK shape: err.error.status = 'RESOURCE_EXHAUSTED'
+      const nestedQuota = {
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          message: 'You exceeded your current quota'
+        }
+      };
+      const resNestedQuota = classifyGeminiError(nestedQuota);
+      expect(resNestedQuota.shouldRetry).toBe(false);
+      expect(resNestedQuota.status).toBe(429);
+      expect(resNestedQuota.reason).toBe('quota_or_credential_exhausted');
     });
 
     it('should prioritize structured reason and status before text search', () => {
@@ -586,6 +635,26 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(DEFAULT_RETRY_CONFIG.maxAttempts).toBe(2);
       expect(DEFAULT_RETRY_CONFIG.baseDelayMs).toBeLessThanOrEqual(800);
     });
+
+    it('should resolve baseDelayMs: 1000 for 503/transient_service_unavailable via getRetryConfigForClassification', () => {
+      const config503 = getRetryConfigForClassification({
+        shouldRetry: true,
+        status: 503,
+        reason: 'transient_service_unavailable',
+        isTransient: true
+      });
+      expect(config503.baseDelayMs).toBe(1000);
+      expect(config503.maxAttempts).toBe(2);
+      expect(config503.maxJitterMs).toBe(250);
+
+      const configRateLimit = getRetryConfigForClassification({
+        shouldRetry: true,
+        status: 429,
+        reason: 'transient_rate_limit',
+        isTransient: true
+      });
+      expect(configRateLimit.baseDelayMs).toBe(600);
+    });
   });
 
   describe('3. Execution Simulations', () => {
@@ -615,7 +684,8 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
             finalOutcome = 'FALLBACK_ACADEMIC';
             break;
           }
-          const delay = calculateRetryDelay(attempt, DEFAULT_RETRY_CONFIG);
+          const retryConfig = getRetryConfigForClassification(classification);
+          const delay = calculateRetryDelay(attempt, retryConfig);
           recordedDelays.push(delay);
           // Wait simulated delay without blocking test
         }
@@ -623,8 +693,8 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
 
       expect(callCount).toBe(2); // Exactly 2 attempts (1 initial + 1 retry)
       expect(recordedDelays.length).toBe(1); // Exactly 1 retry delay calculated
-      expect(recordedDelays[0]).toBeGreaterThanOrEqual(600);
-      expect(recordedDelays[0]).toBeLessThanOrEqual(850);
+      expect(recordedDelays[0]).toBeGreaterThanOrEqual(1000);
+      expect(recordedDelays[0]).toBeLessThanOrEqual(1250);
       expect(finalOutcome).toBe('FALLBACK_ACADEMIC');
     });
 

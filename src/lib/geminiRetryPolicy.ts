@@ -432,6 +432,25 @@ export function classifyGeminiError(err: any): RetryClassification {
 }
 
 /**
+ * Resolves the appropriate retry policy config based on the error classification.
+ * - HTTP 503 / transient_service_unavailable uses baseDelayMs = 1000ms.
+ * - Other transient errors (e.g. transient_rate_limit) use baseConfig (default: 600ms).
+ * - Jitter (0-250ms) and maxAttempts (2) remain strictly bounded.
+ */
+export function getRetryConfigForClassification(
+  classification: RetryClassification,
+  baseConfig: RetryPolicyConfig = DEFAULT_RETRY_CONFIG
+): RetryPolicyConfig {
+  if (classification.status === 503 || classification.reason === 'transient_service_unavailable') {
+    return {
+      ...baseConfig,
+      baseDelayMs: 1000
+    };
+  }
+  return baseConfig;
+}
+
+/**
  * Computes exponential backoff with random jitter.
  * Formula: round(baseDelayMs * (backoffFactor ^ (attempt - 1)) + random * maxJitterMs)
  */

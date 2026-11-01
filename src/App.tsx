@@ -72,7 +72,6 @@ export interface Message {
     isApiUnavailable?: boolean;
     lastErrorStatus?: number;
     reason?: string;
-    rawErrorMessage?: string;
     attemptsRun?: number;
     servedMode?: string;
   };
@@ -1087,7 +1086,7 @@ export default function App() {
                             {msg.serviceStatus?.reason === 'quota_or_credential_exhausted' ? (
                               <>
                                 <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>โควตา API เต็ม (Gemini Quota Exhausted) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                                <span>ขีดจำกัดสิทธิ์หรือโควตา API (Resource / Quota Limit) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
                               </>
                             ) : msg.serviceStatus?.reason === 'transient_rate_limit' ? (
                               <>

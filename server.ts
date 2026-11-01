@@ -11,6 +11,7 @@ import { AcademicVerificationReport } from "./src/models/coreModel";
 import {
   classifyGeminiError,
   calculateRetryDelay,
+  getRetryConfigForClassification,
   DEFAULT_RETRY_CONFIG,
   formatRetryLog
 } from "./src/lib/geminiRetryPolicy";
@@ -1752,9 +1753,7 @@ ${formattedChunks}
         break;
       }
 
-      const retryConfig = classification.status === 503 || classification.reason === 'transient_service_unavailable'
-        ? { ...DEFAULT_RETRY_CONFIG, baseDelayMs: 1000 }
-        : DEFAULT_RETRY_CONFIG;
+      const retryConfig = getRetryConfigForClassification(classification);
       const retryDelay = calculateRetryDelay(attempt, retryConfig);
       lastRetryDelayMs = retryDelay;
 
@@ -1878,7 +1877,6 @@ ${formattedChunks}
       isApiUnavailable: true,
       lastErrorStatus: lastError ? classifyGeminiError(lastError).status : undefined,
       reason: lastError ? classifyGeminiError(lastError).reason : undefined,
-      rawErrorMessage: lastError ? String(lastError.message || '') : undefined,
       attemptsRun: attempt,
       servedMode: "academic_fallback"
     },
