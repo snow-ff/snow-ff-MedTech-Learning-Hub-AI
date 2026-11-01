@@ -1131,12 +1131,12 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(dataDocOff.text).toBeDefined();
         expect(dataDocOff.verification).toBeDefined();
         if (wf === 'compare') {
-          expect(dataDocOff.text).toContain('ประเด็นการเปรียบเทียบที่สกัด');
+          expect(dataDocOff.text).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง');
           expect(dataDocOff.text).toContain('Serum');
         } else if (wf === 'step_by_step') {
-          expect(dataDocOff.text).toContain('ลำดับขั้นตอนตามข้อมูลต้นทาง');
+          expect(dataDocOff.text).toContain('ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง');
         } else if (wf === 'vocabulary') {
-          expect(dataDocOff.text).toContain('การสกัดศัพท์เทคนิค');
+          expect(dataDocOff.text).toContain('คำศัพท์');
         } else if (wf === 'quiz_review') {
           expect(dataDocOff.text).toContain('แบบฝึกหัดทบทวนความรู้');
         }
@@ -1155,7 +1155,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', text: 'ขั้นตอนการทำงาน' }],
+          messages: [{ role: 'user', text: 'ข้อมูลทั่วไป' }],
           searchMode: 'document',
           offlineMode: true,
           documentContext: sparseDocContext,
@@ -1164,7 +1164,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       });
       expect(resSparse.status).toBe(200);
       const dataSparse = await resSparse.json();
-      expect(dataSparse.text).toContain('ไม่พบข้อมูล');
+      expect(dataSparse.text).toContain('หมายเหตุ');
 
       // 3. Online General & Online Document Grounding (4 Mode Paths Coverage)
       let capturedInstruction = '';

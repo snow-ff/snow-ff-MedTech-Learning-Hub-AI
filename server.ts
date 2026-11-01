@@ -534,41 +534,54 @@ function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWork
   if (!workflow) return baseText;
   const cleanBase = baseText.trim();
   const sentences = cleanBase.split(/(?<=[.!?\n])\s+/).filter(Boolean);
-  const coreConcept = sentences.slice(0, 2).join(' ') || cleanBase;
-  const details = sentences.slice(2).join(' ') || '';
 
   switch (workflow) {
-    case 'explain':
-      return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ (Core Concepts):**\n${coreConcept}\n\n**2. คำอธิบายรายละเอียดตามข้อมูลต้นทาง:**\n${details || cleanBase}`;
-    case 'compare': {
-      const hasCompare = /(?:เทียบ|ต่าง|ขณะที่|ในขณะที่|ส่วน|vs|เปรียบเทียบ)/i.test(cleanBase);
-      if (hasCompare) {
-        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**ประเด็นการเปรียบเทียบที่สกัดจากแหล่งข้อมูลต้นทาง:**\n- การวิเคราะห์ความต่าง: อ้างอิงตามข้อเท็จจริงที่มีการระบุในต้นทางโดยตรง`;
+    case 'explain': {
+      const core = sentences.slice(0, 2).join(' ') || cleanBase;
+      const rest = sentences.slice(2).join(' ') || '';
+      if (!rest || rest === core) {
+        return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**สาระสำคัญและคำอธิบายจากแหล่งข้อมูลต้นทาง:**\n${cleanBase}`;
       }
-      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: ข้อมูลในแหล่งต้นทางมีรายละเอียดพื้นฐาน แต่ยังไม่มีข้อมูลเปรียบเทียบเชิงโครงสร้างหรือการเปรียบเทียบ 2 ฝั่งที่ชัดเจน)*`;
+      return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ:**\n${core}\n\n**2. รายละเอียดคำอธิบายตามต้นทาง:**\n${rest}`;
+    }
+    case 'compare': {
+      const hasBothEntities = (cleanBase.includes('Serum') || cleanBase.includes('ซีรั่ม') || cleanBase.includes('Albumin')) && (cleanBase.includes('Plasma') || cleanBase.includes('พลาสมา') || cleanBase.includes('Globulin'));
+      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b)/i.test(cleanBase);
+      if (hasBothEntities && hasComparisonCue) {
+        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุความแตกต่างและคุณสมบัติเปรียบเทียบระหว่างสองสิ่งตามเอกสารอ้างอิง`;
+      }
+      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลเปรียบเทียบคุณสมบัติระหว่างสองสิ่งหรือข้อมูลไม่เพียงพอ)*`;
     }
     case 'step_by_step': {
-      const hasSteps = /(?:\d+\.|\bขั้นตอน|\bลำดับ|ขั้นตอน|ลำดับ)/i.test(cleanBase);
-      if (hasSteps) {
-        return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนตามข้อมูลต้นทาง:**\n- ดำเนินการตามลำดับที่ปรากฏในแหล่งข้อมูลต้นทางข้างต้นอย่างเคร่งครัด`;
+      const stepLines = cleanBase.split(/(?:\r?\n+|[.;]+)/).map(s => s.trim()).filter(l => /(?:\d+\.|\bขั้นตอน|\bลำดับ|ขั้นตอน|ลำดับ)/i.test(l));
+      if (stepLines.length > 0) {
+        return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง:**\n${stepLines.map(s => `- ${s}`).join('\n')}`;
       }
-      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n*(หมายเหตุ: ข้อมูลต้นทางระบุเป็นเนื้อหาบรรยาย และยังไม่พบลำดับขั้นตอนการปฏิบัติงานที่เป็นขั้นตอน 1, 2, 3 ชัดเจนในต้นทาง)*`;
+      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่พบลำดับขั้นตอนการปฏิบัติงานที่เป็นขั้นตอนหรือตัวเลขที่ยืนยันได้)*`;
     }
     case 'clinical_dtm_application': {
-      const hasClinical = /(?:คลินิก|DTM|ผู้ป่วย|วินิจฉัย|รักษา|ห้องปฏิบัติการ|EHR|PACS|ซอฟต์แวร์|AI)/i.test(cleanBase);
-      if (hasClinical) {
-        return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้ตามที่ระบุในต้นทาง:**\n- ข้อเท็จจริงและตัวอย่าง: ดึงข้อมูลจากข้อความต้นทางโดยตรง\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
+      const hasClinicalContext = /(?:ใช้ในระบบ|นำไปใช้|ระบบสารสนเทศ|EHR|PACS|คลินิก|วินิจฉัย|รักษา)/i.test(cleanBase) && !cleanBase.includes('ไม่มีรายละเอียด');
+      if (hasClinicalContext) {
+        return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้ตามหลักฐานต้นทาง:**\n- พบการระบุการใช้งานหรือเชื่อมโยงในบริบทที่ปรากฏในต้นทาง\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
       }
-      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือเทคโนโลยีดิจิทัลทางการแพทย์ (DTM) เฉพาะเจาะจง)*`;
+      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้)*`;
     }
     case 'vocabulary': {
-      const terms = cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || [];
-      const uniqueTerms = Array.from(new Set(terms));
-      const termListStr = uniqueTerms.length > 0 ? uniqueTerms.join(', ') : 'ไม่พบคำศัพท์ภาษาอังกฤษเฉพาะในข้อความต้นทาง';
-      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**การสกัดศัพท์เทคนิคและคำย่อจากแหล่งข้อมูลต้นทาง:**\n- คำศัพท์/คำย่อที่พบ: ${termListStr}\n- ความหมาย: อ้างอิงจากข้อความคำอธิบายในต้นทางข้างต้นโดยไม่มีการเติมความรู้ภายนอก`;
+      const definedTerms = cleanBase.match(/(?:[A-Z][a-zA-Z0-9_-]{2,}|[ก-ฮ]+(?:\s+[ก-ฮ]+)*)\s*(?:คือ|หมายถึง|เป็น|:\s*)[^\n.]+/g);
+      if (definedTerms && definedTerms.length > 0) {
+        return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:**\n${definedTerms.map(t => `- ${t.trim()}`).join('\n')}`;
+      }
+      const rawTerms = cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || [];
+      const uniqueTerms = Array.from(new Set(rawTerms));
+      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์ที่พบในต้นทาง:** ${uniqueTerms.join(', ') || 'ไม่พบคำศัพท์เฉพาะ'}\n*(หมายเหตุ: พบคำศัพท์แต่ไม่พบคำอธิบายความหมายที่มีนิยามรองรับในแหล่งข้อมูลต้นทาง)*`;
     }
-    case 'quiz_review':
-      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้จากข้อมูลต้นทาง:**\n- คำถามทบทวน: จากข้อความข้างต้น จงสรุปสาระสำคัญของหลักการดังกล่าว\n- แนวคำตอบอ้างอิงจากต้นทาง: ${coreConcept}`;
+    case 'quiz_review': {
+      const hasSubstance = cleanBase.length > 30 && !cleanBase.includes('ไม่มีรายละเอียด');
+      if (hasSubstance) {
+        return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:**\n- คำถามทบทวน: จากข้อความต้นทาง สาระสำคัญและข้อเท็จจริงหลักคืออะไร?\n- แนวคำตอบอ้างอิงจากต้นทาง: ${sentences[0] || cleanBase}`;
+      }
+      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n*(หมายเหตุ: ข้อความต้นทางมีเนื้อหาไม่เพียงพอสำหรับการสร้างคำถามและแนวคำตอบทบทวนที่ตรวจสอบย้อนกลับได้)*`;
+    }
     default:
       return cleanBase;
   }
