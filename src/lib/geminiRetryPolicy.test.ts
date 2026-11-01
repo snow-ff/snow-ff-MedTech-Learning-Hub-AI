@@ -155,32 +155,31 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
     });
 
     it('should classify SDK Error shapes (string status and nested error object)', () => {
-      // 1. err.status = 'UNAVAILABLE' (string status)
+      // 1. err.status = 'UNAVAILABLE' (string status, no numeric code, no 'unavailable'/'overloaded' in message)
       const errStatusUnavailable = {
         status: 'UNAVAILABLE',
-        message: 'This model is currently experiencing high demand'
+        message: 'The model is experiencing peak traffic load'
       };
       const resUnavailable = classifyGeminiError(errStatusUnavailable);
       expect(resUnavailable.shouldRetry).toBe(true);
       expect(resUnavailable.status).toBe(503);
       expect(resUnavailable.reason).toBe('transient_service_unavailable');
 
-      // 2. err.status = 'RESOURCE_EXHAUSTED' (string status)
+      // 2. err.status = 'RESOURCE_EXHAUSTED' (string status, no numeric code, no 'quota'/'exhausted' in message)
       const errStatusQuota = {
         status: 'RESOURCE_EXHAUSTED',
-        message: 'Quota exceeded for project'
+        message: 'Operation rejected per policy definition'
       };
       const resQuota = classifyGeminiError(errStatusQuota);
       expect(resQuota.shouldRetry).toBe(false);
       expect(resQuota.status).toBe(429);
       expect(resQuota.reason).toBe('quota_or_credential_exhausted');
 
-      // 3. Nested SDK shape: err.error.status = 'UNAVAILABLE'
+      // 3. Nested SDK shape: err.error.status = 'UNAVAILABLE' (no code: 503, neutral message)
       const nestedUnavailable = {
         error: {
-          code: 503,
           status: 'UNAVAILABLE',
-          message: 'The service is temporarily unavailable'
+          message: 'The model is experiencing peak traffic load'
         }
       };
       const resNestedUnavailable = classifyGeminiError(nestedUnavailable);
@@ -188,12 +187,11 @@ describe('Gemini Retry Policy & Resilience (Track v1.2)', () => {
       expect(resNestedUnavailable.status).toBe(503);
       expect(resNestedUnavailable.reason).toBe('transient_service_unavailable');
 
-      // 4. Nested SDK shape: err.error.status = 'RESOURCE_EXHAUSTED'
+      // 4. Nested SDK shape: err.error.status = 'RESOURCE_EXHAUSTED' (no code: 429, neutral message)
       const nestedQuota = {
         error: {
-          code: 429,
           status: 'RESOURCE_EXHAUSTED',
-          message: 'You exceeded your current quota'
+          message: 'Operation rejected per policy definition'
         }
       };
       const resNestedQuota = classifyGeminiError(nestedQuota);
