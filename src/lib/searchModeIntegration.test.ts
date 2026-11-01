@@ -1096,5 +1096,57 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(resCurriculum.contentOrigin).toBe('local_knowledge_base');
       expect(fallbackCurriculum.localContentMetadata?.verificationStatus).toBe('verified_curriculum');
     });
+
+    it('H10. All 6 Study Workflows Runtime & Formatting Integration: verifies explain, compare, step_by_step, clinical_dtm_application, vocabulary, and quiz_review behave correctly across offline and online modes', async () => {
+      const workflows = ['explain', 'compare', 'step_by_step', 'clinical_dtm_application', 'vocabulary', 'quiz_review'];
+      for (const wf of workflows) {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: wf
+          })
+        });
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.text).toBeDefined();
+        if (wf === 'compare') {
+          expect(data.text).toContain('เปรียบเทียบ');
+        } else if (wf === 'vocabulary') {
+          expect(data.text).toContain('คำศัพท์');
+        } else if (wf === 'quiz_review') {
+          expect(data.text).toContain('ทบทวน');
+        }
+      }
+
+      let capturedInstruction = '';
+      setCustomGeminiMock(async (params) => {
+        capturedInstruction = params.systemInstruction || '';
+        return { text: "Mocked workflow response", candidates: [] };
+      });
+
+      try {
+        const resOnline = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'เปรียบเทียบ Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: false,
+            studyWorkflow: 'compare'
+          })
+        });
+        expect(resOnline.status).toBe(200);
+        expect(capturedInstruction).toContain('Study Workflow');
+        expect(capturedInstruction).toContain('เปรียบเทียบ');
+      } finally {
+        setCustomGeminiMock(null);
+      }
+    });
   });
 });
+

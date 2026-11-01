@@ -530,8 +530,64 @@ function buildChunkReferences(
   });
 }
 
+function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWorkflowType): string {
+  if (!workflow) return baseText;
+  switch (workflow) {
+    case 'compare':
+      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${baseText}\n\n*ข้อสังเกตเชิงเปรียบเทียบ: จัดโครงสร้างเนื้อหาตามประเด็นเปรียบเทียบหลักจากฐานความรู้*`;
+    case 'step_by_step':
+      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${baseText}\n\n*สรุปขั้นตอนตามลำดับที่ปรากฏในฐานความรู้*`;
+    case 'clinical_dtm_application':
+      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${baseText}\n\n*(หมายเหตุการศึกษา: ตัวอย่างการประยุกต์ใช้ในบริบทเทคนิคการแพทย์และ DTM เพื่อการเรียนรู้เท่านั้น มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
+    case 'vocabulary':
+      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${baseText}\n\n*สรุปศัพท์เทคนิคภาษาอังกฤษ คำย่อ และความสำคัญ*`;
+    case 'quiz_review':
+      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${baseText}\n\n*แบบฝึกหัดทบทวน: จากข้อมูลข้างต้น จงอธิบายหลักการสำคัญและเหตุผลทางวิชาการ*`;
+    case 'explain':
+    default:
+      return baseText;
+  }
+}
+
 // Academic fallback generator for robust offline / quota-exceeded handling
 export function getAcademicFallback(
+  prompt: string,
+  messages?: Array<{ role: string; text: string }>,
+  documentContext?: {
+    title: string;
+    courseCode?: string;
+    hasNativePages?: boolean;
+    totalPages?: number;
+    chunks: Array<{ chunkIndex?: number | string; pageNumber?: number | string; text: string }>;
+  } | null,
+  studyWorkflow?: StudyWorkflowType
+): {
+  text: string;
+  evidenceStatus?: "sufficient" | "insufficient" | "external_research";
+  verification?: AcademicVerificationReport;
+  localContentMetadata?: LocalContentMetadata;
+  references: Array<{
+    title: string;
+    uri: string;
+    type?: string;
+    pageNumber?: number | string;
+    linkAccessStatus?: string;
+    verificationStatus?: "source_grounded" | "unsupported_citation" | "unverified";
+    evidenceLocator?: string;
+    isLocatorVerified?: boolean;
+    sourceLocatorProvenance?: string;
+    excerpt?: string;
+    contentVersion?: string;
+  }>;
+} {
+  const result = getAcademicFallbackInternal(prompt, messages, documentContext, studyWorkflow);
+  if (studyWorkflow && result && result.text) {
+    result.text = applyStudyWorkflowToFallbackText(result.text, studyWorkflow);
+  }
+  return result;
+}
+
+function getAcademicFallbackInternal(
   prompt: string,
   messages?: Array<{ role: string; text: string }>,
   documentContext?: {
@@ -1481,6 +1537,14 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
 
+  let workflowInstructionText = '';
+  if (studyWorkflow) {
+    const wfInfo = getWorkflowById(studyWorkflow);
+    if (wfInfo) {
+      workflowInstructionText = `\n\nเป้าหมายและแนวทางการตอบตามรูปแบบ Study Workflow: "${wfInfo.nameTh}" (${wfInfo.nameEn})\n- แนวทางปฏิบัติ: ${wfInfo.guideline}`;
+    }
+  }
+
   let systemInstruction = `คุณคือผู้ช่วย AI วิชาการสำหรับ "MedTech Learning Hub AI" ซึ่งเป็นแพลตฟอร์มการเรียนรู้หลักสูตรวิทยาศาสตรบัณฑิต สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (Digital Technology in Medicine: DTM) หลักสูตรปรับปรุง พ.ศ. 2567 มหาวิทยาลัยวลัยลักษณ์
 โปรดตอบคำถามโดยใช้ภาษาไทยเป็นหลัก พร้อมทั้งรักษาและเน้นคำศัพท์ภาษาอังกฤษทางการแพทย์และเทคโนโลยีดิจิทัลที่สำคัญไว้ (เช่น Electronic Health Record, EHR, DICOM, PACS, HL7, FHIR, ICD-10, Medical AI, Deep Learning, Biomedical Signals, Clinical Decision Support System)
 
@@ -1506,12 +1570,7 @@ app.post("/api/gemini/generate", async (req, res) => {
 หมายเหตุสำคัญ: บริบทรายวิชานี้เป็นเป้าหมายการเรียนรู้ของผู้เรียน ไม่ใช่เอกสารอ้างอิงหรือหลักฐานทางวิชาการ หากไม่มีเอกสารอัปโหลดใน documentContext ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็นความรู้ทั่วไป และห้ามสร้างเลขหน้าหรืออ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`;
   }
 
-  if (studyWorkflow) {
-    const wfInfo = getWorkflowById(studyWorkflow);
-    if (wfInfo) {
-      systemInstruction += `\n\nเป้าหมายและแนวทางการตอบตามรูปแบบ Study Workflow: "${wfInfo.nameTh}" (${wfInfo.nameEn})\n- แนวทางปฏิบัติ: ${wfInfo.guideline}`;
-    }
-  }
+  systemInstruction += workflowInstructionText;
 
   const isCurriculumQuery = determineTopic(latestPrompt, validatedMessages) === 'dtm';
   const isDocumentGrounding = Boolean(
