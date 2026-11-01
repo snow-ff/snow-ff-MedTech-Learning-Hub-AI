@@ -68,6 +68,14 @@ export interface Message {
   groundedDocumentTitle?: string;
   evidenceStatus?: EvidenceStatus;
   verification?: AcademicVerificationReport;
+  serviceStatus?: {
+    isApiUnavailable?: boolean;
+    lastErrorStatus?: number;
+    reason?: string;
+    rawErrorMessage?: string;
+    attemptsRun?: number;
+    servedMode?: string;
+  };
   webGrounding?: {
     webSearchQueries?: string[];
     searchEntryPointHtml?: string;
@@ -605,6 +613,7 @@ export default function App() {
         groundedDocumentTitle: (searchMode !== 'web_search' && activeDocument) ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
         verification: verificationReport,
+        serviceStatus: data.serviceStatus,
         webGrounding: data.webGrounding,
         references: Array.isArray(data.references) ? data.references.map((r: any) => ({
           ...r,
@@ -1030,6 +1039,10 @@ export default function App() {
                     className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                        : msg.source === 'academic_fallback'
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                        : msg.source === 'document_grounding'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
                         : 'bg-cyan-600 text-white shadow-md shadow-cyan-500/20'
                     }`}
                   >
@@ -1042,6 +1055,66 @@ export default function App() {
                         : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none shadow-sm'
                     }`}
                   >
+                    {msg.role === 'assistant' && (
+                      <div className="mb-3">
+                        {(msg.source === 'gemini_grounding' || msg.source === 'gemini_standard') && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/80 text-[11px] text-cyan-200 font-medium">
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>Gemini 3.8 Flash AI — ประมวลผลสด (Live Model Inference)</span>
+                            {msg.source === 'gemini_grounding' && (
+                              <span className="ml-1 px-1.5 py-0.2 rounded bg-cyan-900/60 text-[10px] text-cyan-300">
+                                + Web Grounding
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {msg.source === 'document_grounding' && (
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${
+                            msg.evidenceStatus === 'insufficient'
+                              ? 'bg-slate-900 border-slate-700 text-slate-300'
+                              : 'bg-emerald-950/70 border-emerald-800/80 text-emerald-200'
+                          }`}>
+                            <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>
+                              {msg.evidenceStatus === 'insufficient'
+                                ? 'โหมดติวอิงเอกสาร: ไม่พบหลักฐานตรงในเอกสาร (Strict Anti-Hallucination)'
+                                : 'โหมดติวอิงเอกสาร: ชิ้นส่วนเอกสารที่มีหลักฐานยืนยัน (Document Grounding)'}
+                            </span>
+                          </div>
+                        )}
+                        {msg.source === 'academic_fallback' && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/70 text-[11px] text-amber-200 font-medium">
+                            {msg.serviceStatus?.reason === 'quota_or_credential_exhausted' ? (
+                              <>
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>โควตา API เต็ม (Gemini Quota Exhausted) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                              </>
+                            ) : msg.serviceStatus?.reason === 'transient_rate_limit' ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>อัตราคำขอชั่วคราวเกินขีดจำกัด (Gemini Rate Limited) — ตอบผ่านคลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                              </>
+                            ) : (msg.serviceStatus?.lastErrorStatus === 503 || msg.serviceStatus?.reason === 'transient_service_unavailable') ? (
+                              <>
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>บริการโมเดลมีผู้ใช้งานสูง (HTTP 503 Unavailable) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                              </>
+                            ) : (
+                              <>
+                                <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>โหมดข้อมูลวิชาการสำรอง (Academic Fallback Mode) — คลังความรู้ MedTech Hub</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                        {msg.source === 'external_research' && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/60 border border-blue-800/70 text-[11px] text-blue-200 font-medium">
+                            <Globe className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>สืบค้นวิจัยจากแหล่งวิชาการภายนอก (External Academic Research Grounding)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {msg.webGrounding?.segments && msg.webGrounding.segments.length > 0 ? (
                       <div className="whitespace-pre-wrap medical-text-wrap">
                         {msg.webGrounding.segments.map((seg, sIdx) => (

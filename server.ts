@@ -1393,7 +1393,6 @@ app.post("/api/gemini/generate", async (req, res) => {
           contents: [{ role: 'user', parts: [{ text: researchPrompt }] }],
           config: {
             systemInstruction: "คุณคือผู้ช่วยวิจัยวิชาการทางการแพทย์สำหรับ MedTech Learning Hub AI เมื่อเอกสารของผู้ใช้ไม่มีข้อมูล ให้ค้นคว้าจากแหล่งวิชาการภายนอกและให้ลิงก์อ้างอิงจริง",
-            temperature: 0.2,
             tools: [{ googleSearch: {} }],
             thinkingConfig: {
               thinkingLevel: ThinkingLevel.LOW
@@ -1753,7 +1752,10 @@ ${formattedChunks}
         break;
       }
 
-      const retryDelay = calculateRetryDelay(attempt, DEFAULT_RETRY_CONFIG);
+      const retryConfig = classification.status === 503 || classification.reason === 'transient_service_unavailable'
+        ? { ...DEFAULT_RETRY_CONFIG, baseDelayMs: 1000 }
+        : DEFAULT_RETRY_CONFIG;
+      const retryDelay = calculateRetryDelay(attempt, retryConfig);
       lastRetryDelayMs = retryDelay;
 
       console.warn(formatRetryLog({

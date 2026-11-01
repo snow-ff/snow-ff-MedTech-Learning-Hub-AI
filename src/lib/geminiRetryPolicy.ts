@@ -278,7 +278,9 @@ export function classifyGeminiError(err: any): RetryClassification {
     (!status && (
       Boolean(explicit5xxMatch) ||
       /\bUNAVAILABLE\b/i.test(messageWithoutUrls) ||
-      /\boverloaded\b/i.test(messageWithoutUrls)
+      /\boverloaded\b/i.test(messageWithoutUrls) ||
+      statusString === 'UNAVAILABLE' ||
+      String(err.status || '').toUpperCase() === 'UNAVAILABLE'
     ));
 
   if (isTransient5xx) {
@@ -392,7 +394,9 @@ export function classifyGeminiError(err: any): RetryClassification {
   const isGenericQuotaExhausted =
     messageWithoutUrls.includes('generate_content_free_tier_requests') ||
     /quota\s*exceeded/i.test(messageWithoutUrls) ||
-    messageWithoutUrls.includes('RESOURCE_EXHAUSTED');
+    messageWithoutUrls.includes('RESOURCE_EXHAUSTED') ||
+    statusString === 'RESOURCE_EXHAUSTED' ||
+    String(err.status || '').toUpperCase() === 'RESOURCE_EXHAUSTED';
 
   if (isGenericQuotaExhausted) {
     return {
