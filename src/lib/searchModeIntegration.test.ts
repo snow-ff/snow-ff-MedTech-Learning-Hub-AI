@@ -1,7 +1,7 @@
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'test-key';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, Server } from 'node:http';
-import { app, getAcademicFallback, setCustomGeminiMock } from '../../server';
+import { app, getAcademicFallback, formatFallbackResponse, setCustomGeminiMock } from '../../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getAllLearningTopics, LEARNING_DOMAIN_GROUPS, STUDY_WORKFLOW_OPTIONS, buildStudyWorkflowPrompt, getWorkflowById } from '../data/learningDomainCatalog';
@@ -827,7 +827,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(prompt).toContain(sampleTopic.nameTh);
     });
 
-    it('H3. Provenance Integrity (Gemini Live): successful live inference returns contentOrigin gemini_live', async () => {
+    it('H3. Provenance Integrity (Mocked Gemini Online): successful mocked online inference returns contentOrigin gemini_live', async () => {
       mockCalls = [];
       setCustomGeminiMock(async (params) => {
         mockCalls.push({
@@ -860,10 +860,19 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(mockCalls.length).toBe(1);
       expect(data.contentOrigin).toBe('gemini_live');
       expect(['gemini_grounding', 'gemini_standard']).toContain(data.source);
+      setCustomGeminiMock(null); // Clean up mock after H3
     });
 
-    it('H4. Provenance Integrity (User Document): document grounding returns contentOrigin user_document', async () => {
+    it('H4. Provenance & Answer Fidelity (Mocked User Document): document grounding uses sampleDocumentContext, checks answer text/references consistency, and avoids leakage from H3', async () => {
       mockCalls = [];
+      setCustomGeminiMock(async (params) => {
+        mockCalls.push({ isDocumentGrounding: params.isDocumentGrounding });
+        return {
+          text: "จากเอกสาร คำว่า brady- หมายถึง อาการช้า (Slow) เช่น bradycardia",
+          candidates: [{ groundingMetadata: { groundingChunks: [] } }]
+        };
+      });
+
       const res = await fetch(`${baseUrl}/api/gemini/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -879,6 +888,14 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       const data = await res.json();
       expect(data.contentOrigin).toBe('user_document');
       expect(['document_grounding', 'academic_fallback']).toContain(data.source);
+      // Verify answer content consistency with document (contains brady-)
+      expect(data.text.toLowerCase()).toContain('brady-');
+      // Verify no leak of H3 robotic surgery text
+      expect(data.text).not.toContain('หุ่นยนต์ช่วยผ่าตัด');
+      // Verify references/verification are present and consistent
+      expect(data.verification).toBeDefined();
+      expect(Array.isArray(data.references)).toBe(true);
+      setCustomGeminiMock(null); // Clean up mock after H4
     });
 
     it('H5. Provenance Integrity (Local Knowledge Base): offline static fallback returns contentOrigin local_knowledge_base and rich localContentMetadata', async () => {
@@ -926,36 +943,95 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     });
 
     it('H7. Invalid Study Workflow: endpoint rejects invalid workflow with HTTP 400', async () => {
-      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'อธิบายข้อมูล' }],
-          searchMode: 'web_search',
-          studyWorkflow: 'invalid_workflow_test'
-        })
-      });
+      for (const invalidWf of ['invalid_workflow_test', 123, 'unknown']) {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'อธิบายข้อมูล' }],
+            searchMode: 'web_search',
+            studyWorkflow: invalidWf
+          })
+        });
 
-      expect(res.status).toBe(400);
-      const data = await res.json();
-      expect(data.error).toBeDefined();
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toBeDefined();
+      }
+    });
+
+    it('H7b. Study Workflow Null, Empty, or Omitted: executes successfully without error', async () => {
+      for (const wfValue of [null, '', undefined]) {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: wfValue
+          })
+        });
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.text).toBeDefined();
+      }
     });
 
     it('H8. Document Missing Provenance: document missing state returns contentOrigin as undefined instead of local_knowledge_base', async () => {
-      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'สรุปเอกสาร' }],
-          searchMode: 'document',
-          documentContext: undefined
-        })
-      });
+      for (const offline of [false, true]) {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'สรุปเอกสาร' }],
+            searchMode: 'document',
+            offlineMode: offline,
+            documentContext: undefined
+          })
+        });
 
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.source).toBe('academic_fallback');
-      expect(data.contentOrigin).toBeUndefined();
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.source).toBe('academic_fallback');
+        expect(data.contentOrigin).toBeUndefined();
+      }
+    });
+
+    it('H9. General Concept & General Fallback Provenance: general_concept and unverified topics must not be classified as local_knowledge_base', async () => {
+      // 9a. General Concept topic (e.g. dtm course starter) -> contentOrigin should be undefined
+      const fallbackConcept = getAcademicFallback('เริ่มเรียนรายวิชา DTM');
+      const resConcept = formatFallbackResponse({
+        fallback: fallbackConcept,
+        isDocumentGrounding: false,
+        isOfflineMode: true,
+        attemptsRun: 0
+      });
+      expect(resConcept.contentOrigin).toBeUndefined();
+      expect(fallbackConcept.localContentMetadata?.verificationStatus).toBe('general_concept');
+
+      // 9b. General Fallback topic (unmatched) -> contentOrigin should be undefined
+      const fallbackGeneral = getAcademicFallback('ประวัติศาสตร์การแพทย์แผนโบราณในยุคกลาง');
+      const resGeneral = formatFallbackResponse({
+        fallback: fallbackGeneral,
+        isDocumentGrounding: false,
+        isOfflineMode: true,
+        attemptsRun: 0
+      });
+      expect(resGeneral.contentOrigin).toBeUndefined();
+      expect(fallbackGeneral.localContentMetadata?.verificationStatus).toBe('unverified');
+
+      // 9c. Verified Curriculum topic -> contentOrigin should be local_knowledge_base
+      const fallbackCurriculum = getAcademicFallback('ระบบสารสนเทศสุขภาพ');
+      const resCurriculum = formatFallbackResponse({
+        fallback: fallbackCurriculum,
+        isDocumentGrounding: false,
+        isOfflineMode: true,
+        attemptsRun: 0
+      });
+      expect(resCurriculum.contentOrigin).toBe('local_knowledge_base');
+      expect(fallbackCurriculum.localContentMetadata?.verificationStatus).toBe('verified_curriculum');
     });
   });
 });

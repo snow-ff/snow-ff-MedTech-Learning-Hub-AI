@@ -1367,7 +1367,15 @@ export function formatFallbackResponse(params: {
     ? (isDocumentGrounding ? "offline_document_fallback" : "offline_static_fallback")
     : "academic_fallback";
 
-  const isVerifiedLocalTopic = Boolean((fallback as any).localContentMetadata && (fallback as any).localContentMetadata.contentId !== "kb-fallback-general-01" && (fallback as any).localContentMetadata.verificationStatus && (fallback as any).localContentMetadata.verificationStatus !== 'unverified');
+  const isVerifiedLocalTopic = Boolean(
+    fallback &&
+    (fallback as any).localContentMetadata &&
+    (fallback as any).localContentMetadata.contentId !== "kb-fallback-general-01" &&
+    (
+      (fallback as any).localContentMetadata.verificationStatus === 'verified_knowledge_base' ||
+      (fallback as any).localContentMetadata.verificationStatus === 'verified_curriculum'
+    )
+  );
 
   return {
     text: responseText,
