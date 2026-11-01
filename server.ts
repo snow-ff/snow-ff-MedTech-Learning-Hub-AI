@@ -1353,10 +1353,20 @@ app.post("/api/gemini/generate", async (req, res) => {
 
   // 1. If user explicitly selected 'document' mode, but no active document is provided or active document has no chunks (unless it's a curriculum query)
   if (searchMode === 'document' && !isDocumentGrounding && !isCurriculumQuery) {
+    const documentMissingText = isOfflineMode
+      ? `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสารในโหมดติวออฟไลน์)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ร่วมกับ **"โหมดติวออฟไลน์"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"**\n\n*(หากต้องการสอบถามความรู้ทั่วไปโดยไม่ใช้เอกสาร สามารถสลับเป็น "ค้นหาเว็บ AI" เพื่อใช้คลังความรู้พื้นฐานออฟไลน์)*`
+      : `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"** หรือสลับเป็น **"ค้นหาเว็บ AI"** เพื่อค้นคว้าข้อมูลทั่วไป`;
+
     return res.json({
-      text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"** หรือสลับเป็น **"ค้นหาเว็บ AI"** เพื่อค้นคว้าข้อมูลทั่วไป`,
+      text: documentMissingText,
       source: "academic_fallback",
       evidenceStatus: "insufficient",
+      serviceStatus: {
+        isApiUnavailable: false,
+        reason: isOfflineMode ? "offline_mode_selected" : "active_document_missing",
+        attemptsRun: 0,
+        servedMode: isOfflineMode ? "offline_document_missing" : "document_missing"
+      },
       references: []
     });
   }
@@ -1371,10 +1381,20 @@ app.post("/api/gemini/generate", async (req, res) => {
   );
 
   if (!isDocumentGrounding && explicitDocRequest && searchMode !== 'web_search' && !isCurriculumQuery) {
+    const documentMissingText = isOfflineMode
+      ? `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสารในโหมดติวออฟไลน์)*\n\nคุณกำลังสอบถามข้อมูลที่ต้องอ้างอิงเอกสาร แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** เพื่อให้ระบบสืบค้นเนื้อหาจากเอกสารได้อย่างถูกต้อง`
+      : `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Document Grounding อย่างแม่นยำ`;
+
     return res.json({
-      text: `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Offline Document Grounding อย่างแม่นยำ`,
+      text: documentMissingText,
       source: "academic_fallback",
       evidenceStatus: "insufficient",
+      serviceStatus: {
+        isApiUnavailable: false,
+        reason: isOfflineMode ? "offline_mode_selected" : "active_document_missing",
+        attemptsRun: 0,
+        servedMode: isOfflineMode ? "offline_document_missing" : "document_missing"
+      },
       references: []
     });
   }
@@ -1469,12 +1489,18 @@ app.post("/api/gemini/generate", async (req, res) => {
         conversationHistory: validatedMessages
       });
 
-      console.log(`[Perf Backend] Deterministic short-circuit executed for unpaged document page number query (0 API calls to Gemini).`);
+      console.log(`[Perf Backend] Deterministic short-circuit executed for unpaged document page number query (0 API calls to Gemini). isOfflineMode: ${isOfflineMode}`);
       return res.json({
         text: shortCircuitText,
-        source: "document_grounding",
+        source: "academic_fallback",
         evidenceStatus: "insufficient",
         verification,
+        serviceStatus: {
+          isApiUnavailable: false,
+          reason: isOfflineMode ? "offline_mode_selected" : "deterministic_validation",
+          attemptsRun: 0,
+          servedMode: isOfflineMode ? "offline_document_fallback" : "local_document_validation"
+        },
         references: []
       });
     }
@@ -1502,12 +1528,12 @@ app.post("/api/gemini/generate", async (req, res) => {
           source: isOfflineMode ? "academic_fallback" : "document_grounding",
           evidenceStatus: "insufficient",
           verification,
-          serviceStatus: isOfflineMode ? {
+          serviceStatus: {
             isApiUnavailable: false,
-            reason: "offline_mode_selected",
+            reason: isOfflineMode ? "offline_mode_selected" : "deterministic_validation",
             attemptsRun: 0,
-            servedMode: "offline_document_fallback"
-          } : undefined,
+            servedMode: isOfflineMode ? "offline_document_fallback" : "local_document_validation"
+          },
           references: []
         });
       }

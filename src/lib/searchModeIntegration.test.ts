@@ -521,4 +521,177 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
     expect(dataQuota.serviceStatus.reason).toBe('quota_or_credential_exhausted');
     expect(dataQuota.text).toContain('HTTP 429 Quota Exceeded');
   }, 25000);
+
+  // Action 5: Offline Mode Status Integrity & Regression Coverage (Tests A - E)
+  describe('Offline Mode Status Integrity & Regression Suite', () => {
+    // Test A: Offline Document with Partial Evidence
+    it('Test A: offline document mode with partial evidence returns WARNING verdict and 0 API calls', async () => {
+      mockCalls = [];
+      const partialDoc = {
+        documentId: 'doc-prefix-only',
+        title: 'medical-terminology-prefix.md',
+        hasNativePages: false,
+        totalPages: 1,
+        chunks: [
+          {
+            id: 'c-pre-1',
+            documentId: 'doc-prefix-only',
+            chunkIndex: 1,
+            hasNativePage: false,
+            text: 'Prefix (คำอุปสรรค) คือส่วนที่เติมหน้าคำศัพท์ทางการแพทย์ เพื่อระบุตำแหน่ง ปริมาณ หรือทิศทาง เช่น Intra- (ภายใน), Sub- (ใต้)',
+            charCount: 110
+          }
+        ]
+      };
+
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Prefix และ Suffix ในเอกสาร' }],
+          searchMode: 'document',
+          offlineMode: true,
+          documentContext: partialDoc
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('offline_document_fallback');
+      expect(data.serviceStatus.reason).toBe('offline_mode_selected');
+
+      expect(data.text).toContain('Partial Evidence Notice');
+      expect(data.text).not.toMatch(/หน้า\s*\d+/);
+      expect(data.verification).toBeDefined();
+      expect(data.verification.verdict).toBe('WARNING');
+      expect(data.verification.isVerified).toBe(false);
+    });
+
+    // Test B: Offline Mode on Unsupported Topic (Static Fallback)
+    it('Test B: offline mode with unsupported topic returns offline_static_fallback and zero API calls', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ประวัติศาสตร์การแพทย์แผนโบราณในยุคกลาง' }],
+          searchMode: 'web_search',
+          offlineMode: true
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('offline_static_fallback');
+      expect(data.serviceStatus.reason).toBe('offline_mode_selected');
+      expect(data.text).toContain('ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้');
+      expect(data.text).toContain('คลังเอกสาร (Document Library)');
+      expect(data.text).not.toContain('โควตา');
+    });
+
+    // Test C: Offline Mode on Supported Static Topic (Serum/Plasma)
+    it('Test C: offline mode with supported topic provides static knowledge with unverified references', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+          searchMode: 'web_search',
+          offlineMode: true
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('offline_static_fallback');
+      expect(data.text).toContain('Serum');
+      expect(data.text).toContain('Plasma');
+      expect(data.references.length).toBeGreaterThan(0);
+      for (const ref of data.references) {
+        expect(ref.verificationStatus).toBe('unverified');
+        expect(ref.linkAccessStatus).toBe('unknown');
+      }
+    });
+
+    // Test D: Offline Document Mode without Active Document
+    it('Test D: offline document mode without active document returns offline_document_missing with 0 API calls', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'สรุปเนื้อหาจากเอกสารหน้านี้' }],
+          searchMode: 'document',
+          offlineMode: true
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('offline_document_missing');
+      expect(data.serviceStatus.reason).toBe('offline_mode_selected');
+      expect(data.text).toContain('ยังไม่ได้เลือกเอกสาร');
+      expect(data.text).not.toContain('โควตา');
+    });
+
+    // Test E: Offline Unpaged Document with Page Number Query
+    it('Test E: offline page query on unpaged document deterministic short-circuit without live AI badge or fake pages', async () => {
+      mockCalls = [];
+      const unpagedDoc = {
+        documentId: 'doc-unpaged-notes',
+        title: 'dtm-study-notes.md',
+        hasNativePages: false,
+        totalPages: 1,
+        chunks: [
+          {
+            id: 'c-note-1',
+            documentId: 'doc-unpaged-notes',
+            chunkIndex: 1,
+            hasNativePage: false,
+            text: 'บันทึกการเรียนรู้รายวิชา DTM สำหรับการสอบกลางภาค',
+            charCount: 50
+          }
+        ]
+      };
+
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'เนื้อหาในหน้า 3 มีอะไรบ้าง' }],
+          searchMode: 'document',
+          offlineMode: true,
+          documentContext: unpagedDoc
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.source).toBe('academic_fallback');
+      expect(data.serviceStatus.servedMode).toBe('offline_document_fallback');
+      expect(data.text).toContain('เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ');
+      expect(data.text).not.toContain('โควตา');
+    });
+  });
 });

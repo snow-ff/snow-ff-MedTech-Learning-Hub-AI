@@ -1102,29 +1102,51 @@ export default function App() {
                           </div>
                         )}
                         {msg.source === 'academic_fallback' && (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/70 text-[11px] text-amber-200 font-medium">
-                            {msg.serviceStatus?.reason === 'quota_or_credential_exhausted' ? (
-                              <>
-                                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>ขีดจำกัดสิทธิ์หรือโควตา API (Resource / Quota Limit) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
-                              </>
-                            ) : msg.serviceStatus?.reason === 'transient_rate_limit' ? (
-                              <>
-                                <RefreshCw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>อัตราคำขอชั่วคราวเกินขีดจำกัด (Gemini Rate Limited) — ตอบผ่านคลังความรู้ทางวิชาการ (Academic Fallback)</span>
-                              </>
-                            ) : (msg.serviceStatus?.lastErrorStatus === 503 || msg.serviceStatus?.reason === 'transient_service_unavailable') ? (
-                              <>
-                                <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>บริการโมเดลมีผู้ใช้งานสูง (HTTP 503 Unavailable) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
-                              </>
-                            ) : (
-                              <>
-                                <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>โหมดข้อมูลวิชาการสำรอง (Academic Fallback Mode) — คลังความรู้ MedTech Hub</span>
-                              </>
-                            )}
-                          </div>
+                          msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.serviceStatus?.reason === 'offline_mode_selected' && msg.groundedDocumentTitle) ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/80 text-[11px] text-emerald-200 font-medium">
+                              <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>โหมดติวออฟไลน์ — ค้นหาและตรวจสอบจากเอกสารโดยตรง (ไม่เรียกใช้ API)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' || msg.serviceStatus?.reason === 'offline_mode_selected' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-[11px] text-indigo-200 font-medium">
+                              <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <span>โหมดการเรียนรู้ออฟไลน์ — คลังความรู้พื้นฐาน MedTech (ไม่เรียกใช้ API)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'offline_document_missing' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-800/80 text-[11px] text-amber-300 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span>โหมดติวออฟไลน์ — ยังไม่ได้เลือกเอกสาร (Active Document Missing)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'local_document_validation' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-800/80 text-[11px] text-cyan-300 font-medium">
+                              <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <span>การตรวจสอบเอกสารในเครื่อง (Local Document Validation — ไม่ผ่าน API)</span>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/70 text-[11px] text-amber-200 font-medium">
+                              {msg.serviceStatus?.reason === 'quota_or_credential_exhausted' ? (
+                                <>
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>ขีดจำกัดสิทธิ์หรือโควตา API (Resource / Quota Limit) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                                </>
+                              ) : msg.serviceStatus?.reason === 'transient_rate_limit' ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>อัตราคำขอชั่วคราวเกินขีดจำกัด (Gemini Rate Limited) — ตอบผ่านคลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                                </>
+                              ) : (msg.serviceStatus?.lastErrorStatus === 503 || msg.serviceStatus?.reason === 'transient_service_unavailable') ? (
+                                <>
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>บริการโมเดลมีผู้ใช้งานสูง (HTTP 503 Unavailable) — สลับสู่คลังความรู้ทางวิชาการ (Academic Fallback)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>โหมดข้อมูลวิชาการสำรอง (Academic Fallback Mode) — คลังความรู้ MedTech Hub</span>
+                                </>
+                              )}
+                            </div>
+                          )
                         )}
                         {msg.source === 'external_research' && (
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-950/60 border border-blue-800/70 text-[11px] text-blue-200 font-medium">
@@ -1398,17 +1420,31 @@ export default function App() {
 
                     {msg.source && (
                       <div className="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
-                        {/* 5 Distinct Service Status States */}
-                        {msg.serviceStatus?.reason === 'offline_mode_selected' || msg.serviceStatus?.servedMode?.startsWith('offline_') ? (
-                          <span className={`px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold flex items-center gap-1.5 ${
-                            msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.source === 'academic_fallback' && msg.groundedDocumentTitle)
-                              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/80 shadow-sm'
-                              : 'bg-indigo-950/90 text-indigo-300 border-indigo-700/80 shadow-sm'
-                          }`}>
+                        {/* 7 Distinct Service Status States */}
+                        {msg.serviceStatus?.servedMode === 'offline_document_missing' ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-slate-900 text-amber-300 border-amber-700/80 flex items-center gap-1.5 shadow-sm">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>โหมดติวออฟไลน์ — ยังไม่ได้เลือกเอกสาร (Active Document Missing)</span>
+                          </span>
+                        ) : msg.serviceStatus?.servedMode === 'document_missing' ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-slate-900 text-amber-300 border-amber-700/80 flex items-center gap-1.5 shadow-sm">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>โหมดติวอิงเอกสาร — ยังไม่ได้เลือกเอกสาร (Active Document Missing)</span>
+                          </span>
+                        ) : msg.serviceStatus?.servedMode === 'local_document_validation' ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-slate-900 text-cyan-300 border-cyan-700/80 flex items-center gap-1.5 shadow-sm">
+                            <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>การตรวจสอบเอกสารในเครื่อง (Local Document Validation — ไม่ผ่าน API)</span>
+                          </span>
+                        ) : msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.serviceStatus?.reason === 'offline_mode_selected' && msg.groundedDocumentTitle) ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-emerald-950/90 text-emerald-300 border-emerald-700/80 flex items-center gap-1.5 shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                            {msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.source === 'academic_fallback' && msg.groundedDocumentTitle)
-                              ? 'โหมดติวออฟไลน์ (Offline Learning Mode) — ค้นจากเอกสารโดยตรง (ไม่เรียกใช้ API)'
-                              : 'โหมดการเรียนรู้ออฟไลน์ (Offline Learning Mode) — คลังความรู้พื้นฐาน (ไม่เรียกใช้ API)'}
+                            <span>โหมดติวออฟไลน์ (Offline Learning Mode) — ค้นจากเอกสารโดยตรง (ไม่เรียกใช้ API)</span>
+                          </span>
+                        ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' || msg.serviceStatus?.reason === 'offline_mode_selected' ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-indigo-950/90 text-indigo-300 border-indigo-700/80 flex items-center gap-1.5 shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                            <span>โหมดการเรียนรู้ออฟไลน์ (Offline Learning Mode) — คลังความรู้พื้นฐาน (ไม่เรียกใช้ API)</span>
                           </span>
                         ) : (msg.source === 'academic_fallback' || msg.serviceStatus?.isApiUnavailable) ? (
                           <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-amber-950/90 text-amber-300 border-amber-700/80 flex items-center gap-1.5 shadow-sm">
@@ -1724,10 +1760,12 @@ export default function App() {
                   <span className="text-[11px] text-slate-400 hidden md:inline">
                     {isOfflineMode
                       ? (searchMode === 'document' && activeDocument
-                          ? `(ติวออฟไลน์อิงจาก: ${activeDocument.title})`
-                          : '(โหมดออฟไลน์: ค้นจากเอกสารที่แนบหรือคลังความรู้พื้นฐาน โดยไม่เรียก API)')
+                          ? `(ติวออฟไลน์อิงจาก: ${activeDocument.title} — ตรวจสอบตรงจากเอกสาร ไม่เรียกใช้ API)`
+                          : searchMode === 'document'
+                          ? '(โหมดติวออฟไลน์: กรุณาเลือกเอกสารในคลังเอกสารเพื่อค้นหาโดยตรง หากไม่เลือกจะค้นได้เฉพาะคลังความรู้พื้นฐาน)'
+                          : '(โหมดออฟไลน์: ใช้งานคลังความรู้พื้นฐาน MedTech — หากต้องการติวอิงเอกสาร ให้เลือกโหมดติวอิงเอกสาร และเลือกเอกสารในคลัง)')
                       : (searchMode === 'document'
-                          ? (activeDocument ? `(อิงจาก: ${activeDocument.title})` : '(เลือกเอกสารในคลังเพื่อตรวจสอบหลักฐาน)')
+                          ? (activeDocument ? `(ติวอิงเอกสาร: ${activeDocument.title} — AI Grounding)` : '(โหมดติวอิงเอกสาร: กรุณาเลือกเอกสารในคลังเพื่อใช้เป็นหลักฐาน)')
                           : '(สืบค้นข้อมูลวิชาการสดภายนอกด้วย Google Search Grounding)')}
                   </span>
                 </div>
