@@ -532,20 +532,21 @@ function buildChunkReferences(
 
 function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWorkflowType): string {
   if (!workflow) return baseText;
+  const cleanBase = baseText.trim();
   switch (workflow) {
     case 'compare':
-      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${baseText}\n\n*ข้อสังเกตเชิงเปรียบเทียบ: จัดโครงสร้างเนื้อหาตามประเด็นเปรียบเทียบหลักจากฐานความรู้*`;
+      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**ประเด็นการเปรียบเทียบและวิเคราะห์จากฐานความรู้:**\n- ประเด็นหลัก: วิเคราะห์ตามเนื้อหาข้อเท็จจริงในแหล่งข้อมูลต้นทาง\n- ข้อสังเกตเชิงเปรียบเทียบ: จัดโครงสร้างเนื้อหาตามประเด็นหลักที่ปรากฏในฐานความรู้โดยไม่มีการคาดเดาเพิ่ม`;
     case 'step_by_step':
-      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${baseText}\n\n*สรุปขั้นตอนตามลำดับที่ปรากฏในฐานความรู้*`;
+      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนตามข้อมูลต้นทาง:**\n1. ตรวจสอบข้อมูลตั้งต้นและนิยามหลัก\n2. ดำเนินการตามลำดับขั้นตอนที่ปรากฏในฐานความรู้\n3. สรุปผลการปฏิบัติงานตามหลักวิชาการ`;
     case 'clinical_dtm_application':
-      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${baseText}\n\n*(หมายเหตุการศึกษา: ตัวอย่างการประยุกต์ใช้ในบริบทเทคนิคการแพทย์และ DTM เพื่อการเรียนรู้เท่านั้น มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
+      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้และการวิเคราะห์เชิงคลินิก:**\n- ข้อเท็จจริงทางวิชาการ: อ้างอิงจากฐานความรู้โดยตรง\n- ตัวอย่างการประยุกต์ใช้ในบริบทเทคนิคการแพทย์และ DTM: สำหรับประกอบการเรียนรู้และการฝึกปฏิบัติ\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
     case 'vocabulary':
-      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${baseText}\n\n*สรุปศัพท์เทคนิคภาษาอังกฤษ คำย่อ และความสำคัญ*`;
+      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**สรุปศัพท์เทคนิคและคำย่อสำคัญ:**\n- ศัพท์วิชาการ: อ้างอิงจากเนื้อหาต้นทาง\n- คำย่อและความหมาย: แปลและอธิบายตามหลักวิชาการเทคนิคการแพทย์และ DTM`;
     case 'quiz_review':
-      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${baseText}\n\n*แบบฝึกหัดทบทวน: จากข้อมูลข้างต้น จงอธิบายหลักการสำคัญและเหตุผลทางวิชาการ*`;
+      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้:**\n- คำถามทบทวน: จงอธิบายหลักการสำคัญจากข้อมูลข้างต้น\n- แนวคำตอบอ้างอิง: สรุปจากข้อเท็จจริงในฐานความรู้โดยไม่มีการแต่งเติมข้อเท็จจริงใหม่`;
     case 'explain':
     default:
-      return baseText;
+      return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n${cleanBase}`;
   }
 }
 
@@ -581,8 +582,37 @@ export function getAcademicFallback(
   }>;
 } {
   const result = getAcademicFallbackInternal(prompt, messages, documentContext, studyWorkflow);
-  if (studyWorkflow && result && result.text) {
-    result.text = applyStudyWorkflowToFallbackText(result.text, studyWorkflow);
+  if (result && result.text) {
+    const originalVerification = result.verification;
+    if (studyWorkflow) {
+      result.text = applyStudyWorkflowToFallbackText(result.text, studyWorkflow);
+    }
+    if (documentContext && Array.isArray(documentContext.chunks)) {
+      const activeChunksForGrounding = documentContext.chunks.map((c: any, idx: number) => ({
+        id: c.id || `ctx-chunk-${idx + 1}`,
+        documentId: 'doc-ctx',
+        chunkIndex: c.chunkIndex,
+        pageNumber: c.pageNumber,
+        text: decodeHtmlEntities(c.text || ''),
+        charCount: (c.text || '').length
+      }));
+      const verification = verifyAcademicAnswer({
+        query: prompt,
+        candidateAnswer: result.text,
+        document: {
+          title: documentContext.title,
+          hasNativePages: documentContext.hasNativePages,
+          totalPages: documentContext.totalPages,
+          chunks: activeChunksForGrounding
+        },
+        conversationHistory: (messages || []).map(m => ({ role: m.role as any, text: m.text }))
+      });
+      if (originalVerification && (originalVerification.verdict === 'WARNING' || originalVerification.verdict === 'INSUFFICIENT_EVIDENCE')) {
+        verification.verdict = originalVerification.verdict;
+        verification.isVerified = originalVerification.isVerified;
+      }
+      result.verification = verification;
+    }
   }
   return result;
 }
@@ -1570,8 +1600,6 @@ app.post("/api/gemini/generate", async (req, res) => {
 หมายเหตุสำคัญ: บริบทรายวิชานี้เป็นเป้าหมายการเรียนรู้ของผู้เรียน ไม่ใช่เอกสารอ้างอิงหรือหลักฐานทางวิชาการ หากไม่มีเอกสารอัปโหลดใน documentContext ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็นความรู้ทั่วไป และห้ามสร้างเลขหน้าหรืออ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`;
   }
 
-  systemInstruction += workflowInstructionText;
-
   const isCurriculumQuery = determineTopic(latestPrompt, validatedMessages) === 'dtm';
   const isDocumentGrounding = Boolean(
     !isCurriculumQuery &&
@@ -1910,6 +1938,10 @@ ${formattedChunks}
    - หากผู้ใช้ถามเรื่องความแตกต่างระหว่าง Prefix และ Suffix ให้ตอบเฉพาะนิยาม ตำแหน่ง หน้าที่ และตัวอย่างของ Prefix และ Suffix
    - ห้ามนำเนื้อหา Word Root (รากศัพท์), Combining Form (รูปเชื่อมคำ), หรือเนื้อหากายวิภาค/ช่องว่างร่างกาย (Body Cavities) มาตอบปะปนในคำตอบเด็ดขาด เว้นแต่ผู้ใช้จะถามถึงโดยตรง
    - สรุปคำตอบให้กระชับ ชัดเจน ตรงประเด็น และไม่เขียนเยิ่นเย้อซ้ำซ้อน`;
+  }
+
+  if (workflowInstructionText && systemInstruction) {
+    systemInstruction += workflowInstructionText;
   }
 
   // Map validated messages to Gemini SDK contents format
