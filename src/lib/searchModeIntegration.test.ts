@@ -1214,6 +1214,63 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         setCustomGeminiMock(null);
       }
     });
+
+    it('R2. Compare False Positive & Rigorous Comparison Evidence: requires dual subjects, contrast properties, and forbids length or cue-only false positives', async () => {
+      const resLong = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ข้อมูลทั่วไปเกี่ยวกับระบบโลหิตวิทยาและห้องปฏิบัติการคลินิก' }],
+          searchMode: 'web_search',
+          offlineMode: true,
+          studyWorkflow: 'compare'
+        })
+      });
+      const dataLong = await resLong.json();
+      expect(dataLong.text).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+
+      const resSingle = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'การย้อมสีแกรมของแบคทีเรียversusทั่วไป' }],
+          searchMode: 'web_search',
+          offlineMode: true,
+          studyWorkflow: 'compare'
+        })
+      });
+      const dataSingle = await resSingle.json();
+      expect(dataSingle.text).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+
+      const resGenuine = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+          searchMode: 'web_search',
+          offlineMode: true,
+          studyWorkflow: 'compare'
+        })
+      });
+      const dataGenuine = await resGenuine.json();
+      expect(dataGenuine.text).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง');
+    });
+
+    it('R3 & H10. Static Knowledge Base & Workflow Consistency across all paths', async () => {
+      const resStaticWf = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'หลักการย้อมสีแกรม' }],
+          searchMode: 'web_search',
+          offlineMode: true,
+          studyWorkflow: 'step_by_step'
+        })
+      });
+      expect(resStaticWf.status).toBe(200);
+      const dataStatic = await resStaticWf.json();
+      expect(dataStatic.text).toContain('ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง');
+    });
   });
 });
 

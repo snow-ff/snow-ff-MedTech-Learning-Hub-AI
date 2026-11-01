@@ -545,9 +545,13 @@ function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWork
       return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ:**\n${core}\n\n**2. รายละเอียดคำอธิบายตามต้นทาง:**\n${rest}`;
     }
     case 'compare': {
-      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b|ต่างกัน|เปรียบเทียบระหว่าง|ข้อแตกต่าง)/i.test(cleanBase);
-      if (hasComparisonCue || cleanBase.length > 20) {
-        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุความแตกต่างและคุณสมบัติเปรียบเทียบตามเอกสารอ้างอิง`;
+      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b|ต่างกัน|เปรียบเทียบระหว่าง|ข้อแตกต่าง|ต่างจาก|แตกต่าง|เปรียบเทียบกับ)/i.test(cleanBase);
+      const hasTwoSubjects = /(?:และ|กับ|vs|versus|ขณะที่|ในขณะที่|เทียบกับ|ต่างจาก)/i.test(cleanBase) && (cleanBase.includes('ซีรั่ม') || cleanBase.includes('พลาสมา') || cleanBase.includes('plasma') || cleanBase.includes('serum') || cleanBase.includes('conventional') || cleanBase.includes('real-time') || /(?:ระหว่าง|กับ|และ)\s+[ก-ฮa-zA-Z]+/i.test(cleanBase) || cleanBase.includes('ต่างกัน') || cleanBase.includes('เปรียบเทียบ'));
+      const hasContrastProperty = /(?:คุณสมบัติ|ต่าง|ด้าน|ลักษณะ|การทำงาน|ข้อแตกต่าง|แตกต่างกัน|ต่างจาก|ส่วนประกอบ|ปริมาณ|ระยะเวลา|fibrinogen|coagulation)/i.test(cleanBase);
+      const isSubstantiveComparison = hasComparisonCue && hasTwoSubjects && hasContrastProperty && !cleanBase.includes('ไม่มีข้อมูลเปรียบเทียบ') && !cleanBase.includes('ไม่พบข้อมูล');
+
+      if (isSubstantiveComparison) {
+        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุสิ่งเปรียบเทียบและคุณสมบัติความแตกต่างตามแหล่งข้อมูลต้นทางที่ตรวจสอบได้`;
       }
       return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ)*`;
     }
@@ -900,8 +904,9 @@ function getAcademicFallbackInternal(
   const prefixNotice = "";
 
 
-  if (matchedTopic === 'serum') {
-    return {
+  const staticFallback = (() => {
+    if (matchedTopic === 'serum') {
+      return {
       text: prefixNotice + `**ความแตกต่างระหว่างซีรั่ม (Serum) และพลาสมา (Plasma) ในงานห้องปฏิบัติการทางการแพทย์**
 
 1. **คำจำกัดความและความแตกต่างพื้นฐาน (Core Definitions & Differences):**
@@ -1363,6 +1368,12 @@ function getAcademicFallbackInternal(
       references: []
     };
   }
+})() as ReturnType<typeof getAcademicFallback>;
+
+  if (studyWorkflow && staticFallback) {
+    staticFallback.text = applyStudyWorkflowToFallbackText(staticFallback.text, studyWorkflow);
+  }
+  return staticFallback;
 }
 
 // Formats unified fallback response for both Offline Learning Mode and Online Failure Fallback
