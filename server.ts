@@ -1415,8 +1415,14 @@ app.post("/api/gemini/generate", async (req, res) => {
   const { messages, prompt, documentContext, courseContext, searchMode, offlineMode, studyWorkflow } = req.body;
   const isOfflineMode = Boolean(offlineMode);
   const VALID_WORKFLOWS = ['explain', 'compare', 'step_by_step', 'clinical_dtm_application', 'vocabulary', 'quiz_review'];
-  if (studyWorkflow && !VALID_WORKFLOWS.includes(studyWorkflow)) {
-    return res.status(400).json({ error: "รูปแบบ Study Workflow ไม่ถูกต้อง กรุณาเลือกรูปแบบที่ระบบรองรับ" });
+  if (studyWorkflow !== undefined && studyWorkflow !== null && studyWorkflow !== '') {
+    if (
+      typeof studyWorkflow !== 'string' ||
+      !VALID_WORKFLOWS.includes(studyWorkflow) ||
+      studyWorkflow.trim() === ''
+    ) {
+      return res.status(400).json({ error: "รูปแบบ Study Workflow ไม่ถูกต้อง กรุณาเลือกรูปแบบที่ระบบรองรับ" });
+    }
   }
   console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, offlineMode: ${isOfflineMode}, studyWorkflow: ${studyWorkflow || 'none'}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
 

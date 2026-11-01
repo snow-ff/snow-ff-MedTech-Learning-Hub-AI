@@ -863,39 +863,61 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       setCustomGeminiMock(null); // Clean up mock after H3
     });
 
-    it('H4. Provenance & Answer Fidelity (Mocked User Document): document grounding uses sampleDocumentContext, checks answer text/references consistency, and avoids leakage from H3', async () => {
+    it('H4. Provenance & Answer Fidelity (Mocked User Document): document grounding verifies isDocumentGrounding, tools absence, verification verdict, evidence fidelity, and ground truth consistency', async () => {
       mockCalls = [];
       setCustomGeminiMock(async (params) => {
-        mockCalls.push({ isDocumentGrounding: params.isDocumentGrounding });
+        mockCalls.push({
+          isDocumentGrounding: params.isDocumentGrounding,
+          tools: params.tools
+        });
         return {
-          text: "จากเอกสาร คำว่า brady- หมายถึง อาการช้า (Slow) เช่น bradycardia",
+          text: "จากเอกสาร Prefix brady- หมายถึง ช้า (Slow)",
           candidates: [{ groundingMetadata: { groundingChunks: [] } }]
         };
       });
 
-      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'คำว่า brady- มีความหมายว่าอย่างไรในเอกสาร' }],
-          searchMode: 'document',
-          offlineMode: false,
-          documentContext: sampleDocumentContext
-        })
-      });
+      try {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'คำว่า brady- มีความหมายว่าอย่างไรในเอกสาร' }],
+            searchMode: 'document',
+            offlineMode: false,
+            documentContext: sampleDocumentContext
+          })
+        });
 
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.contentOrigin).toBe('user_document');
-      expect(['document_grounding', 'academic_fallback']).toContain(data.source);
-      // Verify answer content consistency with document (contains brady-)
-      expect(data.text.toLowerCase()).toContain('brady-');
-      // Verify no leak of H3 robotic surgery text
-      expect(data.text).not.toContain('หุ่นยนต์ช่วยผ่าตัด');
-      // Verify references/verification are present and consistent
-      expect(data.verification).toBeDefined();
-      expect(Array.isArray(data.references)).toBe(true);
-      setCustomGeminiMock(null); // Clean up mock after H4
+        expect(res.status).toBe(200);
+        const data = await res.json();
+
+        // 1. Check mock was called in Document Grounding Mode
+        const lastCall = mockCalls[mockCalls.length - 1];
+        expect(lastCall).toBeDefined();
+        expect(lastCall.isDocumentGrounding).toBe(true);
+        // 2. Check Google Search tool was not sent in Document Grounding mode
+        expect(lastCall.tools).toBeUndefined();
+
+        expect(data.contentOrigin).toBe('user_document');
+        expect(['document_grounding', 'academic_fallback']).toContain(data.source);
+        expect(data.text.toLowerCase()).toContain('brady-');
+        expect(data.text).not.toContain('หุ่นยนต์ช่วยผ่าตัด');
+
+        // 5 & 6. Verify Academic Verifier contract (verdict and evidence fidelity)
+        expect(data.verification).toBeDefined();
+        expect(['PASS', 'WARNING']).toContain(data.verification.verdict);
+        expect(data.verification.stages.evidenceFidelity.passed).toBe(true);
+
+        // 7. Verify references support answer
+        expect(Array.isArray(data.references)).toBe(true);
+        expect(data.references.length).toBeGreaterThan(0);
+        for (const ref of data.references) {
+          expect(ref.type).toBe('document_chunk');
+          expect(ref.linkAccessStatus).toBe('verified_local');
+        }
+      } finally {
+        setCustomGeminiMock(null);
+      }
     });
 
     it('H5. Provenance Integrity (Local Knowledge Base): offline static fallback returns contentOrigin local_knowledge_base and rich localContentMetadata', async () => {

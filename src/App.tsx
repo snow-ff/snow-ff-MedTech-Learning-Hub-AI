@@ -1152,9 +1152,14 @@ export default function App() {
                                 [{msg.localContentMetadata.contentId} v{msg.localContentMetadata.version}]
                               </span>
                             )}
-                            {msg.localContentMetadata?.verificationStatus === 'verified' && (
+                            {msg.localContentMetadata?.verificationStatus === 'verified_knowledge_base' && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 text-[10px] font-sans">
-                                ยืนยันแล้ว
+                                ยืนยันคลังความรู้ (Verified KB)
+                              </span>
+                            )}
+                            {msg.localContentMetadata?.verificationStatus === 'verified_curriculum' && (
+                              <span className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800 text-[10px] font-sans">
+                                ผ่านการตรวจสอบกับหลักสูตร (Verified Curriculum)
                               </span>
                             )}
                           </div>
