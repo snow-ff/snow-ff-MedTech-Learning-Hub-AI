@@ -165,6 +165,7 @@ export interface LocalContentMetadata {
   verificationStatus: 'verified' | 'unverified' | 'verified_knowledge_base' | 'verified_curriculum' | 'general_concept';
   reviewScope: string;
   referencesCount: number;
+  learningDomainId?: string;
 }
 
 export type LearningDomainGroupId = 'medical_foundations' | 'medical_technology' | 'digital_health_dtm';
