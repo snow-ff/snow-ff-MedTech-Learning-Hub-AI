@@ -1123,20 +1123,143 @@ export function getAcademicFallback(
     };
   } else {
     return {
-      text: prefixNotice + `**ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้**
-
-ขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม`,
+      text: prefixNotice + `**ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้**\n\nขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม\n\n💡 **คำแนะนำสำหรับการเรียนรู้:**\n- คุณสามารถไปที่แท็บ **"คลังเอกสาร (Document Library)"** เพื่อเลือกหรืออัปโหลดเอกสารที่เกี่ยวข้อง แล้วคลิก **"ถามตอบเอกสารนี้"** ระบบจะสามารถวิเคราะห์และตอบคำถามจากเนื้อหาเอกสารให้ได้ทันที\n- หรือสลับเป็นโหมด **"ออนไลน์ (Gemini AI)"** เพื่อสอบถามปัญญาประดิษฐ์หรือค้นหาข้อมูลจากอินเทอร์เน็ต`,
       references: []
     };
   }
+}
+
+// Formats unified fallback response for both Offline Learning Mode and Online Failure Fallback
+export function formatFallbackResponse(params: {
+  fallback: ReturnType<typeof getAcademicFallback>;
+  isDocumentGrounding: boolean;
+  isOfflineMode: boolean;
+  attemptsRun: number;
+  lastError?: any;
+}) {
+  const { fallback, isDocumentGrounding, isOfflineMode, attemptsRun, lastError } = params;
+  let serviceNoticeText = "";
+
+  if (isOfflineMode) {
+    serviceNoticeText = "";
+  } else if (lastError) {
+    const classification = classifyGeminiError(lastError);
+    const modeNotice = isDocumentGrounding
+      ? "ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ"
+      : "ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ";
+
+    if (classification.reason === 'client_error') {
+      const errorObj = lastError?.error || lastError;
+      const allDetailContainers = [
+        ...(Array.isArray(lastError?.errorDetails) ? lastError.errorDetails : []),
+        ...(Array.isArray(errorObj?.errorDetails) ? errorObj.errorDetails : []),
+        ...(Array.isArray(errorObj?.details) ? errorObj.details : []),
+        ...(Array.isArray(lastError?.details) ? lastError.details : [])
+      ];
+      const hasStructuredArgError =
+        String(errorObj?.status || '').toUpperCase() === 'INVALID_ARGUMENT' ||
+        String(lastError?.reason || errorObj?.reason || '').toUpperCase() === 'INVALID_ARGUMENT' ||
+        allDetailContainers.some((d: any) => d && String(d.reason || '').toUpperCase() === 'INVALID_ARGUMENT') ||
+        String(lastError?.message || '').toUpperCase().includes('INVALID_ARGUMENT');
+
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 400) {
+        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 401) {
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 401 Unauthorized) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 403) {
+        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 403 Forbidden) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 429) {
+        if (hasStructuredArgError) {
+          serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการหรือพารามิเตอร์ไม่ถูกต้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        } else {
+          serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคำขอขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
+        }
+      } else if (hasStructuredArgError) {
+        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP ${classification.status || 400} Bad Request) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: คำขอหรือการตั้งค่าสิทธิ์ไม่ถูกต้อง (HTTP ${classification.status || 400}) — ${modeNotice})*\n\n`;
+      }
+    } else if (classification.reason === 'transient_service_unavailable') {
+      if (classification.status === 500) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 500 Internal Server Error) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 502) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 502 Bad Gateway) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status === 504) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 504 Gateway Timeout) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status || '5xx'} Server Error) — ${modeNotice})*\n\n`;
+      }
+    } else if (classification.reason === 'transient_timeout_or_network') {
+      serviceNoticeText = `*(แจ้งเตือน: การเชื่อมต่อไปยัง Gemini AI หมดเวลาหรือขาดการเชื่อมต่อชั่วคราว (Network/Timeout) — ${modeNotice})*\n\n`;
+    } else if (classification.reason === 'quota_or_credential_exhausted') {
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งาน Gemini API เต็มหรือถูกจำกัด (HTTP ${classification.status || 429} Quota Exceeded) — ${modeNotice})*\n\n`;
+      }
+    } else if (classification.reason === 'transient_rate_limit') {
+      if (classification.status === 503) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
+      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
+        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
+      } else {
+        serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP ${classification.status || 429} Rate Limit) — ${modeNotice})*\n\n`;
+      }
+    } else {
+      serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ${modeNotice})*\n\n`;
+    }
+  }
+
+  const responseText = serviceNoticeText ? `${serviceNoticeText}${fallback.text}` : fallback.text;
+
+  const servedMode = isOfflineMode
+    ? (isDocumentGrounding ? "offline_document_fallback" : "offline_static_fallback")
+    : "academic_fallback";
+
+  return {
+    text: responseText,
+    source: "academic_fallback", // Critical: MUST remain 'academic_fallback' (never misrepresent fallback as Gemini generation)
+    evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "sufficient" : undefined),
+    verification: (fallback as any).verification,
+    serviceStatus: {
+      isApiUnavailable: !isOfflineMode,
+      lastErrorStatus: !isOfflineMode && lastError ? classifyGeminiError(lastError).status : undefined,
+      reason: isOfflineMode ? "offline_mode_selected" : (lastError ? classifyGeminiError(lastError).reason : undefined),
+      attemptsRun: attemptsRun,
+      servedMode: servedMode
+    },
+    references: (fallback.references || []).map(r => ({
+      ...r,
+      type: isDocumentGrounding ? "document_chunk" : "external_academic_link",
+      linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
+      verificationStatus: isDocumentGrounding
+        ? (r.verificationStatus || ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation"))
+        : "unverified",
+      reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
+      reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
+      evidenceLocator: isDocumentGrounding
+        ? ((r as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้')
+        : null,
+      contentVersion: "1.2"
+    })),
+  };
 }
 
 // API endpoint for Gemini generation with multi-turn messages, retry, exponential backoff, and Google Search Grounding
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
   const requestId = (req.headers['x-request-id'] as string) || `req-${Date.now()}`;
-  const { messages, prompt, documentContext, courseContext, searchMode } = req.body;
-  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
+  const { messages, prompt, documentContext, courseContext, searchMode, offlineMode } = req.body;
+  const isOfflineMode = Boolean(offlineMode);
+  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, offlineMode: ${isOfflineMode}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -1357,10 +1480,10 @@ app.post("/api/gemini/generate", async (req, res) => {
     }
 
     if (!preComputedRetrieval.hasEvidence || preComputedRetrieval.relevantChunks.length === 0) {
-      if (searchMode === 'document') {
-        console.log(`[Perf Backend] Document mode active and document has insufficient evidence for query "${latestPrompt}". Strictly refusing external search.`);
+      if (searchMode === 'document' || isOfflineMode) {
+        console.log(`[Perf Backend] Document has insufficient evidence for query "${latestPrompt}" (searchMode: ${searchMode}, offlineMode: ${isOfflineMode}). Strictly refusing external search.`);
         const docTitle = decodeHtmlEntities(documentContext.title || 'เอกสารการเรียนรู้');
-        const insufficientText = `*(ค้นหาจากเอกสาร: "${docTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${docTitle}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง เนื่องจากคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน หากต้องการค้นคว้าข้อมูลเพิ่มเติมจากอินเทอร์เน็ต กรุณาสลับโหมดเป็น **"ค้นหาเว็บ AI"**`;
+        const insufficientText = `*(ค้นหาจากเอกสาร: "${docTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${docTitle}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง ${isOfflineMode ? 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวออฟไลน์ (Offline Learning Mode)"** ระบบจึงเน้นอ้างอิงจากเอกสารโดยตรงและไม่เรียกใช้บริการภายนอก' : 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน หากต้องการค้นคว้าข้อมูลเพิ่มเติมจากอินเทอร์เน็ต กรุณาสลับโหมดเป็น **"ค้นหาเว็บ AI"**'}`;
 
         const verification = verifyAcademicAnswer({
           query: latestPrompt,
@@ -1376,9 +1499,15 @@ app.post("/api/gemini/generate", async (req, res) => {
 
         return res.json({
           text: insufficientText,
-          source: "document_grounding",
+          source: isOfflineMode ? "academic_fallback" : "document_grounding",
           evidenceStatus: "insufficient",
           verification,
+          serviceStatus: isOfflineMode ? {
+            isApiUnavailable: false,
+            reason: "offline_mode_selected",
+            attemptsRun: 0,
+            servedMode: "offline_document_fallback"
+          } : undefined,
           references: []
         });
       }
@@ -1525,6 +1654,17 @@ ${formattedChunks}
     role: m.role,
     parts: [{ text: m.text }]
   }));
+
+  if (isOfflineMode) {
+    console.log(`[Req ${requestId}] Offline Learning Mode active. Bypassing Gemini API retry loop (0 API calls). isDocumentGrounding: ${isDocumentGrounding}`);
+    const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null);
+    return res.json(formatFallbackResponse({
+      fallback,
+      isDocumentGrounding,
+      isOfflineMode: true,
+      attemptsRun: 0
+    }));
+  }
 
   let attempt = 0;
   const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
@@ -1789,112 +1929,13 @@ ${formattedChunks}
   // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and guarded documentContext)
   const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null);
 
-  let serviceNoticeText = "";
-  if (lastError) {
-    const classification = classifyGeminiError(lastError);
-    const modeNotice = isDocumentGrounding
-      ? "ระบบดึงคำตอบวิชาการที่ผ่านการตรวจสอบจากเอกสารที่เลือกให้โดยอัตโนมัติ"
-      : "ระบบแสดงข้อมูลวิชาการสำรองจากคลังความรู้พื้นฐาน MedTech Hub โดยไม่ได้เชื่อมต่อค้นหาเว็บสดหรืออ้างอิงเอกสารเฉพาะ";
-
-    if (classification.reason === 'client_error') {
-      const errorObj = lastError?.error || lastError;
-      const allDetailContainers = [
-        ...(Array.isArray(lastError?.errorDetails) ? lastError.errorDetails : []),
-        ...(Array.isArray(errorObj?.errorDetails) ? errorObj.errorDetails : []),
-        ...(Array.isArray(errorObj?.details) ? errorObj.details : []),
-        ...(Array.isArray(lastError?.details) ? lastError.details : [])
-      ];
-      const hasStructuredArgError =
-        String(errorObj?.status || '').toUpperCase() === 'INVALID_ARGUMENT' ||
-        String(lastError?.reason || errorObj?.reason || '').toUpperCase() === 'INVALID_ARGUMENT' ||
-        allDetailContainers.some(d => d && String(d.reason || '').toUpperCase() === 'INVALID_ARGUMENT') ||
-        String(lastError?.message || '').toUpperCase().includes('INVALID_ARGUMENT');
-
-      if (classification.status === 503) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
-      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบสิทธิ์ (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 400) {
-        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP 400 Bad Request) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 401) {
-        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 401 Unauthorized) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 403) {
-        serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึง Gemini API ขัดข้อง (HTTP 403 Forbidden) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 429) {
-        if (hasStructuredArgError) {
-          serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการหรือพารามิเตอร์ไม่ถูกต้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
-        } else {
-          serviceNoticeText = `*(แจ้งเตือน: สิทธิ์การเข้าถึงหรือคำขอขัดข้อง (HTTP 429 Client Error) — ${modeNotice})*\n\n`;
-        }
-      } else if (hasStructuredArgError) {
-        serviceNoticeText = `*(แจ้งเตือน: รูปแบบคำขอด้านวิชาการไม่ถูกต้อง (HTTP ${classification.status || 400} Bad Request) — ${modeNotice})*\n\n`;
-      } else {
-        serviceNoticeText = `*(แจ้งเตือน: คำขอหรือการตั้งค่าสิทธิ์ไม่ถูกต้อง (HTTP ${classification.status || 400}) — ${modeNotice})*\n\n`;
-      }
-    } else if (classification.reason === 'transient_service_unavailable') {
-      if (classification.status === 500) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 500 Internal Server Error) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 502) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 502 Bad Gateway) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 503) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
-      } else if (classification.status === 504) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP 504 Gateway Timeout) — ${modeNotice})*\n\n`;
-      } else {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status || '5xx'} Server Error) — ${modeNotice})*\n\n`;
-      }
-    } else if (classification.reason === 'transient_timeout_or_network') {
-      serviceNoticeText = `*(แจ้งเตือน: การเชื่อมต่อไปยัง Gemini AI หมดเวลาหรือขาดการเชื่อมต่อชั่วคราว (Network/Timeout) — ${modeNotice})*\n\n`;
-    } else if (classification.reason === 'quota_or_credential_exhausted') {
-      if (classification.status === 503) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นหรือขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
-      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราวในการตรวจสอบโควตา (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
-      } else {
-        serviceNoticeText = `*(แจ้งเตือน: โควตาการใช้งาน Gemini API เต็มหรือถูกจำกัด (HTTP ${classification.status || 429} Quota Exceeded) — ${modeNotice})*\n\n`;
-      }
-    } else if (classification.reason === 'transient_rate_limit') {
-      if (classification.status === 503) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI มีผู้ใช้งานหนาแน่นชั่วคราว (HTTP 503 Service Unavailable) — ${modeNotice})*\n\n`;
-      } else if (classification.status && classification.status >= 500 && classification.status < 600) {
-        serviceNoticeText = `*(แจ้งเตือน: บริการ Gemini AI ขัดข้องชั่วคราว (HTTP ${classification.status} Server Error) — ${modeNotice})*\n\n`;
-      } else {
-        serviceNoticeText = `*(แจ้งเตือน: อัตราการส่งคำขอไปยัง Gemini API ถี่เกินไปชั่วคราว (HTTP ${classification.status || 429} Rate Limit) — ${modeNotice})*\n\n`;
-      }
-    } else {
-      serviceNoticeText = `*(แจ้งเตือน: ไม่สามารถเชื่อมต่อบริการ Gemini AI ได้ชั่วคราว — ${modeNotice})*\n\n`;
-    }
-  }
-
-  const responseText = serviceNoticeText ? `${serviceNoticeText}${fallback.text}` : fallback.text;
-
-  return res.json({
-    text: responseText,
-    source: "academic_fallback", // Critical: MUST remain 'academic_fallback' (never misrepresent fallback as Gemini generation)
-    evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "sufficient" : undefined),
-    verification: (fallback as any).verification,
-    serviceStatus: {
-      isApiUnavailable: true,
-      lastErrorStatus: lastError ? classifyGeminiError(lastError).status : undefined,
-      reason: lastError ? classifyGeminiError(lastError).reason : undefined,
-      attemptsRun: attempt,
-      servedMode: "academic_fallback"
-    },
-    references: fallback.references.map(r => ({
-      ...r,
-      type: isDocumentGrounding ? "document_chunk" : "external_academic_link",
-      linkAccessStatus: isDocumentGrounding ? "verified_local" : "unknown",
-      verificationStatus: isDocumentGrounding
-        ? (r.verificationStatus || ((fallback as any).verification?.stages?.evidenceFidelity?.passed ? "source_grounded" : "unsupported_citation"))
-        : "unverified",
-      reviewer: isDocumentGrounding ? "Academic Verifier v1.2" : null,
-      reviewDate: isDocumentGrounding ? new Date().toISOString() : null,
-      evidenceLocator: isDocumentGrounding
-        ? ((r as any).evidenceLocator || 'ไม่สามารถยืนยันหมายเลขแหล่งอ้างอิงได้')
-        : null,
-      contentVersion: "1.2"
-    })),
-  });
+  return res.json(formatFallbackResponse({
+    fallback,
+    isDocumentGrounding,
+    isOfflineMode: false,
+    attemptsRun: attempt,
+    lastError
+  }));
 });
 
 async function startServer() {

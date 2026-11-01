@@ -1,6 +1,6 @@
 {
-  "summary":  "System-wide root-cause remediation for Source Locator Provenance, Evidence Contracts, Storage Auto-migration, and Reference Card rendering in MedTech Learning Hub AI v1.2.",
-  "updatedAt":  "2026-10-28T04:15:47.147931948Z",
+  "summary":  "Restored actual application usability and implemented first-class Offline Learning Mode for MedTech Learning Hub AI v1.2. Validated 5 clean service status states without fake AI claims or quota misrepresentation. Verified Scenarios A through D on live running dev server.",
+  "updatedAt":  "2026-11-01T03:48:38.875420737Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

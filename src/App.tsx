@@ -216,6 +216,25 @@ export default function App() {
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
   const [searchMode, setSearchMode] = useState<'document' | 'web_search'>('web_search');
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('medtech_offline_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleOfflineMode = () => {
+    setIsOfflineMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('medtech_offline_mode', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -555,6 +574,7 @@ export default function App() {
         body: JSON.stringify({
           messages: validSlice,
           searchMode,
+          offlineMode: isOfflineMode,
           documentContext: documentContextPayload,
           courseContext: selectedLearningCourse ? {
             code: selectedLearningCourse.code,
@@ -1378,27 +1398,54 @@ export default function App() {
 
                     {msg.source && (
                       <div className="mt-2.5 flex items-center gap-2 flex-wrap text-xs">
-                        <span className={`px-2 py-0.5 rounded-full font-mono border ${
-                          msg.source === 'document_grounding'
-                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                            : msg.source === 'external_research'
-                            ? 'bg-blue-950/80 text-blue-300 border-blue-800'
-                            : msg.source === 'gemini_grounding'
-                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                            : msg.source === 'gemini_standard'
-                            ? 'bg-cyan-950/80 text-cyan-300 border-cyan-800'
-                            : 'bg-amber-950/80 text-amber-300 border-amber-800'
-                        }`}>
-                          {msg.source === 'document_grounding'
-                            ? '📚 Document Grounded Mode'
-                            : msg.source === 'external_research'
-                            ? '🌐 External Academic Research'
-                            : msg.source === 'gemini_grounding'
-                            ? 'Google Search Grounding (Live)'
-                            : msg.source === 'gemini_standard'
-                            ? 'Gemini AI Standard'
-                            : 'Academic Fallback Mode'}
-                        </span>
+                        {/* 5 Distinct Service Status States */}
+                        {msg.serviceStatus?.reason === 'offline_mode_selected' || msg.serviceStatus?.servedMode?.startsWith('offline_') ? (
+                          <span className={`px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold flex items-center gap-1.5 ${
+                            msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.source === 'academic_fallback' && msg.groundedDocumentTitle)
+                              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/80 shadow-sm'
+                              : 'bg-indigo-950/90 text-indigo-300 border-indigo-700/80 shadow-sm'
+                          }`}>
+                            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                            {msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.source === 'academic_fallback' && msg.groundedDocumentTitle)
+                              ? 'โหมดติวออฟไลน์ (Offline Learning Mode) — ค้นจากเอกสารโดยตรง (ไม่เรียกใช้ API)'
+                              : 'โหมดการเรียนรู้ออฟไลน์ (Offline Learning Mode) — คลังความรู้พื้นฐาน (ไม่เรียกใช้ API)'}
+                          </span>
+                        ) : (msg.source === 'academic_fallback' || msg.serviceStatus?.isApiUnavailable) ? (
+                          <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-amber-950/90 text-amber-300 border-amber-700/80 flex items-center gap-1.5 shadow-sm">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            <span>
+                              โหมดสำรองวิชาการ (Academic Fallback) — {
+                                msg.serviceStatus?.reason === 'quota_or_credential_exhausted'
+                                  ? 'ขีดจำกัดสิทธิ์หรือโควตา API (Resource / Quota Limit)'
+                                  : msg.serviceStatus?.reason === 'transient_service_unavailable'
+                                  ? 'บริการปลายทางขัดข้องชั่วคราว (Service Unavailable)'
+                                  : msg.serviceStatus?.reason === 'transient_timeout_or_network'
+                                  ? 'การเชื่อมต่อหมดเวลาชั่วคราว (Timeout / Network)'
+                                  : msg.serviceStatus?.reason === 'transient_rate_limit'
+                                  ? 'อัตราคำขอชั่วคราว (Rate Limit)'
+                                  : 'บริการ Gemini AI ขัดข้องชั่วคราว'
+                              }
+                            </span>
+                          </span>
+                        ) : msg.source === 'gemini_grounding' ? (
+                          <span className="px-2.5 py-0.5 rounded-full font-mono border text-[11px] bg-emerald-950/80 text-emerald-300 border-emerald-800 flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>Google Search Grounding (Live AI)</span>
+                          </span>
+                        ) : msg.source === 'document_grounding' ? (
+                          <span className="px-2.5 py-0.5 rounded-full font-mono border text-[11px] bg-emerald-950/80 text-emerald-300 border-emerald-800 flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>Document Grounding (Live AI)</span>
+                          </span>
+                        ) : msg.source === 'external_research' ? (
+                          <span className="px-2.5 py-0.5 rounded-full font-mono border text-[11px] bg-blue-950/80 text-blue-300 border-blue-800 flex items-center gap-1">
+                            <span>🌐 External Academic Research (Live)</span>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full font-mono border text-[11px] bg-cyan-950/80 text-cyan-300 border-cyan-800 flex items-center gap-1">
+                            <span>Gemini AI Standard (Live)</span>
+                          </span>
+                        )}
                       </div>
                     )}
                     {msg.references && (
@@ -1604,6 +1651,41 @@ export default function App() {
               {/* Mode & Action Control Toolbar */}
               <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* Connection / Learning Mode Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={toggleOfflineMode}
+                    className={`px-3.5 py-2 sm:py-1.5 sm:px-3 rounded-xl font-medium flex items-center gap-1.5 transition-all min-h-[44px] sm:min-h-[38px] border ${
+                      isOfflineMode
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-600/80 hover:bg-amber-900/60 shadow-sm'
+                        : 'bg-slate-950/80 text-slate-300 border-slate-700/80 hover:bg-slate-900/60 shadow-sm'
+                    }`}
+                    title={
+                      isOfflineMode
+                        ? 'กำลังใช้งานโหมดเรียนรู้ออฟไลน์ (ไม่ใช้โควตา/ไม่เรียก API) — คลิกเพื่อสลับเป็นโหมดออนไลน์'
+                        : 'กำลังใช้งานโหมดออนไลน์ (Gemini AI สด) — คลิกเพื่อสลับเป็นโหมดเรียนรู้ออฟไลน์'
+                    }
+                    aria-label="สลับโหมดการเชื่อมต่อ ออนไลน์/ออฟไลน์"
+                  >
+                    {isOfflineMode ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                        <span className="font-semibold">โหมดติวออฟไลน์</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-200 font-mono hidden sm:inline">
+                          Zero-API
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="font-semibold">ออนไลน์</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono hidden sm:inline">
+                          Gemini AI
+                        </span>
+                      </>
+                    )}
+                  </button>
+
                   {/* AI Search Mode Toggle Button */}
                   <button
                     type="button"
@@ -1640,9 +1722,13 @@ export default function App() {
                   </button>
 
                   <span className="text-[11px] text-slate-400 hidden md:inline">
-                    {searchMode === 'document'
-                      ? (activeDocument ? `(อิงจาก: ${activeDocument.title})` : '(เลือกเอกสารในคลังเพื่อตรวจสอบหลักฐาน)')
-                      : '(สืบค้นข้อมูลวิชาการสดภายนอกด้วย Google Search Grounding)'}
+                    {isOfflineMode
+                      ? (searchMode === 'document' && activeDocument
+                          ? `(ติวออฟไลน์อิงจาก: ${activeDocument.title})`
+                          : '(โหมดออฟไลน์: ค้นจากเอกสารที่แนบหรือคลังความรู้พื้นฐาน โดยไม่เรียก API)')
+                      : (searchMode === 'document'
+                          ? (activeDocument ? `(อิงจาก: ${activeDocument.title})` : '(เลือกเอกสารในคลังเพื่อตรวจสอบหลักฐาน)')
+                          : '(สืบค้นข้อมูลวิชาการสดภายนอกด้วย Google Search Grounding)')}
                   </span>
                 </div>
 
