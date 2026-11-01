@@ -1102,25 +1102,30 @@ export default function App() {
                           </div>
                         )}
                         {msg.source === 'academic_fallback' && (
-                          msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.serviceStatus?.reason === 'offline_mode_selected' && msg.groundedDocumentTitle) ? (
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/80 text-[11px] text-emerald-200 font-medium">
-                              <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span>โหมดติวออฟไลน์ — ค้นหาและตรวจสอบจากเอกสารโดยตรง (ไม่เรียกใช้ API)</span>
-                            </div>
-                          ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' || msg.serviceStatus?.reason === 'offline_mode_selected' ? (
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-[11px] text-indigo-200 font-medium">
-                              <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                              <span>โหมดการเรียนรู้ออฟไลน์ — คลังความรู้พื้นฐาน MedTech (ไม่เรียกใช้ API)</span>
-                            </div>
-                          ) : msg.serviceStatus?.servedMode === 'offline_document_missing' ? (
+                          msg.serviceStatus?.servedMode === 'offline_document_missing' ? (
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-800/80 text-[11px] text-amber-300 font-medium">
                               <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                               <span>โหมดติวออฟไลน์ — ยังไม่ได้เลือกเอกสาร (Active Document Missing)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'document_missing' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-800/80 text-[11px] text-amber-300 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span>โหมดติวอิงเอกสาร — ยังไม่ได้เลือกเอกสาร (Active Document Missing)</span>
                             </div>
                           ) : msg.serviceStatus?.servedMode === 'local_document_validation' ? (
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-cyan-800/80 text-[11px] text-cyan-300 font-medium">
                               <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                               <span>การตรวจสอบเอกสารในเครื่อง (Local Document Validation — ไม่ผ่าน API)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'offline_document_fallback' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/80 text-[11px] text-emerald-200 font-medium">
+                              <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>โหมดติวออฟไลน์ — ค้นหาและตรวจสอบจากเอกสารโดยตรง (ไม่เรียกใช้ API)</span>
+                            </div>
+                          ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 border border-indigo-800/80 text-[11px] text-indigo-200 font-medium">
+                              <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <span>โหมดการเรียนรู้ออฟไลน์ — คลังความรู้พื้นฐาน MedTech (ไม่เรียกใช้ API)</span>
                             </div>
                           ) : (
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/70 text-[11px] text-amber-200 font-medium">
@@ -1436,12 +1441,12 @@ export default function App() {
                             <BookOpen className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                             <span>การตรวจสอบเอกสารในเครื่อง (Local Document Validation — ไม่ผ่าน API)</span>
                           </span>
-                        ) : msg.serviceStatus?.servedMode === 'offline_document_fallback' || (msg.serviceStatus?.reason === 'offline_mode_selected' && msg.groundedDocumentTitle) ? (
+                        ) : msg.serviceStatus?.servedMode === 'offline_document_fallback' ? (
                           <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-emerald-950/90 text-emerald-300 border-emerald-700/80 flex items-center gap-1.5 shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                             <span>โหมดติวออฟไลน์ (Offline Learning Mode) — ค้นจากเอกสารโดยตรง (ไม่เรียกใช้ API)</span>
                           </span>
-                        ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' || msg.serviceStatus?.reason === 'offline_mode_selected' ? (
+                        ) : msg.serviceStatus?.servedMode === 'offline_static_fallback' ? (
                           <span className="px-2.5 py-1 rounded-full font-sans border text-[11px] font-semibold bg-indigo-950/90 text-indigo-300 border-indigo-700/80 flex items-center gap-1.5 shadow-sm">
                             <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                             <span>โหมดการเรียนรู้ออฟไลน์ (Offline Learning Mode) — คลังความรู้พื้นฐาน (ไม่เรียกใช้ API)</span>

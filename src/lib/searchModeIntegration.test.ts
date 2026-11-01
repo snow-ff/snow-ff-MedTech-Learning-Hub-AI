@@ -688,9 +688,89 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(mockCalls.length).toBe(0);
       expect(data.serviceStatus.attemptsRun).toBe(0);
       expect(data.serviceStatus.isApiUnavailable).toBe(false);
-      expect(data.source).toBe('academic_fallback');
+      expect(data.serviceStatus.reason).toBe('offline_mode_selected');
       expect(data.serviceStatus.servedMode).toBe('offline_document_fallback');
+      expect(data.source).toBe('academic_fallback');
+      expect(data.source).not.toBe('document_grounding');
+      expect(data.source).not.toBe('gemini_grounding');
       expect(data.text).toContain('เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ');
+      expect(data.text).not.toContain('โควตา');
+      expect(data.text).not.toMatch(/\[หน้า\s*3\]|\[page\s*3\]|หน้า 3 มี/i);
+    });
+
+    // Test F: Online Document Missing
+    it('Test F: online document mode without active document returns document_missing with 0 API calls', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'สรุปประเด็นสำคัญในเอกสาร' }],
+          searchMode: 'document',
+          offlineMode: false
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('document_missing');
+      expect(data.serviceStatus.reason).toBe('active_document_missing');
+      expect(data.source).toBe('academic_fallback');
+      expect(data.source).not.toBe('document_grounding');
+      expect(data.text).toContain('ยังไม่ได้เลือกเอกสาร');
+      expect(data.text).toContain('คลังเอกสาร (Document Library)');
+      expect(data.text).not.toContain('โควตา');
+      expect(data.text).not.toContain('HTTP 429');
+    });
+
+    // Test G: Online Local Document Validation
+    it('Test G: online unpaged document with page query returns local_document_validation with 0 API calls and no live AI', async () => {
+      mockCalls = [];
+      const unpagedDoc = {
+        documentId: 'doc-unpaged-guideline',
+        title: 'clinical-lab-manual.md',
+        hasNativePages: false,
+        totalPages: 1,
+        chunks: [
+          {
+            id: 'c-manual-1',
+            documentId: 'doc-unpaged-guideline',
+            chunkIndex: 1,
+            hasNativePage: false,
+            text: 'คู่มือปฏิบัติงานห้องปฏิบัติการคลินิก ฉบับย่อ',
+            charCount: 45
+          }
+        ]
+      };
+
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'เนื้อหาในหน้า 2 มีอะไรบ้าง' }],
+          searchMode: 'document',
+          offlineMode: false,
+          documentContext: unpagedDoc
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(mockCalls.length).toBe(0);
+      expect(data.serviceStatus.attemptsRun).toBe(0);
+      expect(data.serviceStatus.isApiUnavailable).toBe(false);
+      expect(data.serviceStatus.servedMode).toBe('local_document_validation');
+      expect(data.serviceStatus.reason).toBe('deterministic_validation');
+      expect(data.source).toBe('academic_fallback');
+      expect(data.source).not.toBe('document_grounding');
+      expect(data.source).not.toBe('gemini_grounding');
+      expect(data.text).toContain('เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ');
+      expect(data.text).not.toMatch(/\[หน้า\s*2\]|\[page\s*2\]|หน้า 2 มี/i);
       expect(data.text).not.toContain('โควตา');
     });
   });
