@@ -42,13 +42,15 @@ import {
   officialSchoolWebUrl,
   curriculumDrivePdfUrl
 } from './data/curriculumData';
-import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport, SourceLocatorProvenance } from './models/coreModel';
+import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationReport, SourceLocatorProvenance, ContentOrigin, LocalContentMetadata, StudyWorkflowType } from './models/coreModel';
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
+import { LearningDomainCatalogView } from './components/LearningDomainCatalogView';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
 import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities, cleanChunkLocator, filterDisplayedReferences } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
 import { getAllDocuments, seedSampleDocumentsIfEmpty } from './lib/documentStorage';
+import { STUDY_WORKFLOW_OPTIONS, LearningDomainTopic, buildStudyWorkflowPrompt, getWorkflowById } from './data/learningDomainCatalog';
 
 export interface ReferenceItem {
   id: string;
@@ -65,6 +67,8 @@ export interface Message {
   content: string;
   timestamp: Date;
   source?: 'gemini_grounding' | 'gemini_standard' | 'academic_fallback' | 'document_grounding' | 'external_research';
+  contentOrigin?: ContentOrigin;
+  localContentMetadata?: LocalContentMetadata;
   groundedDocumentTitle?: string;
   evidenceStatus?: EvidenceStatus;
   verification?: AcademicVerificationReport;
@@ -212,7 +216,8 @@ export function getMockResponse(prompt: string): string {
 export default function App() {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOutUser, clearError } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'catalog' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
+  const [activeStudyWorkflow, setActiveStudyWorkflow] = useState<StudyWorkflowType | null>(null);
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
   const [searchMode, setSearchMode] = useState<'document' | 'web_search'>('web_search');
@@ -451,6 +456,21 @@ export default function App() {
     setSelectedLearningCourse(null);
   };
 
+  const handleSelectTopicWorkflow = (topic: LearningDomainTopic, workflow: StudyWorkflowType) => {
+    setActiveStudyWorkflow(workflow);
+    const wf = getWorkflowById(workflow);
+    const prefix = wf ? `[${wf.labelTh}] ` : '';
+    setInputQuery(`${prefix}${topic.nameTh} (${topic.nameEn}): `);
+    setActiveTab('chat');
+  };
+
+  const handleOpenLearningGuideByCode = (courseCode: string) => {
+    const course = OFFICIAL_COURSES_2567.find(c => c.code === courseCode);
+    if (course) {
+      setActiveLearningGuideCourse(course);
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputQuery(e.target.value);
     if (textareaRef.current) {
@@ -575,6 +595,7 @@ export default function App() {
           messages: validSlice,
           searchMode,
           offlineMode: isOfflineMode,
+          studyWorkflow: activeStudyWorkflow || undefined,
           documentContext: documentContextPayload,
           courseContext: selectedLearningCourse ? {
             code: selectedLearningCourse.code,
@@ -629,6 +650,8 @@ export default function App() {
         content: data.text || 'ไม่พบข้อมูลคำตอบจากระบบ',
         timestamp: new Date(),
         source: data.source || (documentContextPayload ? 'document_grounding' : 'academic_fallback'),
+        contentOrigin: data.contentOrigin,
+        localContentMetadata: data.localContentMetadata,
         groundedDocumentTitle: (searchMode !== 'web_search' && activeDocument) ? activeDocument.title : undefined,
         evidenceStatus: finalEvidenceStatus,
         verification: verificationReport,
@@ -718,6 +741,17 @@ export default function App() {
           >
             <MessageSquare className="w-4 h-4" />
             ผู้ช่วย AI วิชาการ
+          </button>
+          <button
+            onClick={() => setActiveTab('catalog')}
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              activeTab === 'catalog'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>แผนที่การเรียนรู้ (28 หัวข้อ)</span>
           </button>
           <button
             onClick={() => setActiveTab('documents')}
@@ -881,6 +915,14 @@ export default function App() {
           }`}
         >
           AI แชท
+        </button>
+        <button
+          onClick={() => setActiveTab('catalog')}
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 min-h-[40px] flex items-center justify-center transition-all ${
+            activeTab === 'catalog' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
+          }`}
+        >
+          แผนที่การเรียนรู้
         </button>
         <button
           onClick={() => setActiveTab('documents')}
@@ -1075,8 +1117,50 @@ export default function App() {
                     }`}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="mb-3">
-                        {(msg.source === 'gemini_grounding' || msg.source === 'gemini_standard') && (
+                      <div className="mb-3 space-y-1.5">
+                        {/* Explicit 3-Tier Provenance Badge */}
+                        {msg.contentOrigin === 'gemini_live' ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/80 border border-cyan-800 text-[11px] text-cyan-200 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>Gemini Live AI (ประมวลผลสดผ่าน API)</span>
+                            {msg.source === 'gemini_grounding' && (
+                              <span className="ml-1 px-1.5 py-0.2 rounded bg-cyan-900/60 text-[10px] text-cyan-300 font-mono">
+                                + Google Search Grounding
+                              </span>
+                            )}
+                          </div>
+                        ) : msg.contentOrigin === 'user_document' ? (
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${
+                            msg.evidenceStatus === 'insufficient'
+                              ? 'bg-slate-900 border-slate-700 text-slate-300'
+                              : 'bg-emerald-950/80 border-emerald-800 text-emerald-200'
+                          }`}>
+                            <BookOpen className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>
+                              {msg.evidenceStatus === 'insufficient'
+                                ? 'เอกสารของผู้เรียน (ไม่พบหลักฐานตรง — Anti-Hallucination Guardrail)'
+                                : 'เอกสารของผู้เรียน (User Document Grounding — มีหลักฐานชิ้นส่วนยืนยัน)'}
+                            </span>
+                          </div>
+                        ) : msg.contentOrigin === 'local_knowledge_base' ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700 text-[11px] text-indigo-200 font-medium flex-wrap">
+                            <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            <span>คลังความรู้ทางวิชาการท้องถิ่น (Local Academic Knowledge Base)</span>
+                            {msg.localContentMetadata && (
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-900/80 text-[10px] text-indigo-300 font-mono">
+                                [{msg.localContentMetadata.contentId} v{msg.localContentMetadata.version}]
+                              </span>
+                            )}
+                            {msg.localContentMetadata?.verificationStatus === 'verified' && (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800 text-[10px] font-sans">
+                                ยืนยันแล้ว
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+
+                        {!msg.contentOrigin && (msg.source === 'gemini_grounding' || msg.source === 'gemini_standard') && (
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/70 border border-cyan-800/80 text-[11px] text-cyan-200 font-medium">
                             <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                             <span>Gemini 3.8 Flash AI — ประมวลผลสด (Live Model Inference)</span>
@@ -1789,6 +1873,51 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Study Workflow Selector Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+                <span className="text-[11px] text-slate-400 font-medium shrink-0 flex items-center gap-1">
+                  รูปแบบการเรียน:
+                </span>
+                {STUDY_WORKFLOW_OPTIONS.map((wf) => {
+                  const isSelected = activeStudyWorkflow === wf.id;
+                  return (
+                    <button
+                      key={wf.id}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setActiveStudyWorkflow(null);
+                        } else {
+                          setActiveStudyWorkflow(wf.id);
+                          if (!inputQuery.trim()) {
+                            setInputQuery(`[${wf.labelTh}] `);
+                          }
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all border shrink-0 flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-cyan-600 text-white border-cyan-500 shadow-sm'
+                          : 'bg-slate-950 text-slate-300 hover:text-white border-slate-800 hover:border-slate-700'
+                      }`}
+                      title={wf.description}
+                    >
+                      <span>{wf.icon}</span>
+                      <span>{wf.labelTh}</span>
+                    </button>
+                  );
+                })}
+                {activeStudyWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudyWorkflow(null)}
+                    className="text-[11px] text-slate-400 hover:text-rose-400 px-1.5 py-0.5 ml-1"
+                    title="ยกเลิกตัวเลือกรูปแบบการเรียน"
+                  >
+                    ล้าง
+                  </button>
+                )}
+              </div>
+
               {/* Multi-line Textarea and Action Button Row */}
               <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-end">
                 <div className="flex-1 relative">
@@ -1821,6 +1950,13 @@ export default function App() {
               </div>
             </form>
           </div>
+        )}
+
+        {activeTab === 'catalog' && (
+          <LearningDomainCatalogView
+            onSelectTopicWorkflow={handleSelectTopicWorkflow}
+            onOpenLearningGuide={handleOpenLearningGuideByCode}
+          />
         )}
 
         {activeTab === 'documents' && (

@@ -146,4 +146,56 @@ export interface AcademicVerificationReport {
   critique: string;
 }
 
+// Track C1: Source Provenance & Learning Domain Models
+export type ContentOrigin = 'gemini_live' | 'user_document' | 'local_knowledge_base' | 'external_grounded';
+
+export type StudyWorkflowType =
+  | 'explain'
+  | 'compare'
+  | 'step_by_step'
+  | 'clinical_dtm_application'
+  | 'vocabulary'
+  | 'quiz_review';
+
+export interface LocalContentMetadata {
+  contentId: string;
+  version: string;
+  topicId?: string;
+  topicTitle?: string;
+  verificationStatus: 'verified' | 'unverified' | 'verified_knowledge_base' | 'verified_curriculum' | 'general_concept';
+  reviewScope: string;
+  referencesCount: number;
+}
+
+export type LearningDomainGroupId = 'medical_foundations' | 'medical_technology' | 'digital_health_dtm';
+
+export interface LearningDomainGroup {
+  id: LearningDomainGroupId;
+  nameTh: string;
+  nameEn: string;
+  descriptionTh: string;
+  iconName: string;
+  topicsCount?: number;
+}
+
+export interface LearningDomainTopic {
+  id: string;
+  groupId: LearningDomainGroupId;
+  nameTh: string;
+  nameEn: string;
+  keywords: string[];
+  aliases: string[];
+  description: string;
+  scope: string;
+  recommendedLevel: 'introductory' | 'intermediate' | 'advanced' | 'foundational';
+  prerequisites: string[];
+  relatedTopicIds: string[];
+  contentAvailability: {
+    hasLocalKnowledgeBase: boolean;
+    hasLearningGuide: boolean;
+    isGeminiOnDemandOnly: boolean;
+  };
+  associatedCurriculumCourseCodes: string[];
+}
+
 

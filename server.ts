@@ -7,7 +7,8 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { dtmCurriculum2567 } from "./src/data/curriculumData";
 import { retrieveGroundedChunks, extractRelevantExcerpt, decodeHtmlEntities, cleanChunkLocator, ACADEMIC_STOPWORDS, validateAndResolveLocator, extractGenuineHeadings } from "./src/lib/documentChunker";
 import { verifyAcademicAnswer } from "./src/lib/academicVerifier";
-import { AcademicVerificationReport } from "./src/models/coreModel";
+import { AcademicVerificationReport, ContentOrigin, StudyWorkflowType, LocalContentMetadata } from "./src/models/coreModel";
+import { getWorkflowById } from "./src/data/learningDomainCatalog";
 import {
   classifyGeminiError,
   calculateRetryDelay,
@@ -210,6 +211,9 @@ function getDirectTopic(text: string): string | null {
   }
   if (t.includes("cbc") || t.includes("เม็ดเลือด")) {
     return 'cbc';
+  }
+  if (t.includes("cross") || t.includes("หมู่เลือด") || t.includes("ธนาคารเลือด") || t.includes("blood group")) {
+    return 'cross';
   }
   if (t.includes("เริ่มเรียนรายวิชา") || t.includes("dtm67-") || t.includes("ปูพื้นฐานหัวข้อ")) {
     return 'dtm_course_starter';
@@ -536,11 +540,13 @@ export function getAcademicFallback(
     hasNativePages?: boolean;
     totalPages?: number;
     chunks: Array<{ chunkIndex?: number | string; pageNumber?: number | string; text: string }>;
-  }
+  } | null,
+  studyWorkflow?: StudyWorkflowType
 ): {
   text: string;
   evidenceStatus?: "sufficient" | "insufficient" | "external_research";
   verification?: AcademicVerificationReport;
+  localContentMetadata?: LocalContentMetadata;
   references: Array<{
     title: string;
     uri: string;
@@ -820,6 +826,16 @@ export function getAcademicFallback(
 3. **ความสำคัญและการประยุกต์ทางคลินิก (Clinical Implications):**
    - การทดสอบการแข็งตัวของเลือด (Coagulation assays เช่น Prothrombin Time - PT และ Activated Partial Thromboplastin Time - APTT) **ต้องใช้พลาสมา (Sodium Citrate plasma)** เท่านั้น เนื่องจากซีรั่มไม่มีแฟคเตอร์การแข็งตัว
    - การทดสอบเคมีคลินิกส่วนใหญ่ (Routine chemistry เช่น Electrolytes, Renal function, Liver function, Lipid profile) สามารถใช้ได้ทั้งซีรั่มหรือพลาสมา ขึ้นอยู่กับมาตรฐานและระเบียบปฏิบัติประจำ (SOP) ของห้องปฏิบัติการนั้นๆ`,
+      localContentMetadata: {
+        contentId: "kb-serum-plasma-01",
+        version: "1.2",
+        topicId: "serum-plasma-separation",
+        topicTitle: "การแยกและการวิเคราะห์ซีรั่มและพลาสมา",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "ความแตกต่างทางชีวเคมีคลินิก สารกันเลือดแข็ง และหลอดเก็บเลือด",
+        referencesCount: 2,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { title: "StatPearls: Specimen Collection (Serum vs Plasma)", uri: "https://www.ncbi.nlm.nih.gov/books/NBK555956/" },
         { title: "CLSI H03: Procedures for the Collection of Diagnostic Blood Specimens by Venipuncture", uri: "https://clsi.org/shop/standards/h03/" }
@@ -849,6 +865,16 @@ export function getAcademicFallback(
    - การวินิจฉัยและติดตามโรคทางโลหิตวิทยา เช่น Leukemia และ Lymphoma
    - การประเมินเซลล์เม็ดเลือดขาว CD4 ในผู้ป่วย HIV
    - การทดสอบความเข้ากันได้และการปลูกถ่ายเซลล์`,
+      localContentMetadata: {
+        contentId: "kb-flow-cytometry-01",
+        version: "1.2",
+        topicId: "flow-cytometry-principles",
+        topicTitle: "หลักการ Flow Cytometry และการวัดเซลล์เม็ดเลือด",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "เลเซอร์กระเจิง FSC/SSC, การจำแนกเม็ดเลือดขาว และการประยุกต์ทางเทคนิคการแพทย์",
+        referencesCount: 1,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { 
           title: "Flow Cytometry Blood Cell Identification", 
@@ -871,6 +897,16 @@ export function getAcademicFallback(
 
 3. **ข้อควรระวังในการแปลผลตามมาตรฐานสากล MIQE 2.0 (2025):**
    - การแปลผลค่า Cq/Ct ห้ามใช้เกณฑ์ตัดรอบตายตัวแบบเหมารวม (เช่น กำหนดว่าทุกการทดสอบที่ Ct > 40 เป็นผลลบเสมอ) โดยปราศจากการตรวจสอบความถูกต้องของวิธีตรวจเฉพาะ (Assay validation), ขีดจำกัดการตรวจพบ (Limit of Detection - LoD), การตั้งค่า Baseline/Threshold ที่เหมาะสม และการควบคุมคุณภาพด้วยชุดควบคุม (Positive, Negative, NTC Controls)`,
+        localContentMetadata: {
+          contentId: "kb-molecular-pcr-01",
+          version: "1.2",
+          topicId: "molecular-diagnostics-pcr",
+          topicTitle: "การตรวจวินิจฉัยระดับโมเลกุล (Conventional vs Real-Time PCR)",
+          verificationStatus: "verified_knowledge_base",
+          reviewScope: "Cq/Ct Interpretation, MIQE 2.0 (2025), Closed-tube Real-Time PCR",
+          referencesCount: 1,
+          learningDomainId: "medical_technology"
+        },
         references: [
           { 
             title: "MIQE 2.0: Revision of the Minimum Information for Publication of Quantitative Real-Time PCR Experiments Guidelines (Clinical Chemistry, 2025)", 
@@ -898,6 +934,16 @@ export function getAcademicFallback(
 4. **การประยุกต์ทางเทคนิคการแพทย์:**
    - ตรวจหาเชื้อไวรัสและแบคทีเรียและวัดปริมาณไวรัส (Viral Load testing เช่น HIV-1, HBV, HCV, SARS-CoV-2)
    - ตรวจสอบยีนกลายพันธุ์ในโรคมะเร็งและโรคทางพันธุกรรม`,
+      localContentMetadata: {
+        contentId: "kb-molecular-pcr-01",
+        version: "1.2",
+        topicId: "molecular-diagnostics-pcr",
+        topicTitle: "การตรวจวินิจฉัยระดับโมเลกุล (Conventional vs Real-Time PCR)",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "Cq/Ct Interpretation, MIQE 2.0 (2025), Closed-tube Real-Time PCR",
+        referencesCount: 2,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { 
           title: "MIQE 2.0: Revision of the Minimum Information for Publication of Quantitative Real-Time PCR Experiments Guidelines (Clinical Chemistry, 2025)", 
@@ -927,6 +973,16 @@ export function getAcademicFallback(
 
 3. **การควบคุมคุณภาพ (Quality Control):**
    - ย้อมสไลด์ QC ร่วมด้วยเสมอ เช่น *Staphylococcus aureus* (Gram-positive cocci) และ *Escherichia coli* (Gram-negative bacilli) จากโคโลนีที่เพาะเลี้ยงสดใหม่ (18-24 ชั่วโมง)`,
+      localContentMetadata: {
+        contentId: "kb-gram-stain-01",
+        version: "1.2",
+        topicId: "microbiology-gram-stain",
+        topicTitle: "หลักการย้อมสีแกรมและการควบคุมคุณภาพทางจุลชีววิทยาคลินิก",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "Peptidoglycan, Crystal Violet-Iodine, Decolorization ตามวิธีมาตรฐาน ASM และการควบคุมคุณภาพ",
+        referencesCount: 1,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { title: "Gram Stain Protocols", uri: "https://asm.org/protocols/gram-stain-protocols" }
       ]
@@ -947,6 +1003,16 @@ export function getAcademicFallback(
 
 2. **ความสำคัญทางห้องปฏิบัติการ:**
    - การติดตามค่า Hct และ Platelet อย่างใกล้ชิดช่วยให้แพทย์ประเมินความรุนแรงของโรคและภาวะ Shock ได้ทันท่วงที`,
+      localContentMetadata: {
+        contentId: "kb-dengue-cbc-01",
+        version: "1.2",
+        topicId: "hematology-dengue-cbc",
+        topicTitle: "การแปลผล CBC ในผู้ป่วยติดเชื้อไวรัสเดงกี่",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "Hct leakage, Leukopenia, Thrombocytopenia ตามแนวทาง WHO 2009 / CDC",
+        referencesCount: 2,
+        learningDomainId: "medical_foundations"
+      },
       references: [
         { title: "WHO Guidelines - Dengue: Guidelines for Diagnosis, Treatment, Prevention and Control (2009)", uri: "https://www.who.int/publications/i/item/9789241547871" },
         { title: "Clinical Care of Dengue | Dengue | CDC", uri: "https://www.cdc.gov/dengue/hcp/clinical-care/" }
@@ -979,6 +1045,16 @@ export function getAcademicFallback(
      - **2_2s:** ปฏิเสธการทดสอบ (Rejection / Systematic Error) เมื่อมี 2 ค่าติดต่อกันหลุดเกิน ±2SD ในทิศทางเดียวกัน
      - **R_4s:** ปฏิเสธการทดสอบ (Rejection / Random Error) เมื่อผลต่างระหว่าง 2 ค่าใน Run เดียวกันห่างกันเกิน 4SD
      - **4_1s และ 10_x:** ตรวจจับ Systematic Bias เมื่อมี 4 ค่าต่อเนื่องเกิน ±1SD หรือ 10 ค่าต่อเนื่องอยู่ฝั่งเดียวกันของ Mean`,
+      localContentMetadata: {
+        contentId: "kb-cbc-westgard-01",
+        version: "1.2",
+        topicId: "hematology-cbc-westgard",
+        topicTitle: "หลักการตรวจวิเคราะห์ Complete Blood Count และการควบคุมคุณภาพ Westgard Rules",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "Coulter Principle, CLSI H20 3rd Edition (2026), EDTA-Dependent Pseudothrombocytopenia, Westgard Multirules",
+        referencesCount: 3,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { title: "CLSI H20: Reference Leukocyte Differential Count (Proportional) and Evaluation of Instrumental Methods (3rd Edition)", uri: "https://clsi.org/shop/standards/h20/" },
         { title: "Discovery and Correction of Spurious Low Platelet Counts due to EDTA-Dependent Pseudothrombocytopenia", uri: "https://pubmed.ncbi.nlm.nih.gov/25425098/" },
@@ -1006,6 +1082,16 @@ export function getAcademicFallback(
 
 4. **ข้อกำหนดความปลอดภัย (Disclaimer):**
    - ขั้นตอนข้างต้นเป็นเพียงสรุปหลักการทางทฤษฎีเพื่อการศึกษาเท่านั้น ไม่ใช่แนวทางปฏิบัติงานมาตรฐานทางคลินิก (Clinical SOP) การปฏิบัติงานจริงในห้องปฏิบัติการธนาคารเลือดต้องยึดถือตาม SOP ที่ผ่านการรับรองของแต่ละสถาบันและข้อกำหนดมาตรฐานงานบริการโลหิตอย่างเคร่งครัด`,
+      localContentMetadata: {
+        contentId: "kb-blood-bank-crossmatch-01",
+        version: "1.2",
+        topicId: "blood-banking-transfusion",
+        topicTitle: "ขั้นตอนการทำ Crossmatching และการตรวจหมู่เลือด",
+        verificationStatus: "verified_knowledge_base",
+        reviewScope: "ABO/Rh Blood Grouping, Major/Minor Crossmatch, Immediate Spin & AHG Phase ตามแนวทาง AABB Technical Manual",
+        referencesCount: 2,
+        learningDomainId: "medical_technology"
+      },
       references: [
         { title: "AABB Technical Manual, 22nd Edition", uri: "https://www.aabb.org/aabb-store/product/technical-manual-22nd-edition-print-21871175" },
         { title: "Blood Groups and Red Cell Antigens", uri: "https://www.ncbi.nlm.nih.gov/books/NBK2261/" }
@@ -1032,6 +1118,16 @@ export function getAcademicFallback(
    - ศึกษาโครงสร้างข้อมูลและศัพท์เทคนิคภาษาอังกฤษเป็นลำดับ
    - ทำความเข้าใจกระบวนการทำงานในสถานพยาบาลและจุดเชื่อมต่อระหว่างระบบซอฟต์แวร์กับบุคลากรทางการแพทย์
    - เมื่อมีเอกสารประกอบการสอนจากผู้สอน สามารถนำเข้าสู่ระบบผ่าน "คลังเอกสารการเรียนรู้" (Document Library) เพื่อเปิดโหมดการติวอิงเอกสารและตรวจสอบความถูกต้องเชิงลึกได้ทันที`,
+      localContentMetadata: {
+        contentId: "kb-dtm-course-starter-01",
+        version: "1.2",
+        topicId: "dtm-foundational-guide",
+        topicTitle: "แนวคิดพื้นฐานเพื่อการเรียนรู้รายวิชาในหลักสูตร DTM 2567",
+        verificationStatus: "general_concept",
+        reviewScope: "คำอธิบายแนวคิดพื้นฐานทั่วไปตามหัวข้อวิชาเพื่อช่วยผู้เรียนเริ่มต้นศึกษา (ไม่ใช่คำอธิบายรายวิชาอย่างเป็นทางการ มคอ.2)",
+        referencesCount: 2,
+        learningDomainId: "digital_health_dtm"
+      },
       references: [
         { title: "เล่มหลักสูตร มคอ.2 วท.บ. สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (ปรับปรุง พ.ศ. 2567) ม.วลัยลักษณ์", uri: "https://ces.wu.ac.th/registrar/StudentHandbook/2567/22_IMI_01.pdf" },
         { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" }
@@ -1051,6 +1147,16 @@ export function getAcademicFallback(
 
 3. **มาตรฐานและความปลอดภัยข้อมูล:**
    - ต้องปฏิบัติตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล (PDPA ในไทย หรือ HIPAA ในระดับสากล) โดยกำหนดสิทธิ์การเข้าถึงข้อมูลตามบทบาท (Role-Based Access Control: RBAC)`,
+      localContentMetadata: {
+        contentId: "kb-dtm-informatics-01",
+        version: "1.2",
+        topicId: "dtm-health-informatics-ehr",
+        topicTitle: "ระบบสารสนเทศสุขภาพและเวชระเบียนอิเล็กทรอนิกส์ (Health Informatics & EHR/EMR)",
+        verificationStatus: "verified_curriculum",
+        reviewScope: "EMR vs EHR, Hospital Information System (HIS), CDSS, PDPA/HIPAA Data Privacy",
+        referencesCount: 2,
+        learningDomainId: "digital_health_dtm"
+      },
       references: [
         { title: "WHO Guideline on Digital Health Interventions", uri: "https://www.who.int/publications/i/item/9789241550505" },
         { title: "Health Information Systems - HIMSS", uri: "https://www.himss.org/resources" }
@@ -1071,6 +1177,16 @@ export function getAcademicFallback(
 3. **ระบบรหัสมาตรฐานทางการแพทย์:**
    - **ICD-10 / ICD-11:** รหัสจำแนกโรคสากลสำหรับสถิติและการเบิกจ่าย
    - **LOINC:** รหัสมาตรฐานสากลสำหรับผลตรวจทางห้องปฏิบัติการและสัญญาณชีพ`,
+      localContentMetadata: {
+        contentId: "kb-dtm-standards-01",
+        version: "1.2",
+        topicId: "dtm-standards-dicom-fhir",
+        topicTitle: "มาตรฐานข้อมูลสุขภาพและภาพถ่ายทางการแพทย์ (DICOM, PACS, HL7, FHIR)",
+        verificationStatus: "verified_curriculum",
+        reviewScope: "DICOM/PACS, HL7 FHIR RESTful Architecture, ICD-10/11, LOINC",
+        referencesCount: 2,
+        learningDomainId: "digital_health_dtm"
+      },
       references: [
         { title: "DICOM Standard Overview - NEMA", uri: "https://www.dicomstandard.org/" },
         { title: "HL7 FHIR Specification", uri: "https://hl7.org/fhir/" }
@@ -1090,6 +1206,16 @@ export function getAcademicFallback(
 
 3. **จริยธรรมและความปลอดภัยของ Medical AI:**
    - ต้องตรวจสอบความเอนเอียงของข้อมูล (Algorithmic Bias), ความสามารถในการอธิบายผลการทำนาย (Explainability / XAI เช่น Grad-CAM), และผ่านการทดสอบทางคลินิกก่อนนำไปใช้จริง`,
+      localContentMetadata: {
+        contentId: "kb-dtm-ai-01",
+        version: "1.2",
+        topicId: "dtm-medical-ai",
+        topicTitle: "ปัญญาประดิษฐ์และการประมวลผลข้อมูลทางการแพทย์ (Medical AI & Deep Learning)",
+        verificationStatus: "verified_curriculum",
+        reviewScope: "CNN & U-Net for medical imaging, Sensitivity/Specificity metrics, AI Ethics & WHO Governance",
+        referencesCount: 2,
+        learningDomainId: "digital_health_dtm"
+      },
       references: [
         { title: "WHO Ethics and Governance of AI for Health", uri: "https://www.who.int/publications/i/item/9789240029200" },
         { title: "Deep Learning for Medical Image Analysis (Nature Medicine)", uri: "https://www.nature.com/articles/s41591-018-0316-4" }
@@ -1116,6 +1242,16 @@ export function getAcademicFallback(
 4. **สถานะหลักฐานข้อมูลสำรอง (Academic Fallback Evidence Status):**
    - ข้อมูลโครงสร้างภาพรวมและหมวดหมู่หน่วยกิตข้างต้น: **ข้อมูลสำรองวิชาการ (Static Curriculum Fallback Knowledge)** อ้างอิงจากโครงสร้างหลักสูตรทั่วไป
    - รายวิชาในหลักสูตร: ข้อมูลสรุปอ้างอิงจากเล่มหลักสูตร มคอ.2 (สถานะแหล่งอ้างอิง: ยังไม่ได้ตรวจสอบเนื้อหาแบบไดนามิกในเซสชันนี้ เนื่องจากอยู่ในโหมด Academic Fallback)`,
+      localContentMetadata: {
+        contentId: "kb-dtm-curriculum-2567-01",
+        version: "1.2",
+        topicId: "dtm-curriculum-overview",
+        topicTitle: "โครงสร้างหลักสูตร วท.บ. สาขาเทคโนโลยีดิจิทัลทางการแพทย์ (หลักสูตรปรับปรุง พ.ศ. 2567) ม.วลัยลักษณ์",
+        verificationStatus: "verified_curriculum",
+        reviewScope: "โครงสร้าง 124 หน่วยกิต, หมวดวิชาศึกษาทั่วไป 26 นก., หมวดวิชาเฉพาะ 92 นก. (รวมสหกิจ 13 นก.), วิชาเลือกเสรี 6 นก., 2 วิชาโท",
+        referencesCount: 2,
+        learningDomainId: "digital_health_dtm"
+      },
       references: [
         { title: "เว็บไซต์หลักสูตร Digital Technology in Medicine ม.วลัยลักษณ์", uri: "https://informatics.wu.ac.th/bachelors-degree/digital-technology-in-medicine/" },
         { title: "เอกสารคู่มือนักศึกษาหลักสูตร พ.ศ. 2567 (PDF - CES)", uri: "https://ces.wu.ac.th/registrar/StudentHandbook/2567/22_IMI_01.pdf" }
@@ -1124,6 +1260,13 @@ export function getAcademicFallback(
   } else {
     return {
       text: prefixNotice + `**ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้**\n\nขออภัย ระบบข้อมูลสำรองทางวิชาการ (Academic Fallback Mode) ในขณะนี้ยังไม่มีฐานข้อมูลสรุปเฉพาะสำหรับหัวข้อที่คุณสอบถาม\n\n💡 **คำแนะนำสำหรับการเรียนรู้:**\n- คุณสามารถไปที่แท็บ **"คลังเอกสาร (Document Library)"** เพื่อเลือกหรืออัปโหลดเอกสารที่เกี่ยวข้อง แล้วคลิก **"ถามตอบเอกสารนี้"** ระบบจะสามารถวิเคราะห์และตอบคำถามจากเนื้อหาเอกสารให้ได้ทันที\n- หรือสลับเป็นโหมด **"ออนไลน์ (Gemini AI)"** เพื่อสอบถามปัญญาประดิษฐ์หรือค้นหาข้อมูลจากอินเทอร์เน็ต`,
+      localContentMetadata: {
+        contentId: "kb-fallback-general-01",
+        version: "1.2",
+        verificationStatus: "unverified",
+        reviewScope: "ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้ในคลังความรู้พื้นฐาน",
+        referencesCount: 0
+      },
       references: []
     };
   }
@@ -1227,6 +1370,8 @@ export function formatFallbackResponse(params: {
   return {
     text: responseText,
     source: "academic_fallback", // Critical: MUST remain 'academic_fallback' (never misrepresent fallback as Gemini generation)
+    contentOrigin: isDocumentGrounding ? ("user_document" as const) : ("local_knowledge_base" as const),
+    localContentMetadata: !isDocumentGrounding ? (fallback as any).localContentMetadata : undefined,
     evidenceStatus: (fallback as any).evidenceStatus || (isDocumentGrounding ? "sufficient" : undefined),
     verification: (fallback as any).verification,
     serviceStatus: {
@@ -1257,9 +1402,9 @@ export function formatFallbackResponse(params: {
 app.post("/api/gemini/generate", async (req, res) => {
   const requestStartTime = Date.now();
   const requestId = (req.headers['x-request-id'] as string) || `req-${Date.now()}`;
-  const { messages, prompt, documentContext, courseContext, searchMode, offlineMode } = req.body;
+  const { messages, prompt, documentContext, courseContext, searchMode, offlineMode, studyWorkflow } = req.body;
   const isOfflineMode = Boolean(offlineMode);
-  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, offlineMode: ${isOfflineMode}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
+  console.log(`[Req ${requestId}] Received generate request. hasDocumentContext: ${Boolean(documentContext)}, searchMode: ${searchMode || 'auto'}, offlineMode: ${isOfflineMode}, studyWorkflow: ${studyWorkflow || 'none'}, messagesCount: ${Array.isArray(messages) ? messages.length : 0}`);
 
   // Server-side validation of messages array
   let validatedMessages: Array<{ role: 'user' | 'model'; text: string }> = [];
@@ -1341,6 +1486,13 @@ app.post("/api/gemini/generate", async (req, res) => {
 หมายเหตุสำคัญ: บริบทรายวิชานี้เป็นเป้าหมายการเรียนรู้ของผู้เรียน ไม่ใช่เอกสารอ้างอิงหรือหลักฐานทางวิชาการ หากไม่มีเอกสารอัปโหลดใน documentContext ให้ปูพื้นฐานแนวคิดทางวิชาการและศัพท์เทคนิคภาษาอังกฤษจากความรู้ทั่วไปทางวิทยาศาสตร์และเทคโนโลยีดิจิทัลทางการแพทย์ โดยระบุอย่างชัดเจนว่าเป็นความรู้ทั่วไป และห้ามสร้างเลขหน้าหรืออ้างว่าเป็นคำอธิบายรายวิชาอย่างเป็นทางการ`;
   }
 
+  if (studyWorkflow) {
+    const wfInfo = getWorkflowById(studyWorkflow);
+    if (wfInfo) {
+      systemInstruction += `\n\nเป้าหมายและแนวทางการตอบตามรูปแบบ Study Workflow: "${wfInfo.nameTh}" (${wfInfo.nameEn})\n- แนวทางปฏิบัติ: ${wfInfo.guideline}`;
+    }
+  }
+
   const isCurriculumQuery = determineTopic(latestPrompt, validatedMessages) === 'dtm';
   const isDocumentGrounding = Boolean(
     !isCurriculumQuery &&
@@ -1360,6 +1512,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     return res.json({
       text: documentMissingText,
       source: "academic_fallback",
+      contentOrigin: "local_knowledge_base",
       evidenceStatus: "insufficient",
       serviceStatus: {
         isApiUnavailable: false,
@@ -1388,6 +1541,7 @@ app.post("/api/gemini/generate", async (req, res) => {
     return res.json({
       text: documentMissingText,
       source: "academic_fallback",
+      contentOrigin: "local_knowledge_base",
       evidenceStatus: "insufficient",
       serviceStatus: {
         isApiUnavailable: false,
@@ -1493,6 +1647,7 @@ app.post("/api/gemini/generate", async (req, res) => {
       return res.json({
         text: shortCircuitText,
         source: "academic_fallback",
+        contentOrigin: "user_document",
         evidenceStatus: "insufficient",
         verification,
         serviceStatus: {
@@ -1526,6 +1681,7 @@ app.post("/api/gemini/generate", async (req, res) => {
         return res.json({
           text: insufficientText,
           source: isOfflineMode ? "academic_fallback" : "document_grounding",
+          contentOrigin: "user_document",
           evidenceStatus: "insufficient",
           verification,
           serviceStatus: {
@@ -1596,6 +1752,7 @@ app.post("/api/gemini/generate", async (req, res) => {
           return res.json({
             text: formattedText,
             source: "external_research",
+            contentOrigin: "gemini_live",
             evidenceStatus: "external_research",
             verification,
             references: extReferences.map(r => ({
@@ -1640,6 +1797,7 @@ app.post("/api/gemini/generate", async (req, res) => {
       return res.json({
         text: insufficientText,
         source: "document_grounding",
+        contentOrigin: "user_document",
         evidenceStatus: "insufficient",
         verification,
         references: []
@@ -1683,7 +1841,7 @@ ${formattedChunks}
 
   if (isOfflineMode) {
     console.log(`[Req ${requestId}] Offline Learning Mode active. Bypassing Gemini API retry loop (0 API calls). isDocumentGrounding: ${isDocumentGrounding}`);
-    const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null);
+    const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null, studyWorkflow);
     return res.json(formatFallbackResponse({
       fallback,
       isDocumentGrounding,
@@ -1812,6 +1970,7 @@ ${formattedChunks}
         return res.json({
           text,
           source: "document_grounding",
+          contentOrigin: "user_document",
           evidenceStatus: isInsufficient ? "insufficient" : "sufficient",
           verification,
           references: docReferences,
@@ -1871,6 +2030,7 @@ ${formattedChunks}
       return res.json({
         text,
         source: hasGrounding ? "gemini_grounding" : "gemini_standard",
+        contentOrigin: "gemini_live",
         webGrounding: hasGrounding ? {
           webSearchQueries: groundingMetadata?.webSearchQueries || [],
           searchEntryPointHtml: groundingMetadata?.searchEntryPoint?.renderedContent || undefined,
@@ -1953,7 +2113,7 @@ ${formattedChunks}
   }));
 
   // Fallback to academic responses when API quota is exhausted or unavailable (using latestPrompt, validatedMessages, and guarded documentContext)
-  const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null);
+  const fallback = getAcademicFallback(latestPrompt, validatedMessages, isDocumentGrounding ? documentContext : null, studyWorkflow);
 
   return res.json(formatFallbackResponse({
     fallback,

@@ -3,6 +3,8 @@ import { createServer, Server } from 'node:http';
 import { app, getAcademicFallback, setCustomGeminiMock } from '../../server';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getAllLearningTopics, LEARNING_DOMAIN_GROUPS, STUDY_WORKFLOW_OPTIONS, buildStudyWorkflowPrompt, getWorkflowById } from '../data/learningDomainCatalog';
+import { OFFICIAL_COURSES_2567 } from '../data/curriculumData';
 
 describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
   let server: Server;
@@ -772,6 +774,139 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(data.text).toContain('เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ');
       expect(data.text).not.toMatch(/\[หน้า\s*2\]|\[page\s*2\]|หน้า 2 มี/i);
       expect(data.text).not.toContain('โควตา');
+    });
+  });
+
+  // =========================================================================
+  // Track B2: Learning Coverage, Study Workflows & Source Provenance Integration
+  // =========================================================================
+  describe('Track B2: Learning Coverage, Study Workflows & Source Provenance Integration', () => {
+    it('H1. Catalog Integrity: contains exactly 28 topics across 3 groups, and all associated course codes exist in official 2567 curriculum', () => {
+      const allTopics = getAllLearningTopics();
+      expect(allTopics.length).toBe(28);
+
+      expect(LEARNING_DOMAIN_GROUPS.length).toBe(3);
+      const groupIds = LEARNING_DOMAIN_GROUPS.map((g) => g.id);
+      expect(groupIds).toEqual(['medical_foundations', 'medical_technology', 'digital_health_dtm']);
+
+      const validCurriculumCodes = new Set(OFFICIAL_COURSES_2567.map((c) => c.code));
+
+      for (const topic of allTopics) {
+        expect(topic.id).toBeDefined();
+        expect(topic.nameTh).toBeTruthy();
+        expect(topic.nameEn).toBeTruthy();
+        expect(topic.keywords.length).toBeGreaterThan(0);
+        expect(topic.description).toBeTruthy();
+        expect(['foundational', 'intermediate', 'advanced']).toContain(topic.recommendedLevel);
+        expect(topic.contentAvailability).toBeDefined();
+
+        // Strict 2567 curriculum alignment: every course code must exist in official curriculum
+        for (const code of topic.associatedCurriculumCourseCodes) {
+          expect(validCurriculumCodes.has(code)).toBe(true);
+        }
+      }
+
+      // Check content availability breakdown
+      const localKbTopics = allTopics.filter((t) => t.contentAvailability.hasLocalKnowledgeBase);
+      const learningGuideTopics = allTopics.filter((t) => t.contentAvailability.hasLearningGuide);
+      const onDemandOnlyTopics = allTopics.filter((t) => t.contentAvailability.isGeminiOnDemandOnly);
+
+      expect(localKbTopics.length).toBeGreaterThan(0);
+      expect(learningGuideTopics.length).toBe(3); // DTM67-111, DTM67-123, DTM67-212
+      expect(onDemandOnlyTopics.length).toBeGreaterThan(0);
+    });
+
+    it('H2. Study Workflows: offers 6 workflows and synthesizes structured prompts correctly', () => {
+      expect(STUDY_WORKFLOW_OPTIONS.length).toBe(6);
+      const workflowIds = STUDY_WORKFLOW_OPTIONS.map((w) => w.id);
+      expect(workflowIds).toEqual(['explain', 'compare', 'step_by_step', 'clinical_dtm_application', 'vocabulary', 'quiz_review']);
+
+      const prompt = buildStudyWorkflowPrompt('compare', 'Serum vs Plasma', 'Medical Foundations');
+      expect(prompt).toContain('เปรียบเทียบจุดต่างและความเชื่อมโยง');
+      expect(prompt).toContain('Serum vs Plasma');
+      expect(prompt).toContain('ตารางเปรียบเทียบหรือหัวข้อย่อยที่ชัดเจน');
+    });
+
+    it('H3. Provenance Integrity (Gemini Live): successful live inference returns contentOrigin gemini_live', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'สรุปการประยุกต์ใช้ AI ในการวิเคราะห์ภาพถ่ายทางการแพทย์' }],
+          searchMode: 'web_search',
+          offlineMode: false
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(mockCalls.length).toBe(1);
+      expect(data.contentOrigin).toBe('gemini_live');
+      expect(['gemini_grounding', 'gemini_standard']).toContain(data.source);
+    });
+
+    it('H4. Provenance Integrity (User Document): document grounding returns contentOrigin user_document', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'คำว่า brady- มีความหมายว่าอย่างไรในเอกสาร' }],
+          searchMode: 'document',
+          offlineMode: false,
+          documentContext: sampleDocumentContext
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.contentOrigin).toBe('user_document');
+      expect(['document_grounding', 'academic_fallback']).toContain(data.source);
+    });
+
+    it('H5. Provenance Integrity (Local Knowledge Base): offline static fallback returns contentOrigin local_knowledge_base and rich localContentMetadata', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+          searchMode: 'web_search',
+          offlineMode: true
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(mockCalls.length).toBe(0);
+      expect(data.contentOrigin).toBe('local_knowledge_base');
+      expect(data.source).toBe('academic_fallback');
+      expect(data.localContentMetadata).toBeDefined();
+      expect(data.localContentMetadata.contentId).toBe('kb-serum-plasma');
+      expect(data.localContentMetadata.version).toBe('1.2.0');
+      expect(data.localContentMetadata.verificationStatus).toBe('verified');
+      expect(data.localContentMetadata.referencesCount).toBeGreaterThan(0);
+    });
+
+    it('H6. Study Workflow Parameter: endpoint receives studyWorkflow parameter and executes smoothly', async () => {
+      mockCalls = [];
+      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'เปรียบเทียบ Serum และ Plasma' }],
+          searchMode: 'web_search',
+          offlineMode: true,
+          studyWorkflow: 'compare'
+        })
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.contentOrigin).toBe('local_knowledge_base');
+      expect(data.text).toContain('Serum');
+      expect(data.text).toContain('Plasma');
     });
   });
 });
