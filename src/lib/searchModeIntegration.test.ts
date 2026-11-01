@@ -845,25 +845,28 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         };
       });
 
-      const res = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'อธิบายการทำงานของระบบหุ่นยนต์ช่วยผ่าตัดในห้องผ่าตัดอัจฉริยะ' }],
-          searchMode: 'web_search',
-          offlineMode: false
-        })
-      });
+      try {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'อธิบายการทำงานของระบบหุ่นยนต์ช่วยผ่าตัดในห้องผ่าตัดอัจฉริยะ' }],
+            searchMode: 'web_search',
+            offlineMode: false
+          })
+        });
 
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(mockCalls.length).toBe(1);
-      expect(data.contentOrigin).toBe('gemini_live');
-      expect(['gemini_grounding', 'gemini_standard']).toContain(data.source);
-      setCustomGeminiMock(null); // Clean up mock after H3
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(mockCalls.length).toBe(1);
+        expect(data.contentOrigin).toBe('gemini_live');
+        expect(['gemini_grounding', 'gemini_standard']).toContain(data.source);
+      } finally {
+        setCustomGeminiMock(null);
+      }
     });
 
-    it('H4. Provenance & Answer Fidelity (Mocked User Document): document grounding verifies isDocumentGrounding, tools absence, verification verdict, evidence fidelity, and ground truth consistency', async () => {
+    it('H4. Provenance & Answer Fidelity (Mocked User Document): rigorous verification of retrieval, evidence fidelity, answer fidelity, status aligned, empty unsupported claims, and reference support', async () => {
       mockCalls = [];
       setCustomGeminiMock(async (params) => {
         mockCalls.push({
@@ -891,11 +894,10 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(res.status).toBe(200);
         const data = await res.json();
 
-        // 1. Check mock was called in Document Grounding Mode
+        // 1 & 2. Check mock was called in Document Grounding Mode and tools absent
         const lastCall = mockCalls[mockCalls.length - 1];
         expect(lastCall).toBeDefined();
         expect(lastCall.isDocumentGrounding).toBe(true);
-        // 2. Check Google Search tool was not sent in Document Grounding mode
         expect(lastCall.tools).toBeUndefined();
 
         expect(data.contentOrigin).toBe('user_document');
@@ -903,18 +905,57 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(data.text.toLowerCase()).toContain('brady-');
         expect(data.text).not.toContain('หุ่นยนต์ช่วยผ่าตัด');
 
-        // 5 & 6. Verify Academic Verifier contract (verdict and evidence fidelity)
+        // 5. Verify Academic Verifier contract stages
         expect(data.verification).toBeDefined();
         expect(['PASS', 'WARNING']).toContain(data.verification.verdict);
+        
+        // Detailed stage assertions
+        expect(data.verification.stages.retrieval.passed).toBe(true);
         expect(data.verification.stages.evidenceFidelity.passed).toBe(true);
+        expect(data.verification.stages.answerFidelity.passed).toBe(true);
+        expect(data.verification.stages.answerFidelity.status).toBe('aligned');
+        expect(data.verification.stages.answerFidelity.unsupportedClaims.length).toBe(0);
+        expect(data.verification.stages.answerFidelity.contradictions.length).toBe(0);
 
-        // 7. Verify references support answer
+        // 6 & 7. Verify references support answer and have valid locators
         expect(Array.isArray(data.references)).toBe(true);
         expect(data.references.length).toBeGreaterThan(0);
         for (const ref of data.references) {
           expect(ref.type).toBe('document_chunk');
           expect(ref.linkAccessStatus).toBe('verified_local');
+          expect(ref.evidenceLocator).toBeDefined();
         }
+      } finally {
+        setCustomGeminiMock(null);
+      }
+    });
+
+    it('H4b. Negative Test (Absent/Unsupported Query): verifier must not give PASS when query asks about topic absent from document', async () => {
+      mockCalls = [];
+      setCustomGeminiMock(async (params) => {
+        return {
+          text: "ทฤษฎีควอนตัมฟิสิกส์และการแผ่รังสีของวัตถุดำ",
+          candidates: [{ groundingMetadata: { groundingChunks: [] } }]
+        };
+      });
+
+      try {
+        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ทฤษฎีควอนตัมฟิสิกส์และการแผ่รังสีของวัตถุดำ' }],
+            searchMode: 'document',
+            offlineMode: false,
+            documentContext: sampleDocumentContext
+          })
+        });
+
+        expect(res.status).toBe(200);
+        const data = await res.json();
+        expect(data.verification).toBeDefined();
+        expect(data.verification.verdict).toBe('INSUFFICIENT_EVIDENCE');
+        expect(data.verification.stages.answerFidelity.status).toBe('insufficient_evidence');
       } finally {
         setCustomGeminiMock(null);
       }
@@ -964,8 +1005,8 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(data.text).toContain('Plasma');
     });
 
-    it('H7. Invalid Study Workflow: endpoint rejects invalid workflow with HTTP 400', async () => {
-      for (const invalidWf of ['invalid_workflow_test', 123, 'unknown']) {
+    it('H7. Invalid Study Workflow: endpoint rejects invalid workflow types and values with HTTP 400', async () => {
+      for (const invalidWf of ['invalid_workflow_test', 123, 'unknown', ' ', false, 0, true, [], {}]) {
         const res = await fetch(`${baseUrl}/api/gemini/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
