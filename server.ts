@@ -1184,8 +1184,10 @@ app.post("/api/gemini/generate", async (req, res) => {
     return res.status(400).json({ error: "กรุณาระบุประวัติการสนทนา (messages) หรือคำถาม (prompt)" });
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: "ไม่พบ GEMINI_API_KEY ในระบบ กรุณาตรวจสอบการตั้งค่า Secrets" });
+  const hasApiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '');
+  let lastError: any = null;
+  if (!hasApiKey) {
+    lastError = new Error("ไม่พบ GEMINI_API_KEY ในระบบ กรุณาตรวจสอบการตั้งค่า Secrets (API Key Unconfigured)");
   }
 
   const latestPrompt = validatedMessages[validatedMessages.length - 1].text;
@@ -1526,11 +1528,10 @@ ${formattedChunks}
 
   let attempt = 0;
   const maxAttempts = DEFAULT_RETRY_CONFIG.maxAttempts;
-  let lastError: any = null;
   let totalApiDuration = 0;
   let lastRetryDelayMs: number | undefined = undefined;
 
-  while (attempt < maxAttempts) {
+  while (hasApiKey && attempt < maxAttempts) {
     attempt++;
     const attemptStartTime = Date.now();
     const attemptAbortController = new AbortController();
@@ -1544,7 +1545,7 @@ ${formattedChunks}
       } else {
         console.log(`[Req ${requestId}] [Perf Backend] Calling Gemini API - attempt: ${attempt}/${maxAttempts}, model: gemini-3.8-flash, thinkingLevel: LOW`);
       }
-      // In document grounding mode: DO NOT use googleSearch to prevent external dilution. Low temp for precision.
+      // In document grounding mode: DO NOT use googleSearch to prevent external dilution.
       let response: any;
       if (process.env.VITEST && customGeminiMock) {
         const tools = isDocumentGrounding ? undefined : [{ googleSearch: {} }];
@@ -1569,7 +1570,6 @@ ${formattedChunks}
           contents,
           config: {
             systemInstruction,
-            temperature: isDocumentGrounding ? 0.1 : 0.3,
             maxOutputTokens: 2048,
             tools: isDocumentGrounding ? undefined : [{ googleSearch: {} }],
             thinkingConfig: {
