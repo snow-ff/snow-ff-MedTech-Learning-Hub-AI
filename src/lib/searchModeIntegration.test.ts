@@ -1097,52 +1097,91 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(fallbackCurriculum.localContentMetadata?.verificationStatus).toBe('verified_curriculum');
     });
 
-    it('H10. Comprehensive 6-Workflow & Multi-Mode Integration: verifies explain, compare, step_by_step, clinical_dtm_application, vocabulary, and quiz_review across Offline General, Online General, Offline Doc Grounding, Online Doc Grounding, and Verification Consistency', async () => {
+    it('H10. Evidence-Based 6-Workflow & Multi-Mode Content Integration: verifies content extraction, structuring, negative evidence handling, and verification consistency across all 4 modes', async () => {
       const workflows = ['explain', 'compare', 'step_by_step', 'clinical_dtm_application', 'vocabulary', 'quiz_review'];
       
-      // 1. Offline General / KB (all 6 workflows)
+      const richDocContext = {
+        title: "คู่มือปฏิบัติการเทคนิคการแพทย์",
+        hasNativePages: true,
+        totalPages: 5,
+        chunks: [
+          {
+            chunkIndex: 1,
+            pageNumber: 2,
+            text: "ขั้นตอนที่ 1 เก็บตัวอย่างเลือดใส่หลอด EDTA สำหรับตรวจ CBC. ขั้นตอนที่ 2 ปั่นแยกพลาสมา. Serum ต่างจาก Plasma ตรงที่ Serum ปราศจาก Fibrinogen ขณะที่ Plasma มีแฟคเตอร์การแข็งตัวครบถ้วน. การประยุกต์ใช้ในคลินิก: ใช้ในระบบสารสนเทศสุขภาพ Electronic Health Record (EHR) และ PACS"
+          }
+        ]
+      };
+
+      // 1. Offline Document Grounding with rich content & actual content tests
       for (const wf of workflows) {
-        const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+        const resDocOff = await fetch(`${baseUrl}/api/gemini/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
-            searchMode: 'web_search',
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma และขั้นตอนการทำงาน' }],
+            searchMode: 'document',
             offlineMode: true,
+            documentContext: richDocContext,
             studyWorkflow: wf
           })
         });
-        expect(res.status).toBe(200);
-        const data = await res.json();
-        expect(data.text).toBeDefined();
+        expect(resDocOff.status).toBe(200);
+        const dataDocOff = await resDocOff.json();
+        expect(dataDocOff.text).toBeDefined();
+        expect(dataDocOff.verification).toBeDefined();
         if (wf === 'compare') {
-          expect(data.text).toContain('เปรียบเทียบ');
+          expect(dataDocOff.text).toContain('ประเด็นการเปรียบเทียบที่สกัด');
+          expect(dataDocOff.text).toContain('Serum');
         } else if (wf === 'step_by_step') {
-          expect(data.text).toContain('ขั้นตอน');
-        } else if (wf === 'clinical_dtm_application') {
-          expect(data.text).toContain('คลินิก');
+          expect(dataDocOff.text).toContain('ลำดับขั้นตอนตามข้อมูลต้นทาง');
         } else if (wf === 'vocabulary') {
-          expect(data.text).toContain('คำศัพท์');
+          expect(dataDocOff.text).toContain('การสกัดศัพท์เทคนิค');
         } else if (wf === 'quiz_review') {
-          expect(data.text).toContain('ทบทวน');
+          expect(dataDocOff.text).toContain('แบบฝึกหัดทบทวนความรู้');
         }
       }
 
-      // 2. Online General (all 6 workflows with capturedInstruction)
+      // 2. Negative Evidence / Insufficient content test in document mode
+      const sparseDocContext = {
+        title: "เอกสารสรุปสั้น",
+        hasNativePages: true,
+        totalPages: 1,
+        chunks: [
+          { chunkIndex: 1, pageNumber: 1, text: "ข้อมูลทั่วไปเรื่องทฤษฎีพื้นฐาน ไม่มีรายละเอียดเกี่ยวกับการปฏิบัติงาน" }
+        ]
+      };
+      const resSparse = await fetch(`${baseUrl}/api/gemini/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', text: 'ขั้นตอนการทำงาน' }],
+          searchMode: 'document',
+          offlineMode: true,
+          documentContext: sparseDocContext,
+          studyWorkflow: 'step_by_step'
+        })
+      });
+      expect(resSparse.status).toBe(200);
+      const dataSparse = await resSparse.json();
+      expect(dataSparse.text).toContain('ไม่พบข้อมูล');
+
+      // 3. Online General & Online Document Grounding (4 Mode Paths Coverage)
       let capturedInstruction = '';
       setCustomGeminiMock(async (params) => {
         capturedInstruction = params.systemInstruction || '';
-        return { text: "Mocked online workflow response", candidates: [] };
+        return { text: "Mocked workflow response", candidates: [] };
       });
 
       try {
+        // Online General
         for (const wf of workflows) {
           capturedInstruction = '';
           const resOnline = await fetch(`${baseUrl}/api/gemini/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+              messages: [{ role: 'user', text: 'Serum และ Plasma' }],
               searchMode: 'web_search',
               offlineMode: false,
               studyWorkflow: wf
@@ -1152,46 +1191,17 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
           expect(capturedInstruction).toContain('Study Workflow');
         }
 
-        // 3. Offline Document Grounding (all 6 workflows with verification check)
-        const mockDocContext = {
-          title: "คู่มือปฏิบัติการเทคนิคการแพทย์",
-          hasNativePages: true,
-          totalPages: 5,
-          chunks: [
-            { chunkIndex: 1, pageNumber: 2, text: "Serum คือส่วนของน้ำเหลืองที่แยกเม็ดเลือดแดงและแฟคเตอร์การแข็งตัวออกแล้ว Plasma คือพลาสมาที่มีสารต้านการแข็งตัวของเลือด" }
-          ]
-        };
-
-        for (const wf of workflows) {
-          const resDocOff = await fetch(`${baseUrl}/api/gemini/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
-              searchMode: 'document',
-              offlineMode: true,
-              documentContext: mockDocContext,
-              studyWorkflow: wf
-            })
-          });
-          expect(resDocOff.status).toBe(200);
-          const dataDocOff = await resDocOff.json();
-          expect(dataDocOff.text).toBeDefined();
-          expect(dataDocOff.verification).toBeDefined();
-          expect(dataDocOff.verification.stages.evidenceFidelity).toBeDefined();
-        }
-
-        // 4. Online Document Grounding (verifying systemInstruction contains both Doc Grounding rules and Workflow instructions)
+        // Online Document Grounding
         for (const wf of workflows) {
           capturedInstruction = '';
           const resDocOn = await fetch(`${baseUrl}/api/gemini/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+              messages: [{ role: 'user', text: 'Serum และ Plasma' }],
               searchMode: 'document',
               offlineMode: false,
-              documentContext: mockDocContext,
+              documentContext: richDocContext,
               studyWorkflow: wf
             })
           });

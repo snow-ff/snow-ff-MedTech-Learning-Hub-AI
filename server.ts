@@ -533,20 +533,44 @@ function buildChunkReferences(
 function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWorkflowType): string {
   if (!workflow) return baseText;
   const cleanBase = baseText.trim();
+  const sentences = cleanBase.split(/(?<=[.!?\n])\s+/).filter(Boolean);
+  const coreConcept = sentences.slice(0, 2).join(' ') || cleanBase;
+  const details = sentences.slice(2).join(' ') || '';
+
   switch (workflow) {
-    case 'compare':
-      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**ประเด็นการเปรียบเทียบและวิเคราะห์จากฐานความรู้:**\n- ประเด็นหลัก: วิเคราะห์ตามเนื้อหาข้อเท็จจริงในแหล่งข้อมูลต้นทาง\n- ข้อสังเกตเชิงเปรียบเทียบ: จัดโครงสร้างเนื้อหาตามประเด็นหลักที่ปรากฏในฐานความรู้โดยไม่มีการคาดเดาเพิ่ม`;
-    case 'step_by_step':
-      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนตามข้อมูลต้นทาง:**\n1. ตรวจสอบข้อมูลตั้งต้นและนิยามหลัก\n2. ดำเนินการตามลำดับขั้นตอนที่ปรากฏในฐานความรู้\n3. สรุปผลการปฏิบัติงานตามหลักวิชาการ`;
-    case 'clinical_dtm_application':
-      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้และการวิเคราะห์เชิงคลินิก:**\n- ข้อเท็จจริงทางวิชาการ: อ้างอิงจากฐานความรู้โดยตรง\n- ตัวอย่างการประยุกต์ใช้ในบริบทเทคนิคการแพทย์และ DTM: สำหรับประกอบการเรียนรู้และการฝึกปฏิบัติ\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
-    case 'vocabulary':
-      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**สรุปศัพท์เทคนิคและคำย่อสำคัญ:**\n- ศัพท์วิชาการ: อ้างอิงจากเนื้อหาต้นทาง\n- คำย่อและความหมาย: แปลและอธิบายตามหลักวิชาการเทคนิคการแพทย์และ DTM`;
-    case 'quiz_review':
-      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้:**\n- คำถามทบทวน: จงอธิบายหลักการสำคัญจากข้อมูลข้างต้น\n- แนวคำตอบอ้างอิง: สรุปจากข้อเท็จจริงในฐานความรู้โดยไม่มีการแต่งเติมข้อเท็จจริงใหม่`;
     case 'explain':
+      return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ (Core Concepts):**\n${coreConcept}\n\n**2. คำอธิบายรายละเอียดตามข้อมูลต้นทาง:**\n${details || cleanBase}`;
+    case 'compare': {
+      const hasCompare = /(?:เทียบ|ต่าง|ขณะที่|ในขณะที่|ส่วน|vs|เปรียบเทียบ)/i.test(cleanBase);
+      if (hasCompare) {
+        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**ประเด็นการเปรียบเทียบที่สกัดจากแหล่งข้อมูลต้นทาง:**\n- การวิเคราะห์ความต่าง: อ้างอิงตามข้อเท็จจริงที่มีการระบุในต้นทางโดยตรง`;
+      }
+      return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: ข้อมูลในแหล่งต้นทางมีรายละเอียดพื้นฐาน แต่ยังไม่มีข้อมูลเปรียบเทียบเชิงโครงสร้างหรือการเปรียบเทียบ 2 ฝั่งที่ชัดเจน)*`;
+    }
+    case 'step_by_step': {
+      const hasSteps = /(?:\d+\.|\bขั้นตอน|\bลำดับ|ขั้นตอน|ลำดับ)/i.test(cleanBase);
+      if (hasSteps) {
+        return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนตามข้อมูลต้นทาง:**\n- ดำเนินการตามลำดับที่ปรากฏในแหล่งข้อมูลต้นทางข้างต้นอย่างเคร่งครัด`;
+      }
+      return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n*(หมายเหตุ: ข้อมูลต้นทางระบุเป็นเนื้อหาบรรยาย และยังไม่พบลำดับขั้นตอนการปฏิบัติงานที่เป็นขั้นตอน 1, 2, 3 ชัดเจนในต้นทาง)*`;
+    }
+    case 'clinical_dtm_application': {
+      const hasClinical = /(?:คลินิก|DTM|ผู้ป่วย|วินิจฉัย|รักษา|ห้องปฏิบัติการ|EHR|PACS|ซอฟต์แวร์|AI)/i.test(cleanBase);
+      if (hasClinical) {
+        return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้ตามที่ระบุในต้นทาง:**\n- ข้อเท็จจริงและตัวอย่าง: ดึงข้อมูลจากข้อความต้นทางโดยตรง\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
+      }
+      return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือเทคโนโลยีดิจิทัลทางการแพทย์ (DTM) เฉพาะเจาะจง)*`;
+    }
+    case 'vocabulary': {
+      const terms = cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || [];
+      const uniqueTerms = Array.from(new Set(terms));
+      const termListStr = uniqueTerms.length > 0 ? uniqueTerms.join(', ') : 'ไม่พบคำศัพท์ภาษาอังกฤษเฉพาะในข้อความต้นทาง';
+      return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**การสกัดศัพท์เทคนิคและคำย่อจากแหล่งข้อมูลต้นทาง:**\n- คำศัพท์/คำย่อที่พบ: ${termListStr}\n- ความหมาย: อ้างอิงจากข้อความคำอธิบายในต้นทางข้างต้นโดยไม่มีการเติมความรู้ภายนอก`;
+    }
+    case 'quiz_review':
+      return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้จากข้อมูลต้นทาง:**\n- คำถามทบทวน: จากข้อความข้างต้น จงสรุปสาระสำคัญของหลักการดังกล่าว\n- แนวคำตอบอ้างอิงจากต้นทาง: ${coreConcept}`;
     default:
-      return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n${cleanBase}`;
+      return cleanBase;
   }
 }
 
