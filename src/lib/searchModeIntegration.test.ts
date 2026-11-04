@@ -1,7 +1,7 @@
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'test-key';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, Server } from 'node:http';
-import { app, getAcademicFallback, formatFallbackResponse, setCustomGeminiMock } from '../../server';
+import { app, getAcademicFallback, formatFallbackResponse, setCustomGeminiMock, applyStudyWorkflowToFallbackText, extractComparisonEvidence } from '../../server';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getAllLearningTopics, LEARNING_DOMAIN_GROUPS, STUDY_WORKFLOW_OPTIONS, buildStudyWorkflowPrompt, getWorkflowById } from '../data/learningDomainCatalog';
@@ -1167,6 +1167,8 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       expect(dataSparse.text).toContain('หมายเหตุ');
 
       // 3. Online General & Online Document Grounding (4 Mode Paths Coverage)
+      // 3. [Mock Prompt Integration Test] Online General & Online Document Grounding systemInstruction integration (Mock Gemini API)
+      // Note: This verifies server-side prompt construction with custom Gemini mock, NOT real Gemini live API inference.
       let capturedInstruction = '';
       setCustomGeminiMock(async (params) => {
         capturedInstruction = params.systemInstruction || '';
@@ -1174,7 +1176,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       });
 
       try {
-        // Online General
+        // Online General [Mock Prompt Integration Test]
         for (const wf of workflows) {
           capturedInstruction = '';
           const resOnline = await fetch(`${baseUrl}/api/gemini/generate`, {
@@ -1191,7 +1193,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
           expect(capturedInstruction).toContain('Study Workflow');
         }
 
-        // Online Document Grounding
+        // Online Document Grounding [Mock Prompt Integration Test]
         for (const wf of workflows) {
           capturedInstruction = '';
           const resDocOn = await fetch(`${baseUrl}/api/gemini/generate`, {
@@ -1215,61 +1217,304 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       }
     });
 
-    it('R2. Compare False Positive & Rigorous Comparison Evidence: requires dual subjects, contrast properties, and forbids length or cue-only false positives', async () => {
-      const resLong = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'ข้อมูลทั่วไปเกี่ยวกับระบบโลหิตวิทยาและห้องปฏิบัติการคลินิก' }],
-          searchMode: 'web_search',
-          offlineMode: true,
-          studyWorkflow: 'compare'
-        })
-      });
-      const dataLong = await resLong.json();
-      expect(dataLong.text).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+    // =========================================================================
+    // A. R2 — Correct Comparison Evidence Predicate & Direct Formatter Tests
+    // =========================================================================
+    describe('R2: Comparison Evidence Predicate & Direct Formatter Unit Tests', () => {
+      it('Case 1: Long general text without comparison must not produce positive comparison claim', () => {
+        const text = 'ระบบโลหิตวิทยาและห้องปฏิบัติการคลินิกมีบทบาทสำคัญในการวินิจฉัยโรค โดยการตรวจวิเคราะห์ทางห้องปฏิบัติการต้องอาศัยบุคลากรที่มีความเชี่ยวชาญและเครื่องมือที่ได้มาตรฐาน มีการตรวจสอบการทำงานของเครื่องมืออย่างสม่ำเสมอ เพื่อให้ผลการทดสอบมีความถูกต้องแม่นยำสูงสุดและเป็นประโยชน์ต่อการดูแลรักษาผู้ป่วย';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
 
-      const resSingle = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'การย้อมสีแกรมของแบคทีเรียversusทั่วไป' }],
-          searchMode: 'web_search',
-          offlineMode: true,
-          studyWorkflow: 'compare'
-        })
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
-      const dataSingle = await resSingle.json();
-      expect(dataSingle.text).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
 
-      const resGenuine = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
-          searchMode: 'web_search',
-          offlineMode: true,
-          studyWorkflow: 'compare'
-        })
+      it('Case 2: One subject plus comparison cue only must not pass as valid comparison', () => {
+        const text = 'การย้อมสีแกรมมีข้อแตกต่างและเปรียบเทียบสำหรับการวินิจฉัยแบคทีเรียทั่วไป';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
-      const dataGenuine = await resGenuine.json();
-      expect(dataGenuine.text).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง');
+
+      it('Case 3: Two words connected by a cue but no comparable property must not pass', () => {
+        const text = 'มีแบคทีเรียและไวรัสที่แตกต่างกันในห้องปฏิบัติการ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 4: Two distinct subjects and an explicit property supported by source text must pass', () => {
+        const text = 'คุณสมบัติของแบคทีเรียแกรมบวกและแบคทีเรียแกรมลบมีความแตกต่างกันด้านความหนาของผนังเซลล์ Peptidoglycan โดยแกรมบวกมีผนังเซลล์หนา ขณะที่แกรมลบมีผนังเซลล์บาง';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBeDefined();
+        expect(evidence.subjectB).toBeDefined();
+        expect(evidence.subjectA?.toLowerCase()).not.toBe(evidence.subjectB?.toLowerCase());
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).not.toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+      });
+
+      it('Case 5: Genuine generic comparison without domain hardcoding (Serum, Plasma, Conventional, Real-Time) must pass', () => {
+        const text = 'ความแตกต่างระหว่างกล้องจุลทรรศน์แบบใช้แสงและกล้องจุลทรรศน์อิเล็กตรอน คือ กล้องจุลทรรศน์แบบใช้แสงใช้ลำแสงโฟตอนในการส่องตรวจ ขณะที่กล้องจุลทรรศน์อิเล็กตรอนใช้ลำแสงอิเล็กตรอน ทำให้มีกำลังขยายและขีดจำกัดความละเอียดต่างกันอย่างชัดเจน';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toContain('กล้องจุลทรรศน์แบบใช้แสง');
+        expect(evidence.subjectB).toContain('กล้องจุลทรรศน์อิเล็กตรอน');
+        expect(text).not.toContain('Serum');
+        expect(text).not.toContain('Plasma');
+        expect(text).not.toContain('Conventional');
+        expect(text).not.toContain('Real-Time');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('กล้องจุลทรรศน์แบบใช้แสง');
+        expect(formatted).toContain('กล้องจุลทรรศน์อิเล็กตรอน');
+      });
+
+      it('Case 6: A phrase containing ต่างกัน or เปรียบเทียบ without two distinct subjects must not pass', () => {
+        const text = 'ผลการทดสอบมีความแปรปรวนและต่างกันในแต่ละวันโดยควรนำมาเปรียบเทียบกับค่ามาตรฐาน';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
     });
 
-    it('R3 & H10. Static Knowledge Base & Workflow Consistency across all paths', async () => {
-      const resStaticWf = await fetch(`${baseUrl}/api/gemini/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', text: 'หลักการย้อมสีแกรม' }],
-          searchMode: 'web_search',
-          offlineMode: true,
-          studyWorkflow: 'step_by_step'
-        })
+    // =========================================================================
+    // B. R3 — Complete Missing-Evidence Document Workflow Path
+    // =========================================================================
+    describe('R3: Missing-Evidence Document Workflow Path & Verification Contract', () => {
+      it('Missing evidence in document mode with workflow applies workflow formatting, keeps INSUFFICIENT_EVIDENCE verdict, and invents 0 references', async () => {
+        const missingDocContext = {
+          title: "เอกสารสรุปสั้น",
+          hasNativePages: true,
+          totalPages: 1,
+          chunks: [
+            { chunkIndex: 1, pageNumber: 1, text: "ข้อมูลทั่วไปเรื่องสถิติเบื้องต้น" }
+          ]
+        };
+
+        const testWorkflows: Array<'compare' | 'step_by_step' | 'quiz_review' | 'clinical_dtm_application'> = [
+          'compare',
+          'step_by_step',
+          'quiz_review',
+          'clinical_dtm_application'
+        ];
+
+        for (const wf of testWorkflows) {
+          const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', text: 'ทฤษฎีควอนตัมฟิสิกส์และการแผ่รังสีของวัตถุดำ' }],
+              searchMode: 'document',
+              offlineMode: true,
+              documentContext: missingDocContext,
+              studyWorkflow: wf
+            })
+          });
+
+          expect(res.status).toBe(200);
+          const data = await res.json();
+
+          // 1. Applied workflow formatting to fallback text before verification
+          expect(data.text).toContain(`รูปแบบ Study Workflow`);
+          expect(data.text).toContain('ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้');
+
+          // 2. Negative evidence message does not appear as positive evidence
+          expect(data.text).toContain('หมายเหตุ');
+
+          // 3. Strict verification consistency
+          expect(data.evidenceStatus).toBe('insufficient');
+          expect(data.verification).toBeDefined();
+          expect(data.verification.verdict).toBe('INSUFFICIENT_EVIDENCE');
+          expect(data.verification.isVerified).toBe(false);
+
+          // 4. Zero fabricated page numbers, chunk IDs, or references
+          expect(data.references).toEqual([]);
+          expect(data.text).not.toMatch(/หน้า\s*\d+/);
+
+          // 5. Does not bring Static Knowledge Base information into Document Grounding
+          expect(data.contentOrigin).toBe('user_document');
+          expect(data.localContentMetadata).toBeUndefined();
+        }
       });
-      expect(resStaticWf.status).toBe(200);
-      const dataStatic = await resStaticWf.json();
-      expect(dataStatic.text).toContain('ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง');
+    });
+
+    // =========================================================================
+    // C. H10 — Full 6-Workflow Coverage on Static KB & Offline General Fallback
+    // =========================================================================
+    describe('H10: Full 6-Workflow Coverage on Static KB and Offline General Fallback', () => {
+      it('Static KB Fallback: supports all 6 Workflows with genuine evidence extraction and unverified reference status', async () => {
+        // 1. explain
+        const resExplain = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'explain'
+          })
+        });
+        const dataExplain = await resExplain.json();
+        expect(dataExplain.text).toContain('*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*');
+        expect(dataExplain.text).toContain('Serum');
+        expect(dataExplain.contentOrigin).toBe('local_knowledge_base');
+
+        // 2. compare
+        const resCompare = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'compare'
+          })
+        });
+        const dataCompare = await resCompare.json();
+        expect(dataCompare.text).toContain('*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*');
+        expect(dataCompare.text).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(dataCompare.contentOrigin).toBe('local_knowledge_base');
+
+        // 3. step_by_step (on Gram Stain which has Step 1..4)
+        const resStep = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'หลักการย้อมสีแกรม' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'step_by_step'
+          })
+        });
+        const dataStep = await resStep.json();
+        expect(dataStep.text).toContain('*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*');
+        expect(dataStep.text).toContain('ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง:');
+        expect(dataStep.contentOrigin).toBe('local_knowledge_base');
+
+        // 4. clinical_dtm_application (on Health Informatics which has EHR, PACS, CDSS)
+        const resClinical = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ระบบสารสนเทศสุขภาพ' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'clinical_dtm_application'
+          })
+        });
+        const dataClinical = await resClinical.json();
+        expect(dataClinical.text).toContain('*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*');
+        expect(dataClinical.text).toContain('การประยุกต์ใช้ตามหลักฐานต้นทาง:');
+        expect(dataClinical.contentOrigin).toBe('local_knowledge_base');
+
+        // 5. vocabulary (on DTM Course Starter which has defined technical terms)
+        const resVocab = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'เริ่มเรียนรายวิชา DTM' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'vocabulary'
+          })
+        });
+        const dataVocab = await resVocab.json();
+        expect(dataVocab.text).toContain('*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*');
+        expect(dataVocab.text).toContain('คำศัพท์');
+
+        // 6. quiz_review
+        const resQuiz = await fetch(`${baseUrl}/api/gemini/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', text: 'ความแตกต่างระหว่าง Serum และ Plasma' }],
+            searchMode: 'web_search',
+            offlineMode: true,
+            studyWorkflow: 'quiz_review'
+          })
+        });
+        const dataQuiz = await resQuiz.json();
+        expect(dataQuiz.text).toContain('*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*');
+        expect(dataQuiz.text).toContain('แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:');
+      });
+
+      it('Offline General Fallback (Unmatched Topic): executes all 6 Workflows without fabricating domain facts', async () => {
+        const workflows: Array<'explain' | 'compare' | 'step_by_step' | 'clinical_dtm_application' | 'vocabulary' | 'quiz_review'> = [
+          'explain',
+          'compare',
+          'step_by_step',
+          'clinical_dtm_application',
+          'vocabulary',
+          'quiz_review'
+        ];
+
+        for (const wf of workflows) {
+          const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', text: 'ประวัติศาสตร์การแพทย์แผนโบราณในยุคกลาง' }],
+              searchMode: 'web_search',
+              offlineMode: true,
+              studyWorkflow: wf
+            })
+          });
+
+          expect(res.status).toBe(200);
+          const data = await res.json();
+          expect(data.source).toBe('academic_fallback');
+          expect(data.contentOrigin).toBeUndefined();
+          expect(data.serviceStatus.servedMode).toBe('offline_static_fallback');
+          expect(data.text).toContain('ไม่พบข้อมูลสำรองทางวิชาการเฉพาะสำหรับหัวข้อนี้');
+
+          if (wf === 'compare') {
+            expect(data.text).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          } else if (wf === 'step_by_step') {
+            expect(data.text).toContain('ไม่พบลำดับขั้นตอนการปฏิบัติงานที่เป็นขั้นตอนหรือตัวเลขที่ยืนยันได้');
+          } else if (wf === 'clinical_dtm_application') {
+            expect(data.text).toContain('ไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้');
+          } else if (wf === 'quiz_review') {
+            expect(data.text).toContain('มีเนื้อหาไม่เพียงพอสำหรับการสร้างคำถามและแนวคำตอบทบทวนที่ตรวจสอบย้อนกลับได้');
+          }
+        }
+      });
+
+      it('Negative Tests: asserts non-hallucination constraints on vocabulary, clinical application, and quiz', () => {
+        // Unsupported clinical application text
+        const rawGeneral = 'ข้อความทั่วไปที่ไม่มีการระบุระบบสารสนเทศ คลินิก หรือการนำไปใช้ใดๆ ทั้งสิ้น';
+        const clinicalResult = applyStudyWorkflowToFallbackText(rawGeneral, 'clinical_dtm_application');
+        expect(clinicalResult).toContain('ไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้');
+
+        // Vocabulary on text with no defined terms
+        const noDefText = 'ข้อความทั่วไปที่มีแต่คำบรรยายโดยไม่มีการนิยามความหมายของคำใดเลย';
+        const vocabResult = applyStudyWorkflowToFallbackText(noDefText, 'vocabulary');
+        expect(vocabResult).toContain('ไม่พบคำอธิบายความหมายที่มีนิยามรองรับในแหล่งข้อมูลต้นทาง');
+
+        // Quiz review on short insufficient text
+        const shortText = 'สั้นเกินไป';
+        const quizResult = applyStudyWorkflowToFallbackText(shortText, 'quiz_review');
+        expect(quizResult).toContain('มีเนื้อหาไม่เพียงพอสำหรับการสร้างคำถามและแนวคำตอบทบทวน');
+
+        // Workflow formatting preserves exact base text without injecting external ungrounded facts
+        expect(clinicalResult).toContain(rawGeneral);
+        expect(vocabResult).toContain(noDefText);
+        expect(quizResult).toContain(shortText);
+      });
     });
   });
 });

@@ -530,7 +530,153 @@ function buildChunkReferences(
   });
 }
 
-function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWorkflowType): string {
+export function extractComparisonEvidence(text: string): {
+  isSupported: boolean;
+  subjectA?: string;
+  subjectB?: string;
+  property?: string;
+} {
+  const clean = text.trim();
+  if (!clean || clean.length < 15) return { isSupported: false };
+
+  // Negative assertion check: absence of evidence or negative indicators
+  if (/ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่สามารถสรุป|ไม่มีรายละเอียด|ไม่พบข้อมูลเปรียบเทียบ/i.test(clean)) {
+    return { isSupported: false };
+  }
+
+  const CUE_STOPWORDS = new Set([
+    'ต่างกัน', 'แตกต่างกัน', 'เปรียบเทียบ', 'การเปรียบเทียบ', 'ข้อแตกต่าง',
+    'ความแตกต่าง', 'ข้อมูล', 'การทดสอบ', 'ผลการทดสอบ', 'ค่ามาตรฐาน',
+    'ทั่วไป', 'ระบบ', 'ห้องปฏิบัติการ', 'แต่ละวัน', 'บางส่วน', 'ทั้งหมด',
+    'การวิเคราะห์', 'ข้อนี้', 'เรื่องนี้', 'สิ่งนี้', 'อันนี้', 'ตัวอย่าง'
+  ]);
+
+  const cleanSubject = (s: string): string => {
+    return s
+      .replace(/^(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ|ระหว่าง|ของ|และ|กับ)\s*/, '')
+      .replace(/[*_#:`"()]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const isValidSubject = (s: string): boolean => {
+    if (!s || s.length < 2) return false;
+    const lower = s.toLowerCase();
+    if (CUE_STOPWORDS.has(lower) || CUE_STOPWORDS.has(s)) return false;
+    if (/^(?:ต่าง|เปรียบเทียบ|ความต่าง|แตกต่าง|versus|vs|และ|กับ|หรือ|ของ|ใน)$/i.test(s)) return false;
+    return true;
+  };
+
+  let subA: string | undefined;
+  let subB: string | undefined;
+
+  // Pattern 1: ความแตกต่างระหว่าง [A] และ [B] หรือ [A] vs [B] (support Thai zero-space between words)
+  const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*ใน|\s*คือ|\s*ด้าน|\s*เรื่อง|\s*ตรงที่|[:\n(.]|$)/i;
+  const matchBetween = clean.match(patternBetween);
+  if (matchBetween) {
+    const candA = cleanSubject(matchBetween[1].replace(/\([^)]*\)/g, ''));
+    const candB = cleanSubject(matchBetween[2].replace(/\([^)]*\)/g, ''));
+    if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+      subA = candA;
+      subB = candB;
+    }
+  }
+
+  // Pattern 1b: [A] และ [B] มีความแตกต่างกัน / แตกต่างกัน / ต่างกัน (Thai Postfix cue)
+  if (!subA || !subB) {
+    const patternPostfix = /(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]{2,40}?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]{2,40}?)\s*(?:มีความแตกต่าง|มีความต่าง|แตกต่างกัน|ต่างกัน)/i;
+    const matchPostfix = clean.match(patternPostfix);
+    if (matchPostfix) {
+      const candA = cleanSubject(matchPostfix[1].replace(/\([^)]*\)/g, ''));
+      const candB = cleanSubject(matchPostfix[2].replace(/\([^)]*\)/g, ''));
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+      }
+    }
+  }
+
+  // Pattern 2: Bullet items - **[A]** ... - **[B]** or numbered 1. **[A]** ... 2. **[B]**
+  if (!subA || !subB) {
+    const patternBullets = /(?:^|\n)\s*[-*•]\s*\*\*([^*\n:]+)\*\*[\s\S]*?(?:^|\n)\s*[-*•]\s*\*\*([^*\n:]+)\*\*/;
+    const matchBullets = clean.match(patternBullets);
+    if (matchBullets) {
+      const candA = cleanSubject(matchBullets[1].replace(/\([^)]*\)/g, ''));
+      const candB = cleanSubject(matchBullets[2].replace(/\([^)]*\)/g, ''));
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+      }
+    }
+  }
+
+  // Pattern 2b: Numbered headings 1. **[A]** ... 2. **[B]**
+  if (!subA || !subB) {
+    const patternNumbered = /(?:^|\n)\s*1\.\s*\*\*([^*\n:]+)\*\*[\s\S]*?(?:^|\n)\s*2\.\s*\*\*([^*\n:]+)\*\*/;
+    const matchNumbered = clean.match(patternNumbered);
+    if (matchNumbered) {
+      const candA = cleanSubject(matchNumbered[1].replace(/\([^)]*\)/g, ''));
+      const candB = cleanSubject(matchNumbered[2].replace(/\([^)]*\)/g, ''));
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+      }
+    }
+  }
+
+  // Pattern 3: [A] ต่างจาก/แตกต่างจาก [B]
+  if (!subA || !subB) {
+    const patternDiff = /([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)\s*(?:ต่างจาก|แตกต่างจาก|เมื่อเทียบกับ)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*ตรงที่|\s*ในด้าน|\s*คือ|\s*เนื่องจาก|[:\n,.]|$)/i;
+    const matchDiff = clean.match(patternDiff);
+    if (matchDiff) {
+      const candA = cleanSubject(matchDiff[1]);
+      const candB = cleanSubject(matchDiff[2]);
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+      }
+    }
+  }
+
+  // Pattern 4: [A] มี/เป็น ... ขณะที่ [B] มี/เป็น/ไม่มี
+  if (!subA || !subB) {
+    const patternContrast = /(?:^|[.\n])\s*(?:โดย|ซึ่ง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้)\s*[^.!?\n]{2,80}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้|ปราศจาก|ไม่มี|หนา|บาง)/i;
+    const matchContrast = clean.match(patternContrast);
+    if (matchContrast) {
+      const candA = cleanSubject(matchContrast[1]);
+      const candB = cleanSubject(matchContrast[2]);
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+      }
+    }
+  }
+
+  if (!subA || !subB) {
+    return { isSupported: false };
+  }
+
+  // Check comparable property or contrasting predicate
+  // DO NOT accept generic cue words such as 'ต่าง', 'ต่างกัน', 'เปรียบเทียบ' as the property
+  const PROPERTY_REGEX = /(?:คุณสมบัติ|ลักษณะ|โครงสร้าง|หน้าที่|ส่วนประกอบ|องค์ประกอบ|ปริมาณ|ความเข้มข้น|ระยะเวลา|ขนาด|ความหนา|ความไว|ความจำเพาะ|หลักการ|การตรวจวัด|ข้อดี|ข้อจำกัด|การประยุกต์|สภาวะ|กระบวนการ|วิธี|วิธีการ|กำลังขยาย|ความละเอียด|สัญญาณ|ขอบเขต|สัดส่วน|ระดับ|การทำงาน|ผนังเซลล์|หลอดเก็บ|สารกันเลือดแข็ง|ปัจจัยการแข็งตัว|แฟคเตอร์|Fibrinogen|Coagulation|interoperability|sensitivity|specificity|resolution|signal|parameter|mechanism)/i;
+  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s+[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?(?:มี|พบ)|(?:มี|พบ)\s+[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{1,20}?(?:ขณะที่|ในขณะที่)[^.!?\n]{1,20}?บาง|บาง[^.!?\n]{1,20}?(?:ขณะที่|ในขณะที่)[^.!?\n]{1,20}?หนา|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ตรงที่\s+[^.!?\n]{2,60}?(?:ขณะที่|ในขณะที่|ส่วน)/i;
+
+  const propMatch = clean.match(PROPERTY_REGEX);
+  const contrastMatch = clean.match(CONTRAST_PREDICATE_REGEX);
+
+  if (!propMatch && !contrastMatch) {
+    return { isSupported: false, subjectA: subA, subjectB: subB };
+  }
+
+  return {
+    isSupported: true,
+    subjectA: subA,
+    subjectB: subB,
+    property: propMatch ? propMatch[0] : (contrastMatch ? 'contrast_predicate' : undefined)
+  };
+}
+
+export function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWorkflowType): string {
   if (!workflow) return baseText;
   const cleanBase = baseText.trim();
   const sentences = cleanBase.split(/(?<=[.!?\n])\s+/).filter(Boolean);
@@ -545,41 +691,44 @@ function applyStudyWorkflowToFallbackText(baseText: string, workflow?: StudyWork
       return `*(รูปแบบ Study Workflow: อธิบายหลักการ / Explain)*\n\n**1. หลักการสำคัญ:**\n${core}\n\n**2. รายละเอียดคำอธิบายตามต้นทาง:**\n${rest}`;
     }
     case 'compare': {
-      const hasComparisonCue = /(?:ต่าง|เปรียบเทียบ|ขณะที่|ในขณะที่|เทียบกับ|versus|\bvs\b|ต่างกัน|เปรียบเทียบระหว่าง|ข้อแตกต่าง|ต่างจาก|แตกต่าง|เปรียบเทียบกับ)/i.test(cleanBase);
-      const hasTwoSubjects = /(?:และ|กับ|vs|versus|ขณะที่|ในขณะที่|เทียบกับ|ต่างจาก)/i.test(cleanBase) && (cleanBase.includes('ซีรั่ม') || cleanBase.includes('พลาสมา') || cleanBase.includes('plasma') || cleanBase.includes('serum') || cleanBase.includes('conventional') || cleanBase.includes('real-time') || /(?:ระหว่าง|กับ|และ)\s+[ก-ฮa-zA-Z]+/i.test(cleanBase) || cleanBase.includes('ต่างกัน') || cleanBase.includes('เปรียบเทียบ'));
-      const hasContrastProperty = /(?:คุณสมบัติ|ต่าง|ด้าน|ลักษณะ|การทำงาน|ข้อแตกต่าง|แตกต่างกัน|ต่างจาก|ส่วนประกอบ|ปริมาณ|ระยะเวลา|fibrinogen|coagulation)/i.test(cleanBase);
-      const isSubstantiveComparison = hasComparisonCue && hasTwoSubjects && hasContrastProperty && !cleanBase.includes('ไม่มีข้อมูลเปรียบเทียบ') && !cleanBase.includes('ไม่พบข้อมูล');
-
-      if (isSubstantiveComparison) {
-        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุสิ่งเปรียบเทียบและคุณสมบัติความแตกต่างตามแหล่งข้อมูลต้นทางที่ตรวจสอบได้`;
+      const evidence = extractComparisonEvidence(cleanBase);
+      if (evidence.isSupported) {
+        return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n**การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:**\n- พบข้อมูลระบุสิ่งเปรียบเทียบ (${evidence.subjectA} กับ ${evidence.subjectB}) และคุณสมบัติความแตกต่างตามแหล่งข้อมูลต้นทางที่ตรวจสอบได้`;
       }
       return `*(รูปแบบ Study Workflow: เปรียบเทียบ / Compare)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ)*`;
     }
     case 'step_by_step': {
-      const stepLines = cleanBase.split(/(?:\r?\n+|[.;]+)/).map(s => s.trim()).filter(l => /(?:\d+\.|\bขั้นตอน|\bลำดับ|ขั้นตอน|ลำดับ)/i.test(l));
+      const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด|ไม่พบลำดับ/i.test(cleanBase);
+      const stepLines = isNegative ? [] : cleanBase.split(/(?:\r?\n+|[.;]+)/).map(s => s.trim()).filter(l => /(?:\d+\.|\bStep\s*\d+|ขั้นตอน|ลำดับ)/i.test(l) && !/ไม่พบ|ไม่มี/.test(l));
       if (stepLines.length > 0) {
         return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n**ลำดับขั้นตอนที่สกัดจากข้อมูลต้นทาง:**\n${stepLines.map(s => `- ${s}`).join('\n')}`;
       }
       return `*(รูปแบบ Study Workflow: ขั้นตอนการปฏิบัติ / Step-by-Step)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่พบลำดับขั้นตอนการปฏิบัติงานที่เป็นขั้นตอนหรือตัวเลขที่ยืนยันได้)*`;
     }
     case 'clinical_dtm_application': {
-      const hasClinicalContext = /(?:ใช้ในระบบ|นำไปใช้|ระบบสารสนเทศ|EHR|PACS|คลินิก|วินิจฉัย|รักษา)/i.test(cleanBase) && !cleanBase.includes('ไม่มีรายละเอียด');
+      const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด|ไม่มีการระบุ|ไม่ระบุ/i.test(cleanBase);
+      const hasClinicalContext = !isNegative && (
+        /(?:การประยุกต์ใช้ในคลินิก|ใช้ในระบบสารสนเทศ|นำไปใช้ใน|EHR|PACS|CDSS|Hospital Information|เวชระเบียน)/i.test(cleanBase) ||
+        (/(?:คลินิก|วินิจฉัย|รักษา)/i.test(cleanBase) && /(?:ประยุกต์|นำไปใช้|ใช้งาน|ใช้สำหรับ|บทบาท)/i.test(cleanBase))
+      );
       if (hasClinicalContext) {
         return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้ตามหลักฐานต้นทาง:**\n- พบการระบุการใช้งานหรือเชื่อมโยงในบริบทที่ปรากฏในต้นทาง\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
       }
       return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n*(หมายเหตุ: แหล่งข้อมูลต้นทางไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้)*`;
     }
     case 'vocabulary': {
-      const definedTerms = cleanBase.match(/(?:[A-Z][a-zA-Z0-9_-]{2,}|[ก-ฮ]+(?:\s+[ก-ฮ]+)*)\s*(?:คือ|หมายถึง|เป็น|:\s*)[^\n.]+/g);
+      const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด/i.test(cleanBase);
+      const definedTerms = isNegative ? null : cleanBase.match(/(?:[A-Z][a-zA-Z0-9_-]{2,}|[ก-ฮ]+(?:\s+[ก-ฮ]+)*)\s*(?:คือ|หมายถึง|เป็น|:\s*)[^\n.]+/g);
       if (definedTerms && definedTerms.length > 0) {
         return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:**\n${definedTerms.map(t => `- ${t.trim()}`).join('\n')}`;
       }
-      const rawTerms = cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || [];
+      const rawTerms = isNegative ? [] : (cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || []);
       const uniqueTerms = Array.from(new Set(rawTerms));
       return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์ที่พบในต้นทาง:** ${uniqueTerms.join(', ') || 'ไม่พบคำศัพท์เฉพาะ'}\n*(หมายเหตุ: พบคำศัพท์แต่ไม่พบคำอธิบายความหมายที่มีนิยามรองรับในแหล่งข้อมูลต้นทาง)*`;
     }
     case 'quiz_review': {
-      const hasSubstance = cleanBase.length > 30 && !cleanBase.includes('ไม่มีรายละเอียด');
+      const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด|ไม่พบข้อมูลสำรองทางวิชาการ/i.test(cleanBase);
+      const hasSubstance = cleanBase.length > 30 && !isNegative;
       if (hasSubstance) {
         return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:**\n- คำถามทบทวน: จากข้อความต้นทาง สาระสำคัญและข้อเท็จจริงหลักคืออะไร?\n- แนวคำตอบอ้างอิงจากต้นทาง: ${sentences[0] || cleanBase}`;
       }
@@ -846,7 +995,11 @@ function getAcademicFallbackInternal(
         references: uniqueChunkReferences
       };
     } else {
-      const fallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`;
+      let fallbackText = `*(ค้นหาจากเอกสาร: "${documentContext.title}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Anti-Hallucination)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${documentContext.title}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${prompt}" ได้โดยตรง\n\nระบบ MedTech Learning Hub AI ยึดหลักความถูกต้องทางวิชาการ จึงไม่มีการคาดเดาหรือแต่งคำตอบขึ้นมาเอง กรุณาตรวจสอบเอกสารเพิ่มเติม หรือลองปรับคำค้นหาครับ`;
+
+      if (studyWorkflow) {
+        fallbackText = applyStudyWorkflowToFallbackText(fallbackText, studyWorkflow);
+      }
 
       const verification = verifyAcademicAnswer({
         query: prompt,
@@ -1754,7 +1907,11 @@ app.post("/api/gemini/generate", async (req, res) => {
     const isUnpagedDocument = documentContext.hasNativePages === false || !documentContext.hasNativePages;
 
     if (isPageNumberQuery && isUnpagedDocument) {
-      const shortCircuitText = `*(แจ้งเตือน: เอกสาร "${documentContext.title}" เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ)*\n\nจากการตรวจสอบคำถามเกี่ยวกับการระบุเลขหน้า เนื่องจากเอกสารนี้ไม่มีเลขหน้าจริงในต้นฉบับ ระบบจึงไม่สามารถยืนยันหรือระบุเลขหน้าได้\n\n*(หมายเหตุ: ระบบเน้นตอบคำถามวิชาการจากเนื้อหาข้อความในเอกสารโดยตรงโดยไม่สามารถอ้างอิงเลขหน้าได้)*`;
+      let shortCircuitText = `*(แจ้งเตือน: เอกสาร "${documentContext.title}" เป็นบันทึกสรุปที่ไม่มีเลขหน้าต้นฉบับ)*\n\nจากการตรวจสอบคำถามเกี่ยวกับการระบุเลขหน้า เนื่องจากเอกสารนี้ไม่มีเลขหน้าจริงในต้นฉบับ ระบบจึงไม่สามารถยืนยันหรือระบุเลขหน้าได้\n\n*(หมายเหตุ: ระบบเน้นตอบคำถามวิชาการจากเนื้อหาข้อความในเอกสารโดยตรงโดยไม่สามารถอ้างอิงเลขหน้าได้)*`;
+
+      if (studyWorkflow) {
+        shortCircuitText = applyStudyWorkflowToFallbackText(shortCircuitText, studyWorkflow);
+      }
 
       const verification = verifyAcademicAnswer({
         query: latestPrompt,
@@ -1767,6 +1924,8 @@ app.post("/api/gemini/generate", async (req, res) => {
         },
         conversationHistory: validatedMessages
       });
+      verification.verdict = 'INSUFFICIENT_EVIDENCE';
+      verification.isVerified = false;
 
       console.log(`[Perf Backend] Deterministic short-circuit executed for unpaged document page number query (0 API calls to Gemini). isOfflineMode: ${isOfflineMode}`);
       return res.json({
@@ -1789,7 +1948,11 @@ app.post("/api/gemini/generate", async (req, res) => {
       if (searchMode === 'document' || isOfflineMode) {
         console.log(`[Perf Backend] Document has insufficient evidence for query "${latestPrompt}" (searchMode: ${searchMode}, offlineMode: ${isOfflineMode}). Strictly refusing external search.`);
         const docTitle = decodeHtmlEntities(documentContext.title || 'เอกสารการเรียนรู้');
-        const insufficientText = `*(ค้นหาจากเอกสาร: "${docTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${docTitle}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง ${isOfflineMode ? 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวออฟไลน์ (Offline Learning Mode)"** ระบบจึงเน้นอ้างอิงจากเอกสารโดยตรงและไม่เรียกใช้บริการภายนอก' : 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน หากต้องการค้นคว้าข้อมูลเพิ่มเติมจากอินเทอร์เน็ต กรุณาสลับโหมดเป็น **"ค้นหาเว็บ AI"**'}`;
+        let insufficientText = `*(ค้นหาจากเอกสาร: "${docTitle}"${documentContext.courseCode ? ` รหัสวิชา ${documentContext.courseCode}` : ''})*\n\n**ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้ (Strict Document Grounding)**\n\nจากการตรวจสอบชิ้นส่วนเนื้อหาทั้งหมดในเอกสาร "${docTitle}" ไม่พบข้อความหรือข้อมูลที่ตอบประเด็น "${latestPrompt}" ได้โดยตรง ${isOfflineMode ? 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวออฟไลน์ (Offline Learning Mode)"** ระบบจึงเน้นอ้างอิงจากเอกสารโดยตรงและไม่เรียกใช้บริการภายนอก' : 'เนื่องจากคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ระบบจึงไม่ค้นหาข้อมูลภายนอกมาปะปน หากต้องการค้นคว้าข้อมูลเพิ่มเติมจากอินเทอร์เน็ต กรุณาสลับโหมดเป็น **"ค้นหาเว็บ AI"**'}`;
+
+        if (studyWorkflow) {
+          insufficientText = applyStudyWorkflowToFallbackText(insufficientText, studyWorkflow);
+        }
 
         const verification = verifyAcademicAnswer({
           query: latestPrompt,
@@ -1802,6 +1965,8 @@ app.post("/api/gemini/generate", async (req, res) => {
           },
           conversationHistory: validatedMessages
         });
+        verification.verdict = 'INSUFFICIENT_EVIDENCE';
+        verification.isVerified = false;
 
         return res.json({
           text: insufficientText,
