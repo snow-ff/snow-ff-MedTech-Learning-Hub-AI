@@ -553,17 +553,19 @@ export function extractComparisonEvidence(text: string): {
 
   const cleanSubject = (s: string): string => {
     return s
-      .replace(/^(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ|ระหว่าง|ของ|และ|กับ)\s*/, '')
+      .replace(/^(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ|ข้อแตกต่างของ|ความต่างของ|การเปรียบเทียบระหว่าง|ระหว่าง|ของ|และ|กับ)\s*/i, '')
+      .replace(/\s*(?:มีความสำคัญ|สำคัญมาก|สำคัญ|มีความแตกต่าง|แตกต่างกัน|ต่างกัน|คือ|ด้าน|ในด้าน|เรื่อง|ตรงที่|ควร|ต้อง|โดย|ซึ่ง|ที่|ในห้อง|ใน).*$/i, '')
       .replace(/[*_#:`"()]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   };
 
   const isValidSubject = (s: string): boolean => {
-    if (!s || s.length < 2) return false;
+    if (!s || s.length < 2 || s.length > 40) return false;
     const lower = s.toLowerCase();
     if (CUE_STOPWORDS.has(lower) || CUE_STOPWORDS.has(s)) return false;
-    if (/^(?:ต่าง|เปรียบเทียบ|ความต่าง|แตกต่าง|versus|vs|และ|กับ|หรือ|ของ|ใน)$/i.test(s)) return false;
+    if (/^(?:ต่าง|เปรียบเทียบ|ความต่าง|แตกต่าง|ข้อแตกต่าง|ความแตกต่าง|versus|vs|และ|กับ|หรือ|ของ|ใน|คือ|โดย|ซึ่ง|ที่|ด้าน)$/i.test(s)) return false;
+    if (/(?:ควร|ต้อง|มีความสำคัญ|สำคัญ|การนำไปใช้|วิธีการ|แนะนำ|อย่างเหมาะสม)/i.test(s)) return false;
     return true;
   };
 
@@ -571,7 +573,7 @@ export function extractComparisonEvidence(text: string): {
   let subB: string | undefined;
 
   // Pattern 1: ความแตกต่างระหว่าง [A] และ [B] หรือ [A] vs [B] (support Thai zero-space between words)
-  const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*ใน|\s*คือ|\s*ด้าน|\s*เรื่อง|\s*ตรงที่|[:\n(.]|$)/i;
+  const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*(?:ในห้อง|ในด้าน|ด้าน|คือ|เรื่อง|ตรงที่|มีความสำคัญ|สำคัญ|มี|เป็น|จัดเป็น|[:\n(.,;!?]|$))/i;
   const matchBetween = clean.match(patternBetween);
   if (matchBetween) {
     const candA = cleanSubject(matchBetween[1].replace(/\([^)]*\)/g, ''));
@@ -626,7 +628,7 @@ export function extractComparisonEvidence(text: string): {
 
   // Pattern 3: [A] ต่างจาก/แตกต่างจาก [B]
   if (!subA || !subB) {
-    const patternDiff = /([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)\s*(?:ต่างจาก|แตกต่างจาก|เมื่อเทียบกับ)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*ตรงที่|\s*ในด้าน|\s*คือ|\s*เนื่องจาก|[:\n,.]|$)/i;
+    const patternDiff = /([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)\s*(?:ต่างจาก|แตกต่างจาก|เมื่อเทียบกับ)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*(?:ตรงที่|ในด้าน|ด้าน|คือ|เนื่องจาก|[:\n,.]|$))/i;
     const matchDiff = clean.match(patternDiff);
     if (matchDiff) {
       const candA = cleanSubject(matchDiff[1]);
@@ -656,15 +658,46 @@ export function extractComparisonEvidence(text: string): {
     return { isSupported: false };
   }
 
-  // Check comparable property or contrasting predicate
-  // DO NOT accept generic cue words such as 'ต่าง', 'ต่างกัน', 'เปรียบเทียบ' as the property
-  const PROPERTY_REGEX = /(?:คุณสมบัติ|ลักษณะ|โครงสร้าง|หน้าที่|ส่วนประกอบ|องค์ประกอบ|ปริมาณ|ความเข้มข้น|ระยะเวลา|ขนาด|ความหนา|ความไว|ความจำเพาะ|หลักการ|การตรวจวัด|ข้อดี|ข้อจำกัด|การประยุกต์|สภาวะ|กระบวนการ|วิธี|วิธีการ|กำลังขยาย|ความละเอียด|สัญญาณ|ขอบเขต|สัดส่วน|ระดับ|การทำงาน|ผนังเซลล์|หลอดเก็บ|สารกันเลือดแข็ง|ปัจจัยการแข็งตัว|แฟคเตอร์|Fibrinogen|Coagulation|interoperability|sensitivity|specificity|resolution|signal|parameter|mechanism)/i;
-  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s+[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?(?:มี|พบ)|(?:มี|พบ)\s+[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{1,20}?(?:ขณะที่|ในขณะที่)[^.!?\n]{1,20}?บาง|บาง[^.!?\n]{1,20}?(?:ขณะที่|ในขณะที่)[^.!?\n]{1,20}?หนา|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ตรงที่\s+[^.!?\n]{2,60}?(?:ขณะที่|ในขณะที่|ส่วน)/i;
+  // 1. Contrast Predicate: must verify direct contrast relationship linking the subjects or comparative degree
+  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s+[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?(?:มี|พบ)|(?:มี|พบ)\s+[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?บาง|บาง[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?:มี|ยังมี)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
 
-  const propMatch = clean.match(PROPERTY_REGEX);
+  // 2. Explicit Comparative Property Clause: must be introduced directly with ด้าน, ในด้าน, เรื่อง, ตรงที่
+  const EXPLICIT_PROPERTY_CLAUSE_REGEX = /(?:ด้าน|ในด้าน|เรื่อง|ตรงที่)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*(?:โดย|ซึ่ง|คือ|ทำให้|เนื่องจาก|และ|[:\n,.]|$))/i;
+
+  // 3. Property keywords that are specific (DO NOT include generic standalone 'วิธี' / 'วิธีการ' that appear as general advice)
+  const PROPERTY_KEYWORDS_REGEX = /(?:ความหนาของผนังเซลล์|ความหนา|ผนังเซลล์|กำลังขยาย|ความละเอียด|สารกันเลือดแข็ง|หลอดเก็บ|ปัจจัยการแข็งตัว|แฟคเตอร์|โครงสร้างเซลล์|โครงสร้าง|ส่วนประกอบ|องค์ประกอบ|ปริมาณ|ความเข้มข้น|ระยะเวลา|ขนาด|ความไว|ความจำเพาะ|หลักการ|การตรวจวัด|ข้อดี|ข้อจำกัด|สภาวะ|กระบวนการ|สัดส่วน|ระดับ|การทำงาน|Fibrinogen|Coagulation|interoperability|sensitivity|specificity|resolution|signal|parameter|mechanism)/i;
+
   const contrastMatch = clean.match(CONTRAST_PREDICATE_REGEX);
+  const explicitPropClauseMatch = clean.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
 
-  if (!propMatch && !contrastMatch) {
+  // If neither a contrast predicate nor an explicit property clause is present,
+  // then the subjects have no comparative relationship supported by evidence.
+  if (!contrastMatch && !explicitPropClauseMatch) {
+    return { isSupported: false, subjectA: subA, subjectB: subB };
+  }
+
+  let resolvedProperty: string | undefined = undefined;
+
+  // If explicit property clause matched, verify it actually contains a legitimate property keyword
+  if (explicitPropClauseMatch) {
+    const candidateProp = explicitPropClauseMatch[1].trim();
+    const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
+    if (kw) {
+      resolvedProperty = kw[0];
+    }
+  }
+
+  // If no explicit property clause or it was generic, check if contrast predicate contains/relates to property
+  if (!resolvedProperty) {
+    const generalPropMatch = clean.match(PROPERTY_KEYWORDS_REGEX);
+    if (generalPropMatch && contrastMatch) {
+      resolvedProperty = generalPropMatch[0];
+    } else if (contrastMatch) {
+      resolvedProperty = 'contrast_predicate';
+    }
+  }
+
+  if (!resolvedProperty) {
     return { isSupported: false, subjectA: subA, subjectB: subB };
   }
 
@@ -672,7 +705,7 @@ export function extractComparisonEvidence(text: string): {
     isSupported: true,
     subjectA: subA,
     subjectB: subB,
-    property: propMatch ? propMatch[0] : (contrastMatch ? 'contrast_predicate' : undefined)
+    property: resolvedProperty
   };
 }
 
@@ -707,10 +740,11 @@ export function applyStudyWorkflowToFallbackText(baseText: string, workflow?: St
     }
     case 'clinical_dtm_application': {
       const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด|ไม่มีการระบุ|ไม่ระบุ/i.test(cleanBase);
-      const hasClinicalContext = !isNegative && (
-        /(?:การประยุกต์ใช้ในคลินิก|ใช้ในระบบสารสนเทศ|นำไปใช้ใน|EHR|PACS|CDSS|Hospital Information|เวชระเบียน)/i.test(cleanBase) ||
-        (/(?:คลินิก|วินิจฉัย|รักษา)/i.test(cleanBase) && /(?:ประยุกต์|นำไปใช้|ใช้งาน|ใช้สำหรับ|บทบาท)/i.test(cleanBase))
-      );
+      const hasExplicitApplicationPhrase = /(?:การประยุกต์ใช้ในคลินิก|การนำไปใช้ในคลินิก|การประยุกต์ทางคลินิก|การประยุกต์ใช้จริง|การนำไปประยุกต์ใช้|การประยุกต์ทางเทคนิคการแพทย์)/i.test(cleanBase);
+      const hasClinicalAction = /(?:นำไปใช้|ประยุกต์ใช้|การประยุกต์|ใช้งานใน|การใช้งาน|ใช้สำหรับ|ใช้ในระบบ|ช่วยแพทย์|สนับสนุนการตัดสินใจ|แจ้งเตือนความเสี่ยง|เชื่อมต่อระบบ|แลกเปลี่ยนและเชื่อมโยง)/i.test(cleanBase);
+      const hasClinicalTarget = /(?:คลินิก|โรงพยาบาล|สถานพยาบาล|การวินิจฉัย|การรักษา|การดูแลผู้ป่วย|ระบบสารสนเทศสุขภาพ|HIS|LIS|เวชระเบียน|EHR|PACS|CDSS)/i.test(cleanBase);
+
+      const hasClinicalContext = !isNegative && (hasExplicitApplicationPhrase || (hasClinicalAction && hasClinicalTarget));
       if (hasClinicalContext) {
         return `*(รูปแบบ Study Workflow: การประยุกต์ใช้ในคลินิกและ DTM)*\n\n${cleanBase}\n\n**การประยุกต์ใช้ตามหลักฐานต้นทาง:**\n- พบการระบุการใช้งานหรือเชื่อมโยงในบริบทที่ปรากฏในต้นทาง\n*(หมายเหตุการศึกษา: มิใช่คำแนะนำทางการแพทย์เพื่อวินิจฉัยหรือรักษา)*`;
       }
@@ -718,9 +752,21 @@ export function applyStudyWorkflowToFallbackText(baseText: string, workflow?: St
     }
     case 'vocabulary': {
       const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด/i.test(cleanBase);
-      const definedTerms = isNegative ? null : cleanBase.match(/(?:[A-Z][a-zA-Z0-9_-]{2,}|[ก-ฮ]+(?:\s+[ก-ฮ]+)*)\s*(?:คือ|หมายถึง|เป็น|:\s*)[^\n.]+/g);
-      if (definedTerms && definedTerms.length > 0) {
-        return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:**\n${definedTerms.map(t => `- ${t.trim()}`).join('\n')}`;
+      let definedTerms: string[] = [];
+      if (!isNegative) {
+        const boldMatches = Array.from(cleanBase.matchAll(/(?:^|\n)\s*[-*•]?\s*\*\*([^*\n]+?)(?::\*\*|\*\*:)\s*([^\n]+)/g))
+          .map(m => `${m[1].trim()}: ${m[2].trim()}`)
+          .filter(t => !/^(?:หมายเหตุ|ภาพรวม|ขั้นตอน|คำจำกัดความ|คำเตือน|ข้อควรระวัง|คำศัพท์เทคนิค)/i.test(t));
+        if (boldMatches.length > 0) {
+          definedTerms = boldMatches;
+        } else {
+          const plainMatches = Array.from(cleanBase.matchAll(/(?:^|\n)\s*[-*•]?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]{2,50}?)\s*(?:คือ|หมายถึง)\s*([^\n]+)/g))
+            .map(m => `${m[1].trim()} คือ ${m[2].trim()}`);
+          definedTerms = plainMatches;
+        }
+      }
+      if (definedTerms.length > 0) {
+        return `*(รูปแบบ Study Workflow: คำศัพท์และคำย่อ / Vocabulary & Terminology)*\n\n${cleanBase}\n\n**คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:**\n${definedTerms.map(t => `- ${t}`).join('\n')}`;
       }
       const rawTerms = isNegative ? [] : (cleanBase.match(/[A-Z][a-zA-Z0-9_-]{2,}/g) || []);
       const uniqueTerms = Array.from(new Set(rawTerms));
@@ -728,7 +774,11 @@ export function applyStudyWorkflowToFallbackText(baseText: string, workflow?: St
     }
     case 'quiz_review': {
       const isNegative = /ไม่พบข้อมูล|ไม่มีข้อมูล|ไม่พบหลักฐาน|ไม่มีรายละเอียด|ไม่พบข้อมูลสำรองทางวิชาการ/i.test(cleanBase);
-      const hasSubstance = cleanBase.length > 30 && !isNegative;
+      const isFillerOrInstruction = /^(?:สวัสดี|ยินดีต้อนรับ|ขออภัย|กรุณา|ข้อความทั่วไป|โปรด|ติดต่อ|ขอบคุณ)/i.test(cleanBase) ||
+        /(?:ยินดีต้อนรับ|ไม่มีสาระทางวิชาการ|เป็นเพียงข้อความทักทาย|กรุณาตรวจสอบเอกสารเพิ่มเติม)/i.test(cleanBase);
+      const hasAcademicKeywords = /(?:หลักการ|กระบวนการ|วิธีการ|ขั้นตอน|การตรวจ|การวิเคราะห์|คุณสมบัติ|หน้าที่|โครงสร้าง|เซลล์|เลือด|สาร|ไวรัส|แบคทีเรีย|โปรตีน|ยีน|ปฏิกิริยา|วินิจฉัย|รักษา|พารามิเตอร์|เกณฑ์|มาตรฐาน|สถิติ|หลักสูตร|หน่วยกิต|ระบบ|ข้อมูล|DICOM|HL7|FHIR|EHR|PACS|CDSS|PCR|CBC|WBC|RBC|DNA|RNA|Serum|Plasma|Stain)/i.test(cleanBase);
+
+      const hasSubstance = cleanBase.length > 30 && !isNegative && !isFillerOrInstruction && hasAcademicKeywords;
       if (hasSubstance) {
         return `*(รูปแบบ Study Workflow: ทบทวนคำถาม / Quiz Review)*\n\n${cleanBase}\n\n**แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:**\n- คำถามทบทวน: จากข้อความต้นทาง สาระสำคัญและข้อเท็จจริงหลักคืออะไร?\n- แนวคำตอบอ้างอิงจากต้นทาง: ${sentences[0] || cleanBase}`;
       }
@@ -804,7 +854,7 @@ function getAcademicFallbackInternal(
   }>;
 } {
   // If documentContext is present, perform grounded retrieval on document chunks
-  if (documentContext && documentContext.chunks && documentContext.chunks.length > 0) {
+  if (documentContext && Array.isArray(documentContext.chunks)) {
     const isDocUnpaged = documentContext.hasNativePages === false;
     const chunksForRetrieval = documentContext.chunks.map((c: any, idx) => {
       const hasNativePage = c.hasNativePage === true || (c.pageNumber !== undefined && c.pageNumber !== null);
@@ -1523,6 +1573,13 @@ function getAcademicFallbackInternal(
   }
 })() as ReturnType<typeof getAcademicFallback>;
 
+  if (staticFallback && staticFallback.references) {
+    staticFallback.references = staticFallback.references.map(r => ({
+      ...r,
+      verificationStatus: r.verificationStatus || ("unverified" as const)
+    }));
+  }
+
   if (studyWorkflow && staticFallback) {
     staticFallback.text = applyStudyWorkflowToFallbackText(staticFallback.text, studyWorkflow);
   }
@@ -1787,8 +1844,13 @@ app.post("/api/gemini/generate", async (req, res) => {
       ? `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสารในโหมดติวออฟไลน์)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** ร่วมกับ **"โหมดติวออฟไลน์"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"**\n\n*(หากต้องการสอบถามความรู้ทั่วไปโดยไม่ใช้เอกสาร สามารถสลับเป็น "ค้นหาเว็บ AI" เพื่อใช้คลังความรู้พื้นฐานออฟไลน์)*`
       : `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nคุณกำลังใช้งาน **"โหมดติวอิงเอกสาร (Document Grounding)"** แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการศึกษา แล้วคลิก **"ถามตอบเอกสารนี้"** หรือสลับเป็น **"ค้นหาเว็บ AI"** เพื่อค้นคว้าข้อมูลทั่วไป`;
 
+    let text = documentMissingText;
+    if (studyWorkflow) {
+      text = applyStudyWorkflowToFallbackText(text, studyWorkflow);
+    }
+
     return res.json({
-      text: documentMissingText,
+      text,
       source: "academic_fallback",
       contentOrigin: undefined,
       evidenceStatus: "insufficient",
@@ -1816,8 +1878,13 @@ app.post("/api/gemini/generate", async (req, res) => {
       ? `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสารในโหมดติวออฟไลน์)*\n\nคุณกำลังสอบถามข้อมูลที่ต้องอ้างอิงเอกสาร แต่ยังไม่ได้เลือกเอกสารในระบบ กรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** เพื่อให้ระบบสืบค้นเนื้อหาจากเอกสารได้อย่างถูกต้อง`
       : `*(แจ้งเตือน: ยังไม่ได้เลือกเอกสาร Active Document)*\n\nกรุณาไปที่แท็บ **"คลังเอกสาร (Document Library)"** และเลือกเอกสารที่ต้องการ แล้วคลิก **"ถามตอบเอกสารนี้"** ก่อนเริ่มถามคำถามที่ต้องอ้างอิงเอกสาร เพื่อให้ระบบใช้โหมด Document Grounding อย่างแม่นยำ`;
 
+    let text = documentMissingText;
+    if (studyWorkflow) {
+      text = applyStudyWorkflowToFallbackText(text, studyWorkflow);
+    }
+
     return res.json({
-      text: documentMissingText,
+      text,
       source: "academic_fallback",
       contentOrigin: undefined,
       evidenceStatus: "insufficient",

@@ -1,7 +1,7 @@
 # Implementation Plan & Verification Report: P0 Restore Usability & Offline Learning Mode
 ## MedTech Learning Hub AI v1.2
 
-## Status: COMPLETED & VERIFIED (Production Build Passed, 293 Tests Passing, Live Scenarios A-D Verified)
+## Status: COMPLETED & VERIFIED (Production Build Passed, 330 Tests Passing across 19 Suites, R2/R3/H10 Remediation Closed)
 
 ---
 
@@ -82,5 +82,32 @@ All scenarios were executed and verified against the live dev server running on 
 - `npx tsc --noEmit`: 0 errors.
 - `compile_applet`: Succeeded.
 - `npm run build`: Succeeded (Vite production bundle generated in 1.13s).
-- Targeted Vitest tests (`src/lib/searchModeIntegration.test.ts` & `src/lib/geminiRetryPolicy.test.ts`): 48/48 tests passed (100%).
-- Full Vitest test suite: 19 test files / 293 tests passed (100%).
+- `npx tsc --noEmit`: 0 errors.
+- `compile_applet`: Succeeded.
+- `npm run build`: Succeeded (Vite production bundle generated in 1.13s).
+- Targeted Vitest tests (`src/lib/searchModeIntegration.test.ts`): 50/50 tests passed (100%).
+- Full Vitest test suite: 19 test files / 330 tests passed (100%).
+
+---
+
+### 5. Remediation Closure: R2, R3, H10 & Verification Contract
+
+1. **R2: Evidence-Based Comparison Predicate & Subject Isolation:**
+   - Isolated Subject B cleanly by stripping trailing Thai verbal/context clauses (`มีความสำคัญ`, `คำแนะนำ`, `ในห้อง`, `คือ`, `ด้าน`, etc.).
+   - Constrained subject length bounds (2–40) and excluded modal/action verbs (`ควร`, `ต้อง`, `มีความสำคัญ`, `วิธีการ`, `แนะนำ`).
+   - Refined `extractComparisonEvidence()` with dual validation requiring contrast predicates (`CONTRAST_PREDICATE_REGEX`) or explicit property clauses (`EXPLICIT_PROPERTY_CLAUSE_REGEX`).
+   - Eliminated false positives from standalone generic advice keywords (`วิธี`, `วิธีการ`).
+   - Supported authentic domain comparisons (Gram positive vs negative, light microscope vs electron microscope, Serum vs Plasma) across sentences and bullet points.
+
+2. **R3: Verification Consistency & Missing Evidence Paths:**
+   - Updated `getAcademicFallbackInternal()` to inspect empty chunks array (`chunks: []`), properly routing to Document Grounding verification with `verdict = 'INSUFFICIENT_EVIDENCE'`.
+   - Verified that all 6 workflows on missing document evidence return `INSUFFICIENT_EVIDENCE`, `isVerified: false`, `evidenceStatus: 'insufficient'`, `references: []`, and no fabricated page numbers.
+   - Updated early return in `/api/gemini/generate` for Document Mode without Active Document to format with `studyWorkflow` when provided.
+
+3. **H10 & Verification Contract:**
+   - Verified Static KB `references[].verificationStatus === 'unverified'` per contract.
+   - Verified Vocabulary defined terms capture actual definition bodies (matching both `**Term:** body` and `**Term**: body` formats).
+   - Validated Clinical Application to require genuine clinical action/target pairs, rejecting isolated acronyms (`EHR`, `PACS`, `CDSS`) without implementation description.
+   - Validated Quiz Review to require substantive academic keywords and reject conversational filler text.
+   - Validated Offline General Fallback across all 6 workflows without domain entity hallucinations.
+
