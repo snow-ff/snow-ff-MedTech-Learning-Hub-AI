@@ -1326,6 +1326,68 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
         expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
+
+      it('Case 10: Bacteria/Virus subjects with unrelated Serum/Plasma contrast elsewhere must return isSupported false', () => {
+        const text = 'ความแตกต่างระหว่างแบคทีเรียและไวรัสในห้องปฏิบัติการ แต่ Serum มี Fibrinogen ขณะที่ Plasma ไม่มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรีย');
+        expect(evidence.subjectB).toBe('ไวรัส');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 11: Subject pair in the first paragraph and unrelated comparative property in the second paragraph must return isSupported false', () => {
+        const text = 'ความแตกต่างระหว่างแบคทีเรียและไวรัสในห้องปฏิบัติการทางการแพทย์\n\nความหนาของผนังเซลล์ของแบคทีเรียมีความสำคัญในการทดสอบย้อมสี';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรีย');
+        expect(evidence.subjectB).toBe('ไวรัส');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 12: Two bullet headings with an unrelated contrast elsewhere must return isSupported false', () => {
+        const text = '- **แบคทีเรีย**: เป็นเซลล์โพรแคริโอตที่มีผนังเซลล์\n- **ไวรัส**: มีสารพันธุกรรมแต่ไม่ใช่เซลล์สมบูรณ์\n\nหมายเหตุ: ในห้องปฏิบัติการ Serum มี Fibrinogen แต่ Plasma ไม่มี';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรีย');
+        expect(evidence.subjectB).toBe('ไวรัส');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 13: Same two subjects with their own explicit contrast in the same statement must return isSupported true', () => {
+        const text = 'ความแตกต่างระหว่าง Serum และ Plasma คือ Plasma มี Fibrinogen แต่ Serum ไม่มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      it('Case 14: Valid Thai comparison with no spaces around conjunctions must remain supported', () => {
+        const text = 'ความแตกต่างระหว่างSerumและPlasmaในด้านFibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
     });
 
     // =========================================================================
@@ -1440,6 +1502,50 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(data.text).toContain('รูปแบบ Study Workflow: อธิบายหลักการ / Explain');
         expect(data.text).toContain('ยังไม่ได้เลือกเอกสารในโหมดติวออฟไลน์');
         expect(data.contentOrigin).toBeUndefined();
+      });
+
+      it('API Route Empty Chunks: documentContext with chunks: [] applies Document Missing Evidence contract across all 6 workflows', async () => {
+        const allWorkflows: Array<'explain' | 'compare' | 'step_by_step' | 'clinical_dtm_application' | 'vocabulary' | 'quiz_review'> = [
+          'explain',
+          'compare',
+          'step_by_step',
+          'clinical_dtm_application',
+          'vocabulary',
+          'quiz_review'
+        ];
+
+        const emptyDocContext = {
+          title: "เอกสารโครงร่างว่าง",
+          hasNativePages: true,
+          totalPages: 1,
+          chunks: []
+        };
+
+        for (const wf of allWorkflows) {
+          const res = await fetch(`${baseUrl}/api/gemini/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', text: 'สรุปประเด็นหลักทางเทคนิคการแพทย์' }],
+              searchMode: 'document',
+              offlineMode: true,
+              documentContext: emptyDocContext,
+              studyWorkflow: wf
+            })
+          });
+
+          expect(res.status).toBe(200);
+          const data = await res.json();
+          expect(data.contentOrigin).toBe('user_document');
+          expect(data.evidenceStatus).toBe('insufficient');
+          expect(data.verification).toBeDefined();
+          expect(data.verification.verdict).toBe('INSUFFICIENT_EVIDENCE');
+          expect(data.verification.isVerified).toBe(false);
+          expect(data.references).toEqual([]);
+          expect(data.text).toContain('รูปแบบ Study Workflow');
+          expect(data.text).toContain('ไม่พบข้อมูลที่ตรงกับคำถามในเอกสารนี้');
+          expect(data.text).not.toMatch(/หน้า\s*\d+/);
+        }
       });
     });
 
@@ -1607,16 +1713,37 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       });
 
       it('Negative Tests: asserts non-hallucination constraints on vocabulary, clinical application, and quiz', () => {
-        // Clinical negative test: contains EHR/PACS/CDSS but NO actual application/implementation description
+        // Clinical negative test 1: contains EHR/PACS/CDSS but NO actual application/implementation description
         const acronymsOnly = 'เอกสารระบบสารสนเทศสุขภาพกล่าวถึงรายการคำย่อมาตรฐาน ได้แก่ EHR, PACS และ CDSS ในเบื้องต้น';
         const clinicalAcronymResult = applyStudyWorkflowToFallbackText(acronymsOnly, 'clinical_dtm_application');
         expect(clinicalAcronymResult).toContain('ไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้');
         expect(clinicalAcronymResult).not.toContain('การประยุกต์ใช้ตามหลักฐานต้นทาง:');
 
+        // Clinical negative test 2: Unrelated Clinical Action and Clinical Target in separate sentences must not combine
+        const separateActionAndTarget = 'ระบบซอฟต์แวร์นี้มีฟังก์ชันช่วยแพทย์ในการวิเคราะห์ตัวเลขสถิติอย่างรวดเร็ว ในขณะเดียวกันโรงพยาบาลแห่งนี้มีผู้ป่วยเข้ารับการรักษาจำนวนมากในแต่ละวัน';
+        const clinicalSeparateResult = applyStudyWorkflowToFallbackText(separateActionAndTarget, 'clinical_dtm_application');
+        expect(clinicalSeparateResult).toContain('ไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้');
+        expect(clinicalSeparateResult).not.toContain('การประยุกต์ใช้ตามหลักฐานต้นทาง:');
+
         // General text with no clinical context
         const rawGeneral = 'ข้อความทั่วไปที่ไม่มีการระบุระบบสารสนเทศ คลินิก หรือการนำไปใช้ใดๆ ทั้งสิ้น';
         const clinicalResult = applyStudyWorkflowToFallbackText(rawGeneral, 'clinical_dtm_application');
         expect(clinicalResult).toContain('ไม่มีข้อมูลระบุการประยุกต์ใช้ในคลินิกหรือ DTM ที่ยืนยันได้');
+
+        // Vocabulary bold format 1 (**Term:** def) and format 2 (**Term**: def) verification
+        const dualFormatVocab = '- **Health Informatics:** การประยุกต์ใช้สารสนเทศศาสตร์ในงานสุขภาพ\n- **Medical Imaging**: วิทยาการด้านภาพทางการแพทย์เพื่อการตรวจวินิจฉัย';
+        const dualVocabResult = applyStudyWorkflowToFallbackText(dualFormatVocab, 'vocabulary');
+        expect(dualVocabResult).toContain('คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:');
+        expect(dualVocabResult).toContain('Health Informatics: การประยุกต์ใช้สารสนเทศศาสตร์ในงานสุขภาพ');
+        expect(dualVocabResult).toContain('Medical Imaging: วิทยาการด้านภาพทางการแพทย์เพื่อการตรวจวินิจฉัย');
+
+        // Vocabulary heading exclusion: section headings must NOT be returned as vocabulary definitions
+        const textWithHeadings = '**บทที่ 1:** ภาพรวมของระบบเทคโนโลยีดิจิทัล\n**สรุปภาพรวม:** เนื้อหาวิชานี้ครอบคลุมระบบสารสนเทศทั้งหมด\nข้อความทั่วไปไม่มีการนิยาม';
+        const headingVocabResult = applyStudyWorkflowToFallbackText(textWithHeadings, 'vocabulary');
+        expect(headingVocabResult).not.toContain('คำศัพท์และคำอธิบายที่มีนิยามรองรับในต้นทาง:');
+        expect(headingVocabResult).not.toContain('- บทที่ 1:');
+        expect(headingVocabResult).not.toContain('- สรุปภาพรวม:');
+        expect(headingVocabResult).toContain('ไม่พบคำอธิบายความหมายที่มีนิยามรองรับในแหล่งข้อมูลต้นทาง');
 
         // Vocabulary on text with no defined terms
         const noDefText = 'ข้อความทั่วไปที่มีแต่คำบรรยายโดยไม่มีการนิยามความหมายของคำใดเลย';
@@ -1629,6 +1756,12 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(quizFillerResult).toContain('มีเนื้อหาไม่เพียงพอสำหรับการสร้างคำถามและแนวคำตอบทบทวนที่ตรวจสอบย้อนกลับได้');
         expect(quizFillerResult).not.toContain('แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:');
 
+        // Quiz review on generic informational text containing 'ระบบ' and 'ข้อมูล' without substantive academic content
+        const genericSystemInfoText = 'ระบบนี้ให้บริการข้อมูลทั่วไปเกี่ยวกับการใช้งานเว็บไซต์ กรุณาเข้าสู่ระบบเพื่อตรวจสอบข้อมูลบัญชีผู้ใช้งานของคุณ';
+        const genericQuizResult = applyStudyWorkflowToFallbackText(genericSystemInfoText, 'quiz_review');
+        expect(genericQuizResult).toContain('มีเนื้อหาไม่เพียงพอสำหรับการสร้างคำถามและแนวคำตอบทบทวนที่ตรวจสอบย้อนกลับได้');
+        expect(genericQuizResult).not.toContain('แบบฝึกหัดทบทวนความรู้จากหลักฐานต้นทาง:');
+
         // Quiz review on short insufficient text
         const shortText = 'สั้นเกินไป';
         const quizResult = applyStudyWorkflowToFallbackText(shortText, 'quiz_review');
@@ -1636,9 +1769,11 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
 
         // Workflow formatting preserves exact base text without injecting external ungrounded facts
         expect(clinicalAcronymResult).toContain(acronymsOnly);
+        expect(clinicalSeparateResult).toContain(separateActionAndTarget);
         expect(clinicalResult).toContain(rawGeneral);
         expect(vocabResult).toContain(noDefText);
         expect(quizFillerResult).toContain(fillerText);
+        expect(genericQuizResult).toContain(genericSystemInfoText);
         expect(quizResult).toContain(shortText);
       });
     });
