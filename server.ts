@@ -577,21 +577,55 @@ export function extractComparisonEvidence(text: string): {
   let bulletSectionA: string | undefined;
   let bulletSectionB: string | undefined;
 
-  // Pattern 1: ความแตกต่างระหว่าง [A] และ [B] หรือ [A] vs [B] (support Thai zero-space between words)
-  const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*(?:ในห้อง|ในด้าน|ด้าน|คือ|เรื่อง|ตรงที่|มีความสำคัญ|สำคัญ|มี|เป็น|จัดเป็น|[:\n(.,;!?]|$))/i;
-  const matchBetween = clean.match(patternBetween);
-  if (matchBetween) {
-    const candA = cleanSubject(matchBetween[1].replace(/\([^)]*\)/g, ''));
-    const candB = cleanSubject(matchBetween[2].replace(/\([^)]*\)/g, ''));
+  // Pattern 1: Bullet items - **[A]** ... - **[B]** or numbered 1. **[A]** ... 2. **[B]**
+  const patternBullets = /(?:^|\n)\s*[-*•]\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?:^|\n)\s*[-*•]\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?=(?:^|\n)\s*[-*•]|(?:\r?\n){2,}|$)/;
+  const matchBullets = clean.match(patternBullets);
+  if (matchBullets) {
+    const candA = cleanSubject(matchBullets[1].replace(/\([^)]*\)/g, ''));
+    const candB = cleanSubject(matchBullets[3].replace(/\([^)]*\)/g, ''));
     if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
       subA = candA;
       subB = candB;
-      sourceKind = 'between';
-      sourceMatchText = matchBetween[0];
+      sourceKind = 'bullets';
+      bulletSectionA = matchBullets[2];
+      bulletSectionB = matchBullets[4];
     }
   }
 
-  // Pattern 1b: [A] และ [B] มีความแตกต่างกัน / แตกต่างกัน / ต่างกัน (Thai Postfix cue)
+  // Pattern 1b: Numbered headings 1. **[A]** ... 2. **[B]**
+  if (!subA || !subB) {
+    const patternNumbered = /(?:^|\n)\s*1\.\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?:^|\n)\s*2\.\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?=(?:^|\n)\s*\d+\.|(?:\r?\n){2,}|$)/;
+    const matchNumbered = clean.match(patternNumbered);
+    if (matchNumbered) {
+      const candA = cleanSubject(matchNumbered[1].replace(/\([^)]*\)/g, ''));
+      const candB = cleanSubject(matchNumbered[3].replace(/\([^)]*\)/g, ''));
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+        sourceKind = 'numbered';
+        bulletSectionA = matchNumbered[2];
+        bulletSectionB = matchNumbered[4];
+      }
+    }
+  }
+
+  // Pattern 2: ความแตกต่างระหว่าง [A] และ [B] หรือ [A] vs [B] (support Thai zero-space between words)
+  if (!subA || !subB) {
+    const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*(?:ในห้อง|ในด้าน|ด้าน|คือ|เรื่อง|ตรงที่|มีความสำคัญ|สำคัญ|มี|เป็น|จัดเป็น|[:\n(.,;!?]|$))/i;
+    const matchBetween = clean.match(patternBetween);
+    if (matchBetween) {
+      const candA = cleanSubject(matchBetween[1].replace(/\([^)]*\)/g, ''));
+      const candB = cleanSubject(matchBetween[2].replace(/\([^)]*\)/g, ''));
+      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
+        subA = candA;
+        subB = candB;
+        sourceKind = 'between';
+        sourceMatchText = matchBetween[0];
+      }
+    }
+  }
+
+  // Pattern 2b: [A] และ [B] มีความแตกต่างกัน / แตกต่างกัน / ต่างกัน (Thai Postfix cue)
   if (!subA || !subB) {
     const patternPostfix = /(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]{2,40}?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]{2,40}?)\s*(?:มีความแตกต่าง|มีความต่าง|แตกต่างกัน|ต่างกัน)/i;
     const matchPostfix = clean.match(patternPostfix);
@@ -603,40 +637,6 @@ export function extractComparisonEvidence(text: string): {
         subB = candB;
         sourceKind = 'postfix';
         sourceMatchText = matchPostfix[0];
-      }
-    }
-  }
-
-  // Pattern 2: Bullet items - **[A]** ... - **[B]** or numbered 1. **[A]** ... 2. **[B]**
-  if (!subA || !subB) {
-    const patternBullets = /(?:^|\n)\s*[-*•]\s*\*\*([^*\n:]+)\*\*([\s\S]*?)(?:^|\n)\s*[-*•]\s*\*\*([^*\n:]+)\*\*([\s\S]*?)(?=(?:^|\n)\s*[-*•]|(?:\r?\n){2,}|$)/;
-    const matchBullets = clean.match(patternBullets);
-    if (matchBullets) {
-      const candA = cleanSubject(matchBullets[1].replace(/\([^)]*\)/g, ''));
-      const candB = cleanSubject(matchBullets[3].replace(/\([^)]*\)/g, ''));
-      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
-        subA = candA;
-        subB = candB;
-        sourceKind = 'bullets';
-        bulletSectionA = matchBullets[2];
-        bulletSectionB = matchBullets[4];
-      }
-    }
-  }
-
-  // Pattern 2b: Numbered headings 1. **[A]** ... 2. **[B]**
-  if (!subA || !subB) {
-    const patternNumbered = /(?:^|\n)\s*1\.\s*\*\*([^*\n:]+)\*\*([\s\S]*?)(?:^|\n)\s*2\.\s*\*\*([^*\n:]+)\*\*([\s\S]*?)(?=(?:^|\n)\s*\d+\.|(?:\r?\n){2,}|$)/;
-    const matchNumbered = clean.match(patternNumbered);
-    if (matchNumbered) {
-      const candA = cleanSubject(matchNumbered[1].replace(/\([^)]*\)/g, ''));
-      const candB = cleanSubject(matchNumbered[3].replace(/\([^)]*\)/g, ''));
-      if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
-        subA = candA;
-        subB = candB;
-        sourceKind = 'numbered';
-        bulletSectionA = matchNumbered[2];
-        bulletSectionB = matchNumbered[4];
       }
     }
   }
@@ -753,65 +753,87 @@ export function extractComparisonEvidence(text: string): {
   }
 
   // B. Narrative / Inline comparison:
-  // 1. Explicit property clause: must appear in the same statement / sentence containing subA and subB
-  const explicitPropClauseMatch = clean.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
-  if (explicitPropClauseMatch) {
-    const candidateProp = explicitPropClauseMatch[1].trim();
-    const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
-    if (kw) {
-      const propIndex = clean.indexOf(explicitPropClauseMatch[0]);
-      const prefixBeforeProp = clean.slice(0, propIndex);
-      const lastBreak = Math.max(prefixBeforeProp.lastIndexOf('\n'), prefixBeforeProp.lastIndexOf('.'));
-      const sentenceOfProp = clean.slice(lastBreak >= 0 ? lastBreak + 1 : 0, propIndex + explicitPropClauseMatch[0].length + 80);
+  // Strict span-based evidence linkage:
+  // Restrict property/contrast validation strictly to the specific sentence or clause
+  // where both subjects (subA and subB) were identified, preventing cross-paragraph
+  // or cross-subject contamination.
+  if (!sourceMatchText) {
+    return { isSupported: false, subjectA: subA, subjectB: subB };
+  }
 
-      // Verify sentence of property belongs to subA or subB (or immediate introductory clause)
-      if (mentionsA(sentenceOfProp) || mentionsB(sentenceOfProp) || (sourceMatchText && clean.slice(0, propIndex + 60).includes(sourceMatchText))) {
-        // Ensure no intervening clause introduces an unrelated foreign contrast
-        const interveningText = prefixBeforeProp.slice(lastBreak >= 0 ? lastBreak + 1 : 0);
-        const hasInterveningForeignContrast = /(?:แต่|ในขณะที่|ขณะที่)\s+([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้)/i.test(interveningText);
-        if (!hasInterveningForeignContrast) {
-          resolvedProperty = kw[0];
-        }
+  const matchIndex = clean.indexOf(sourceMatchText);
+  if (matchIndex < 0) {
+    return { isSupported: false, subjectA: subA, subjectB: subB };
+  }
+
+  // 1. Isolate the exact paragraph containing the subject identification match (strict paragraph boundary)
+  const lastDoubleNewline = clean.lastIndexOf('\n\n', matchIndex);
+  const paraStart = lastDoubleNewline >= 0 ? lastDoubleNewline + 2 : 0;
+  const nextDoubleNewline = clean.indexOf('\n\n', matchIndex);
+  const paraEnd = nextDoubleNewline >= 0 ? nextDoubleNewline : clean.length;
+  const currentParagraph = clean.slice(paraStart, paraEnd);
+
+  // 2. Isolate the specific sentence within currentParagraph containing sourceMatchText
+  const relMatchIdx = matchIndex - paraStart;
+  const prefixBeforeMatch = currentParagraph.slice(0, relMatchIdx);
+  const lastSentenceBreak = Math.max(
+    prefixBeforeMatch.lastIndexOf('\n'),
+    prefixBeforeMatch.lastIndexOf('.'),
+    prefixBeforeMatch.lastIndexOf('!'),
+    prefixBeforeMatch.lastIndexOf('?')
+  );
+  const sentenceStartInPara = lastSentenceBreak >= 0 ? lastSentenceBreak + 1 : 0;
+
+  const relMatchEnd = relMatchIdx + sourceMatchText.length;
+  const suffixAfterMatch = currentParagraph.slice(relMatchEnd);
+  const nextSentenceBreakMatch = suffixAfterMatch.match(/[.!?\n]|(?<=[^\s])\s{2,}(?=[^\s])|\s+(?:ในขณะเดียวกัน|อย่างไรก็ตาม|ในส่วนของ|ทั้งนี้|อนึ่ง|นอกจากนี้)\s+/);
+  const sentenceEndInPara = nextSentenceBreakMatch && nextSentenceBreakMatch.index !== undefined
+    ? relMatchEnd + nextSentenceBreakMatch.index
+    : currentParagraph.length;
+
+  const targetSentence = currentParagraph.slice(sentenceStartInPara, sentenceEndInPara).trim();
+
+  // 3. Strict foreign subject pair detection in targetSentence
+  // If the sentence contains a contrast between an unrelated foreign pair (e.g. Serum vs Plasma when subjects are Bacteria vs Virus),
+  // immediately return isSupported: false
+  const foreignPairMatch = targetSentence.match(/([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้)\s*[^.!?\n]{1,40}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี)/i);
+  if (foreignPairMatch) {
+    const fA = cleanSubject(foreignPairMatch[1]);
+    const fB = cleanSubject(foreignPairMatch[2]);
+    if (isValidSubject(fA) && isValidSubject(fB)) {
+      const fAMatches = mentionsA(fA) || mentionsB(fA);
+      const fBMatches = mentionsA(fB) || mentionsB(fB);
+      if (!fAMatches && !fBMatches) {
+        return { isSupported: false, subjectA: subA, subjectB: subB };
       }
     }
   }
 
-  // 2. Contrast Predicate: must be proven to belong to the exact Subject A / Subject B pair
-  const contrastMatch = clean.match(CONTRAST_PREDICATE_REGEX);
-  if (contrastMatch) {
-    const contrastIdx = clean.indexOf(contrastMatch[0]);
-    const prefixBeforeContrast = clean.slice(0, contrastIdx);
-    const lastBreak = Math.max(prefixBeforeContrast.lastIndexOf('\n'), prefixBeforeContrast.lastIndexOf('.'));
-    const sentenceOfContrast = clean.slice(lastBreak >= 0 ? lastBreak + 1 : 0, contrastIdx + contrastMatch[0].length + 100);
-
-    const hasAInContrast = mentionsA(sentenceOfContrast) || mentionsA(contrastMatch[0]);
-    const hasBInContrast = mentionsB(sentenceOfContrast) || mentionsB(contrastMatch[0]);
-
-    if (hasAInContrast || hasBInContrast) {
-      // Check if this contrast clause explicitly compares a foreign subject pair (e.g. Serum and Plasma)
-      const foreignPairMatch = sentenceOfContrast.match(/([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้)\s*[^.!?\n]{1,40}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี)/i);
-      let isForeignPair = false;
-      if (foreignPairMatch) {
-        const fA = cleanSubject(foreignPairMatch[1]);
-        const fB = cleanSubject(foreignPairMatch[2]);
-        if (isValidSubject(fA) && isValidSubject(fB)) {
-          const fAMatches = mentionsA(fA) || mentionsB(fA);
-          const fBMatches = mentionsA(fB) || mentionsB(fB);
-          if (!fAMatches && !fBMatches) {
-            isForeignPair = true;
-          }
-        }
+  // 4. Strict property & contrast validation: restricted exclusively to targetSentence
+  // 4a. Explicit property clause in targetSentence
+  const explicitPropClauseMatch = targetSentence.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
+  if (explicitPropClauseMatch) {
+    const candidateProp = explicitPropClauseMatch[1].trim();
+    const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
+    if (kw) {
+      const propIndex = targetSentence.indexOf(explicitPropClauseMatch[0]);
+      const prefixBeforeProp = targetSentence.slice(0, propIndex);
+      const hasInterveningForeignContrast = /(?:แต่|ในขณะที่|ขณะที่)\s+([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้)/i.test(prefixBeforeProp);
+      if (!hasInterveningForeignContrast) {
+        resolvedProperty = kw[0];
       }
+    }
+  }
 
-      if (!isForeignPair) {
-        if (!resolvedProperty) {
-          const propInContrast = sentenceOfContrast.match(PROPERTY_KEYWORDS_REGEX);
-          if (propInContrast) {
-            resolvedProperty = propInContrast[0];
-          } else {
-            resolvedProperty = 'contrast_predicate';
-          }
-        }
+  // 4b. Contrast predicate in targetSentence
+  const contrastMatch = targetSentence.match(CONTRAST_PREDICATE_REGEX);
+  if (contrastMatch) {
+    if (!resolvedProperty) {
+      const propInContrast = targetSentence.match(PROPERTY_KEYWORDS_REGEX);
+      if (propInContrast) {
+        resolvedProperty = propInContrast[0];
+      } else {
+        resolvedProperty = 'contrast_predicate';
       }
     }
   }
