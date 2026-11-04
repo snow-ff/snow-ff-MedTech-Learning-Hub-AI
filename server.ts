@@ -554,7 +554,7 @@ export function extractComparisonEvidence(text: string): {
   const cleanSubject = (s: string): string => {
     return s
       .replace(/^(?:คุณสมบัติของ|ลักษณะของ|ความแตกต่างของ|ข้อแตกต่างของ|ความต่างของ|การเปรียบเทียบระหว่าง|ระหว่าง|ของ|และ|กับ)\s*/i, '')
-      .replace(/\s*(?:มีความสำคัญ|สำคัญมาก|สำคัญ|มีความแตกต่าง|แตกต่างกัน|ต่างกัน|คือ|ด้าน|ในด้าน|เรื่อง|ตรงที่|ควร|ต้อง|โดย|ซึ่ง|ที่|ในห้อง|ใน).*$/i, '')
+      .replace(/\s*(?:มีความสำคัญ|สำคัญมาก|สำคัญ|มีความแตกต่าง|แตกต่างกัน|ต่างกัน|คือ|ด้าน|ในด้าน|เรื่อง|ตรงที่|ควร|ต้อง|โดย|ซึ่ง|ที่|ในห้อง|ใน|แต่|ในขณะที่|ขณะที่).*$/i, '')
       .replace(/[*_#:`"()]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -611,7 +611,7 @@ export function extractComparisonEvidence(text: string): {
 
   // Pattern 2: ความแตกต่างระหว่าง [A] และ [B] หรือ [A] vs [B] (support Thai zero-space between words)
   if (!subA || !subB) {
-    const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*(?:ในห้อง|ในด้าน|ด้าน|คือ|เรื่อง|ตรงที่|มีความสำคัญ|สำคัญ|มี|เป็น|จัดเป็น|[:\n(.,;!?]|$))/i;
+    const patternBetween = /(?:ความแตกต่าง|ข้อแตกต่าง|การเปรียบเทียบ|เปรียบเทียบ|ความต่าง)(?:ระหว่าง)?\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)\s*(?:และ|กับ|vs\.?|versus)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/() ]+?)(?:\s*(?:ในห้อง|ในด้าน|ด้าน|คือ|เรื่อง|ตรงที่|มีความสำคัญ|สำคัญ|แต่|ในขณะที่|ขณะที่|มี|เป็น|จัดเป็น|[:\n(.,;!?]|$))/i;
     const matchBetween = clean.match(patternBetween);
     if (matchBetween) {
       const candA = cleanSubject(matchBetween[1].replace(/\([^)]*\)/g, ''));
@@ -686,28 +686,41 @@ export function extractComparisonEvidence(text: string): {
   // 3. Property keywords that are specific (DO NOT include generic standalone 'วิธี' / 'วิธีการ' that appear as general advice)
   const PROPERTY_KEYWORDS_REGEX = /(?:ความหนาของผนังเซลล์|ความหนา|ผนังเซลล์|กำลังขยาย|ความละเอียด|สารกันเลือดแข็ง|หลอดเก็บ|ปัจจัยการแข็งตัว|แฟคเตอร์|โครงสร้างเซลล์|โครงสร้าง|ส่วนประกอบ|องค์ประกอบ|ปริมาณ|ความเข้มข้น|ระยะเวลา|ขนาด|ความไว|ความจำเพาะ|หลักการ|การตรวจวัด|ข้อดี|ข้อจำกัด|สภาวะ|กระบวนการ|สัดส่วน|ระดับ|การทำงาน|Fibrinogen|Coagulation|interoperability|sensitivity|specificity|resolution|signal|parameter|mechanism)/i;
 
-  // Helper: subject tokens
-  const getSubjectTokens = (s: string): string[] => {
+  // Helper: subject tokens, stripping common categories/prefixes shared between subA and subB
+  const getSubjectTokens = (s: string, otherSubject?: string): string[] => {
     const cleanS = s.trim().toLowerCase();
     const tokens = [cleanS];
+
+    let otherTokens: string[] = [];
+    if (otherSubject) {
+      const cleanOther = otherSubject.trim().toLowerCase();
+      otherTokens = [cleanOther, ...cleanOther.split(/[\s\-_/()]+/).filter(p => p.length >= 3)];
+    }
+
     const stripped = cleanS.replace(/^(?:แบคทีเรีย|กล้องจุลทรรศน์|ระบบ|การตรวจ|สาร)\s*/i, '').trim();
     if (stripped.length >= 3 && stripped !== cleanS) {
       tokens.push(stripped);
     }
     const parts = cleanS.split(/[\s\-_/()]+/).filter(p => p.length >= 3);
     tokens.push(...parts);
-    return Array.from(new Set(tokens));
+
+    const filtered = tokens.filter(tok => {
+      if (otherTokens.length === 0) return true;
+      return !otherTokens.includes(tok);
+    });
+
+    return Array.from(new Set(filtered.length > 0 ? filtered : [cleanS]));
   };
 
-  const tokensA = getSubjectTokens(subA);
-  const tokensB = getSubjectTokens(subB);
+  const tokensA = getSubjectTokens(subA, subB);
+  const tokensB = getSubjectTokens(subB, subA);
   const mentionsA = (seg: string) => {
     const s = seg.toLowerCase().trim();
-    return tokensA.some(t => s.includes(t) || t.includes(s));
+    return tokensA.some(t => s.includes(t));
   };
   const mentionsB = (seg: string) => {
     const s = seg.toLowerCase().trim();
-    return tokensB.some(t => s.includes(t) || t.includes(s));
+    return tokensB.some(t => s.includes(t));
   };
 
   // Contrast clause regex anchored by clause delimiters to prevent swallowing preceding conjunctions/text
@@ -737,41 +750,48 @@ export function extractComparisonEvidence(text: string): {
       }
     }
 
-    // Root Cause B: Ensure property is evaluated across BOTH bullet items, not isolated to one
-    // Check 1: Explicit property clause in A or B
+    // Require genuine contrast/difference evidence across the two bullet/numbered sections
+    const hasAdjectiveContrast = ((/หนา(?!\s*ของ)/.test(secA) && /บาง/.test(secB)) || (/บาง/.test(secA) && /หนา(?!\s*ของ)/.test(secB))) ||
+      ((/สูงกว่า/.test(secA) && /ต่ำกว่า/.test(secB)) || (/ต่ำกว่า/.test(secA) && /สูงกว่า/.test(secB))) ||
+      ((/มากกว่า/.test(secA) && /น้อยกว่า/.test(secB)) || (/น้อยกว่า/.test(secA) && /มากกว่า/.test(secB)));
+
+    const hasExistenceContrast = ((/(?:มี|พบ)/.test(secA) && /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB)) || (/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA) && /(?:มี|พบ)/.test(secB)));
+
+    const hasMethodContrast = ((/(?:เชิงปริมาณ|quantitative)/.test(secA) && /(?:กึ่งปริมาณ|qualitative)/.test(secB)) || (/(?:กึ่งปริมาณ|qualitative)/.test(secA) && /(?:เชิงปริมาณ|quantitative)/.test(secB)));
+
+    const hasDirectCrossMention = (mentionsB(secA) && Boolean(contrastInList)) || (mentionsA(secB) && Boolean(contrastInList));
+
+    const hasBulletContrast = Boolean(contrastInList) || hasAdjectiveContrast || hasExistenceContrast || hasMethodContrast || hasDirectCrossMention;
+
+    // Check 1: Explicit property clause in A or B (requires contrast evidence)
     const explicitPropA = secA.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
     const explicitPropB = secB.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
 
-    if (explicitPropA) {
+    if (explicitPropA && hasBulletContrast) {
       const candidateProp = explicitPropA[1].trim();
       const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
       const targetKw = kw ? kw[0] : candidateProp;
       const bAddressesProp = secB.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secB.toLowerCase().includes(kw[0].toLowerCase()));
-      const aComparesToB = mentionsB(secA) && Boolean(contrastInList);
+      const aComparesToB = mentionsB(secA);
       if (bAddressesProp || aComparesToB) {
         resolvedProperty = targetKw;
       }
     }
 
-    if (!resolvedProperty && explicitPropB) {
+    if (!resolvedProperty && explicitPropB && hasBulletContrast) {
       const candidateProp = explicitPropB[1].trim();
       const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
       const targetKw = kw ? kw[0] : candidateProp;
       const aAddressesProp = secA.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secA.toLowerCase().includes(kw[0].toLowerCase()));
-      const bComparesToA = mentionsA(secB) && Boolean(contrastInList);
+      const bComparesToA = mentionsA(secB);
       if (aAddressesProp || bComparesToA) {
         resolvedProperty = targetKw;
       }
     }
 
-    const hasBulletContrast = Boolean(contrastInList) ||
-      ((/หนา/.test(secA) && /บาง/.test(secB)) || (/บาง/.test(secA) && /หนา/.test(secB))) ||
-      ((/(?:มี|พบ)/.test(secA) && /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB)) || (/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA) && /(?:มี|พบ)/.test(secB))) ||
-      ((/(?:เชิงปริมาณ|quantitative)/.test(secA) && /(?:กึ่งปริมาณ|qualitative)/.test(secB)) || (/(?:กึ่งปริมาณ|qualitative)/.test(secA) && /(?:เชิงปริมาณ|quantitative)/.test(secB)));
-
-    // Check 2: Shared general property keywords present in BOTH bullet sections
+    // Check 2: Shared general property keywords present in BOTH bullet sections (requires contrast evidence)
     if (!resolvedProperty && hasBulletContrast) {
       const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
       const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
@@ -853,17 +873,40 @@ export function extractComparisonEvidence(text: string): {
 
   const targetSentence = currentParagraph.slice(sentenceStartInPara, sentenceEndInPara).trim();
 
+  // Root Cause A: If targetSentence contains an adversative or explanatory conjunction following sourceMatchText,
+  // that evidence clause must mention both subjects (or target subject contrast)
+  const adversativeMatch = targetSentence.match(/(?:^|[.!?\n]|(?<=[A-Za-z0-9\u0e00-\u0e7f\s]))\s*(?:แต่|โดย|ซึ่ง|คือ)\s*(.+)$/);
+  if (adversativeMatch) {
+    const evidenceClause = adversativeMatch[1];
+    const mentionsAnyA = mentionsA(evidenceClause);
+    const mentionsAnyB = mentionsB(evidenceClause);
+
+    // If the adversative clause introduces an explicit comparison or contrast, both target subjects must be represented
+    if (!mentionsAnyA || !mentionsAnyB) {
+      return { isSupported: false, subjectA: subA, subjectB: subB };
+    }
+  }
+
   // 3. Strict foreign subject pair detection in targetSentence
   // If the sentence contains a contrast between an unrelated foreign pair (e.g. Serum vs Plasma when subjects are Bacteria vs Virus),
   // or a partial-overlap pair (e.g. Bacteria vs Plasma when subjects are Bacteria vs Virus),
   // immediately return isSupported: false
-  const foreignPairMatches = Array.from(targetSentence.matchAll(contrastClauseRegex));
-  for (const match of foreignPairMatches) {
-    const fA = cleanSubject(match[1]);
-    const fB = cleanSubject(match[2]);
-    if (isValidSubject(fA) && isValidSubject(fB) && fA.toLowerCase() !== fB.toLowerCase()) {
-      const isTargetPair = (mentionsA(fA) && mentionsB(fB)) || (mentionsB(fA) && mentionsA(fB));
-      if (!isTargetPair) {
+  const contrastPairs = [
+    ...Array.from(targetSentence.matchAll(contrastClauseRegex)),
+    ...Array.from(targetSentence.matchAll(/([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี|หนา|บาง)[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี|หนา|บาง)/gi))
+  ];
+  for (const match of contrastPairs) {
+    const fullMatch = match[0];
+    const sides = fullMatch.split(/(?:ขณะที่|ในขณะที่|แต่|ส่วน)/).filter(Boolean);
+    if (sides.length === 2) {
+      const side1 = sides[0];
+      const side2 = sides[1];
+      const side1A = mentionsA(side1);
+      const side1B = mentionsB(side1);
+      const side2A = mentionsA(side2);
+      const side2B = mentionsB(side2);
+      const targetsPresent = (side1A && side2B) || (side1B && side2A);
+      if (!targetsPresent) {
         return { isSupported: false, subjectA: subA, subjectB: subB };
       }
     }

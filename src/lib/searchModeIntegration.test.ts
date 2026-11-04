@@ -1417,7 +1417,7 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       });
 
       it('Case 17: Root Cause A - Foreign Pair with zero subject overlap must return isSupported false', () => {
-        const text = 'ความแตกต่างระหว่างแบคทีเรียและไวรัสในห้องปฏิบัติการ แต่ Serum มี Fibrinogen ขณะที่ Plasma ไม่มี Fibrinogen';
+        const text = 'ความแตกต่างระหว่างแบคทีเรียและไวรัสในห้องปฏิบัติการ แต่กล้องจุลทรรศน์ใช้แสงใช้แสงส่องตรวจ ขณะที่กล้องจุลทรรศน์อิเล็กตรอนใช้ลำแสงอิเล็กตรอน';
         const evidence = extractComparisonEvidence(text);
         expect(evidence.isSupported).toBe(false);
         expect(evidence.subjectA).toBe('แบคทีเรีย');
@@ -1477,6 +1477,96 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
         expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         expect(formatted).toContain('กล้องจุลทรรศน์ใช้แสง กับ กล้องจุลทรรศน์อิเล็กตรอน');
+      });
+
+      // =========================================================================
+      // Root Cause A & B Final Linkage Verification Cases 22-28
+      // =========================================================================
+      it('Case 22: Root Cause A - Comparative degree in subsequent clause without subject linkage must return isSupported false', () => {
+        const text = 'ความแตกต่างระหว่างแบคทีเรียและไวรัสในห้องปฏิบัติการ แต่ระดับ Fibrinogen สูงกว่าใน Serum';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรีย');
+        expect(evidence.subjectB).toBe('ไวรัส');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 23: Root Cause A - Partial subject name / shared prefix collision must return isSupported false', () => {
+        const text = 'ความแตกต่างระหว่างแบคทีเรียแกรมบวกและแบคทีเรียแกรมลบ แต่แบคทีเรียมีผนังเซลล์หนากว่า';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรียแกรมบวก');
+        expect(evidence.subjectB).toBe('แบคทีเรียแกรมลบ');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 24: Root Cause A - Genuine narrative pair comparing target subjects with comparative degree must return isSupported true', () => {
+        const text = 'ความแตกต่างระหว่างแบคทีเรียแกรมบวกและแบคทีเรียแกรมลบ แต่แบคทีเรียแกรมบวกมีผนังเซลล์หนากว่าแบคทีเรียแกรมลบ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('แบคทีเรียแกรมบวก');
+        expect(evidence.subjectB).toBe('แบคทีเรียแกรมลบ');
+        expect(evidence.property).toBe('ผนังเซลล์');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('แบคทีเรียแกรมบวก กับ แบคทีเรียแกรมลบ');
+      });
+
+      it('Case 25: Root Cause B - Shared property without contrast in bullets must return isSupported false', () => {
+        const text = '- **แบคทีเรียแกรมบวก**: มีความหนาของผนังเซลล์ตามธรรมชาติ\n- **แบคทีเรียแกรมลบ**: ตรวจพบความหนาของผนังเซลล์ในห้องปฏิบัติการ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('แบคทีเรียแกรมบวก');
+        expect(evidence.subjectB).toBe('แบคทีเรียแกรมลบ');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 26: Root Cause B - Positive shared property with explicit difference in bullets must return isSupported true', () => {
+        const text = '- **แบคทีเรียแกรมบวก**: ผนังเซลล์หนา\n- **แบคทีเรียแกรมลบ**: ผนังเซลล์บาง';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('แบคทีเรียแกรมบวก');
+        expect(evidence.subjectB).toBe('แบคทีเรียแกรมลบ');
+        expect(evidence.property).toBe('ผนังเซลล์');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('แบคทีเรียแกรมบวก กับ แบคทีเรียแกรมลบ');
+      });
+
+      it('Case 27: Root Cause B - Numbered items without contrast must return isSupported false', () => {
+        const text = '1. **Serum**: รายงานระดับ Fibrinogen\n2. **Plasma**: รายงานระดับ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 28: Root Cause B - Positive numbered comparison with explicit contrast must return isSupported true', () => {
+        const text = '1. **Serum**: ไม่มี Fibrinogen\n2. **Plasma**: มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
       });
     });
 
