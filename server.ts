@@ -678,7 +678,9 @@ export function extractComparisonEvidence(text: string): {
   }
 
   // 1. Contrast Predicate: must verify direct contrast relationship linking the subjects or comparative degree
-  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:มี|พบ)|(?:มี|พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?บาง|บาง[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?:มี|ยังมี)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
+  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?<!ไม่)(?:มี|พบ)|(?<!ไม่)(?:มี|พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?บาง|บาง[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?<!ไม่)(?:มี|ยังมี)\s*[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
+
+  const COMPARATIVE_DEGREE_PAIR_REGEX = /(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)/i;
 
   // 2. Explicit Comparative Property Clause: must be introduced directly with ด้าน, ในด้าน, เรื่อง, ตรงที่
   const EXPLICIT_PROPERTY_CLAUSE_REGEX = /(?:ด้าน|ในด้าน|เรื่อง|ตรงที่)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*(?:โดย|ซึ่ง|คือ|ทำให้|เนื่องจาก|และ|[:\n,.]|$))/i;
@@ -753,13 +755,20 @@ export function extractComparisonEvidence(text: string): {
     // Require genuine contrast/difference evidence across the two bullet/numbered sections
     const hasAdjectiveContrast = ((/หนา(?!\s*ของ)/.test(secA) && /บาง/.test(secB)) || (/บาง/.test(secA) && /หนา(?!\s*ของ)/.test(secB))) ||
       ((/สูงกว่า/.test(secA) && /ต่ำกว่า/.test(secB)) || (/ต่ำกว่า/.test(secA) && /สูงกว่า/.test(secB))) ||
-      ((/มากกว่า/.test(secA) && /น้อยกว่า/.test(secB)) || (/น้อยกว่า/.test(secA) && /มากกว่า/.test(secB)));
+      ((/มากกว่า/.test(secA) && /น้อยกว่า/.test(secB)) || (/น้อยกว่า/.test(secA) && /มากกว่า/.test(secB))) ||
+      ((/หนากว่า/.test(secA) && /บางกว่า/.test(secB)) || (/บางกว่า/.test(secA) && /หนากว่า/.test(secB)));
 
-    const hasExistenceContrast = ((/(?:มี|พบ)/.test(secA) && /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB)) || (/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA) && /(?:มี|พบ)/.test(secB)));
+    const secAPos = !/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA) && /(?<!ไม่)(?:มี|พบ)/.test(secA);
+    const secANeg = /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA);
+    const secBPos = !/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB) && /(?<!ไม่)(?:มี|พบ)/.test(secB);
+    const secBNeg = /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB);
+
+    const hasExistenceContrast = (secAPos && secBNeg) || (secANeg && secBPos);
 
     const hasMethodContrast = ((/(?:เชิงปริมาณ|quantitative)/.test(secA) && /(?:กึ่งปริมาณ|qualitative)/.test(secB)) || (/(?:กึ่งปริมาณ|qualitative)/.test(secA) && /(?:เชิงปริมาณ|quantitative)/.test(secB)));
 
-    const hasDirectCrossMention = (mentionsB(secA) && Boolean(contrastInList)) || (mentionsA(secB) && Boolean(contrastInList));
+    const hasDirectCrossMention = (mentionsB(secA) && (Boolean(contrastInList) || COMPARATIVE_DEGREE_PAIR_REGEX.test(secA))) ||
+                                  (mentionsA(secB) && (Boolean(contrastInList) || COMPARATIVE_DEGREE_PAIR_REGEX.test(secB)));
 
     const hasBulletContrast = Boolean(contrastInList) || hasAdjectiveContrast || hasExistenceContrast || hasMethodContrast || hasDirectCrossMention;
 
@@ -810,7 +819,7 @@ export function extractComparisonEvidence(text: string): {
     }
 
     // Check 3: One bullet has property and an explicit comparative predicate connects it directly to the other subject
-    if (!resolvedProperty && contrastInList) {
+    if (!resolvedProperty && (Boolean(contrastInList) || hasDirectCrossMention)) {
       const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
       const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
       if (propsInA.length > 0 && mentionsB(secA)) {
@@ -929,8 +938,9 @@ export function extractComparisonEvidence(text: string): {
   }
 
   // 4b. Contrast predicate in targetSentence
+  const hasDirectComparative = mentionsA(targetSentence) && mentionsB(targetSentence) && COMPARATIVE_DEGREE_PAIR_REGEX.test(targetSentence);
   const contrastMatch = targetSentence.match(CONTRAST_PREDICATE_REGEX);
-  if (contrastMatch) {
+  if (contrastMatch || hasDirectComparative) {
     if (!resolvedProperty) {
       const propInContrast = targetSentence.match(PROPERTY_KEYWORDS_REGEX);
       if (propInContrast) {

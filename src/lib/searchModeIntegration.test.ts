@@ -1568,6 +1568,54 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         expect(formatted).toContain('Serum กับ Plasma');
       });
+
+      it('Case 29: Root Cause A - External reference comparison in bullets without subject linkage must return isSupported false', () => {
+        const text = '- **Serum**: ระดับ Fibrinogen สูงกว่าเกณฑ์อ้างอิง\n- **Plasma**: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 30: Root Cause B - Both subjects explicitly lack the same property in bullets must return isSupported false', () => {
+        const text = '- **Serum**: ไม่มี Fibrinogen\n- **Plasma**: ไม่มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 31: Numbered List - External reference comparison without subject linkage must return isSupported false', () => {
+        const text = '1. **Serum**: ระดับ Fibrinogen สูงกว่าเกณฑ์อ้างอิง\n2. **Plasma**: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 32: Numbered List - Both subjects explicitly lack the same property must return isSupported false', () => {
+        const text = '1. **Serum**: ไม่มี Fibrinogen\n2. **Plasma**: ไม่มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
     });
 
     // =========================================================================
