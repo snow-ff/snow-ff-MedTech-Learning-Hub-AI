@@ -1616,6 +1616,47 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
         expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
+
+      // =========================================================================
+      // Root Cause: Existence Assertion Scope & Property Linkage Cases 33-35
+      // =========================================================================
+      it('Case 33: Negative Scope - Both subjects lack property with multi-word negation must return isSupported false', () => {
+        const text = '- Serum: ไม่สามารถตรวจพบ Fibrinogen\n- Plasma: ไม่พบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 34: Negative vs Positive - Distinguish multi-word negation vs positive detection must return isSupported true', () => {
+        const text = '- Serum: ไม่สามารถตรวจพบ Fibrinogen\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      it('Case 35: Property Linkage - Common property with identical normal level must not be claimed as difference', () => {
+        const text = '- Serum: ตรวจพบ Albumin; Fibrinogen อยู่ในระดับปกติ\n- Plasma: ไม่พบ Albumin; Fibrinogen อยู่ในระดับปกติ';
+        const evidence = extractComparisonEvidence(text);
+        // Fail-closed because Albumin is not an approved property keyword and Fibrinogen has no contrast
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
     });
 
     // =========================================================================

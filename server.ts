@@ -577,34 +577,38 @@ export function extractComparisonEvidence(text: string): {
   let bulletSectionA: string | undefined;
   let bulletSectionB: string | undefined;
 
-  // Pattern 1: Bullet items - **[A]** ... - **[B]** or numbered 1. **[A]** ... 2. **[B]**
-  const patternBullets = /(?:^|\n)\s*[-*•]\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?:^|\n)\s*[-*•]\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?=(?:^|\n)\s*[-*•]|(?:\r?\n){2,}|$)/;
+  // Pattern 1: Bullet items - **[A]** ... - **[B]** or - [A]: ... - [B]: ...
+  const patternBullets = /(?:^|\n)\s*[-*•]\s*(?:\*\*([^*\n:]+?)(?::\*\*|\*\*:?)|([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?):)\s*([\s\S]*?)(?:^|\n)\s*[-*•]\s*(?:\*\*([^*\n:]+?)(?::\*\*|\*\*:?)|([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?):)\s*([\s\S]*?)(?=(?:^|\n)\s*[-*•]|(?:\r?\n){2,}|$)/;
   const matchBullets = clean.match(patternBullets);
   if (matchBullets) {
-    const candA = cleanSubject(matchBullets[1].replace(/\([^)]*\)/g, ''));
-    const candB = cleanSubject(matchBullets[3].replace(/\([^)]*\)/g, ''));
+    const rawA = (matchBullets[1] || matchBullets[2] || '').replace(/\([^)]*\)/g, '');
+    const rawB = (matchBullets[4] || matchBullets[5] || '').replace(/\([^)]*\)/g, '');
+    const candA = cleanSubject(rawA);
+    const candB = cleanSubject(rawB);
     if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
       subA = candA;
       subB = candB;
       sourceKind = 'bullets';
-      bulletSectionA = matchBullets[2];
-      bulletSectionB = matchBullets[4];
+      bulletSectionA = matchBullets[3];
+      bulletSectionB = matchBullets[6];
     }
   }
 
-  // Pattern 1b: Numbered headings 1. **[A]** ... 2. **[B]**
+  // Pattern 1b: Numbered headings 1. **[A]** ... 2. **[B]** or 1. [A]: ... 2. [B]: ...
   if (!subA || !subB) {
-    const patternNumbered = /(?:^|\n)\s*1\.\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?:^|\n)\s*2\.\s*\*\*([^*\n]+?)(?::\*\*|\*\*:?)\s*([\s\S]*?)(?=(?:^|\n)\s*\d+\.|(?:\r?\n){2,}|$)/;
+    const patternNumbered = /(?:^|\n)\s*1\.\s*(?:\*\*([^*\n:]+?)(?::\*\*|\*\*:?)|([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?):)\s*([\s\S]*?)(?:^|\n)\s*2\.\s*(?:\*\*([^*\n:]+?)(?::\*\*|\*\*:?)|([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?):)\s*([\s\S]*?)(?=(?:^|\n)\s*\d+\.|(?:\r?\n){2,}|$)/;
     const matchNumbered = clean.match(patternNumbered);
     if (matchNumbered) {
-      const candA = cleanSubject(matchNumbered[1].replace(/\([^)]*\)/g, ''));
-      const candB = cleanSubject(matchNumbered[3].replace(/\([^)]*\)/g, ''));
+      const rawA = (matchNumbered[1] || matchNumbered[2] || '').replace(/\([^)]*\)/g, '');
+      const rawB = (matchNumbered[4] || matchNumbered[5] || '').replace(/\([^)]*\)/g, '');
+      const candA = cleanSubject(rawA);
+      const candB = cleanSubject(rawB);
       if (isValidSubject(candA) && isValidSubject(candB) && candA.toLowerCase() !== candB.toLowerCase()) {
         subA = candA;
         subB = candB;
         sourceKind = 'numbered';
-        bulletSectionA = matchNumbered[2];
-        bulletSectionB = matchNumbered[4];
+        bulletSectionA = matchNumbered[3];
+        bulletSectionB = matchNumbered[6];
       }
     }
   }
@@ -772,36 +776,81 @@ export function extractComparisonEvidence(text: string): {
 
     const hasBulletContrast = Boolean(contrastInList) || hasAdjectiveContrast || hasExistenceContrast || hasMethodContrast || hasDirectCrossMention;
 
+    // Per-property assertion classifier to ensure contrast is linked to the specific property
+    const getPropertyAssertion = (sec: string, prop: string): string => {
+      const pIdx = sec.toLowerCase().indexOf(prop.toLowerCase());
+      if (pIdx < 0) return 'absent';
+      const start = Math.max(0, sec.lastIndexOf(';', pIdx) + 1, sec.lastIndexOf('.', pIdx) + 1, sec.lastIndexOf('\n', pIdx) + 1);
+      let nextBreak = sec.indexOf(';', pIdx);
+      if (nextBreak < 0) nextBreak = sec.indexOf('.', pIdx);
+      if (nextBreak < 0) nextBreak = sec.indexOf('\n', pIdx);
+      const end = nextBreak >= 0 ? nextBreak : sec.length;
+      const clause = sec.slice(start, end).trim();
+
+      if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
+        return 'negative';
+      }
+      if (/(?:หนากว่า)/i.test(clause)) return 'thick_comp';
+      if (/(?:บางกว่า)/i.test(clause)) return 'thin_comp';
+      if (/(?:สูงกว่า)/i.test(clause)) return 'higher_comp';
+      if (/(?:ต่ำกว่า)/i.test(clause)) return 'lower_comp';
+      if (/(?:มากกว่า)/i.test(clause)) return 'more_comp';
+      if (/(?:น้อยกว่า)/i.test(clause)) return 'less_comp';
+      if (/(?:หนา(?!\s*ของ))/i.test(clause)) return 'thick';
+      if (/(?:บาง)/i.test(clause)) return 'thin';
+      if (/(?:เชิงปริมาณ|quantitative)/i.test(clause)) return 'quantitative';
+      if (/(?:กึ่งปริมาณ|qualitative)/i.test(clause)) return 'qualitative';
+      if (/(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause)) {
+        return 'positive';
+      }
+      return 'neutral';
+    };
+
+    const hasPropertyContrast = (sA: string, sB: string, prop: string): boolean => {
+      const a = getPropertyAssertion(sA, prop);
+      const b = getPropertyAssertion(sB, prop);
+      if (a === 'absent' || b === 'absent') return false;
+      if (a === 'neutral' || b === 'neutral') return false;
+      if (a === b) return false;
+      if ((a === 'positive' && b === 'negative') || (a === 'negative' && b === 'positive')) return true;
+      if ((a === 'thick' && b === 'thin') || (a === 'thin' && b === 'thick')) return true;
+      if ((a === 'higher_comp' && b === 'lower_comp') || (a === 'lower_comp' && b === 'higher_comp')) return true;
+      if ((a === 'thick_comp' && b === 'thin_comp') || (a === 'thin_comp' && b === 'thick_comp')) return true;
+      if ((a === 'more_comp' && b === 'less_comp') || (a === 'less_comp' && b === 'more_comp')) return true;
+      if ((a === 'quantitative' && b === 'qualitative') || (a === 'qualitative' && b === 'quantitative')) return true;
+      return false;
+    };
+
     // Check 1: Explicit property clause in A or B (requires contrast evidence)
     const explicitPropA = secA.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
     const explicitPropB = secB.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
 
-    if (explicitPropA && hasBulletContrast) {
+    if (explicitPropA) {
       const candidateProp = explicitPropA[1].trim();
       const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
       const targetKw = kw ? kw[0] : candidateProp;
       const bAddressesProp = secB.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secB.toLowerCase().includes(kw[0].toLowerCase()));
       const aComparesToB = mentionsB(secA);
-      if (bAddressesProp || aComparesToB) {
+      if ((bAddressesProp && hasPropertyContrast(secA, secB, targetKw)) || aComparesToB) {
         resolvedProperty = targetKw;
       }
     }
 
-    if (!resolvedProperty && explicitPropB && hasBulletContrast) {
+    if (!resolvedProperty && explicitPropB) {
       const candidateProp = explicitPropB[1].trim();
       const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
       const targetKw = kw ? kw[0] : candidateProp;
       const aAddressesProp = secA.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secA.toLowerCase().includes(kw[0].toLowerCase()));
       const bComparesToA = mentionsA(secB);
-      if (aAddressesProp || bComparesToA) {
+      if ((aAddressesProp && hasPropertyContrast(secA, secB, targetKw)) || bComparesToA) {
         resolvedProperty = targetKw;
       }
     }
 
-    // Check 2: Shared general property keywords present in BOTH bullet sections (requires contrast evidence)
-    if (!resolvedProperty && hasBulletContrast) {
+    // Check 2: Shared general property keywords present in BOTH bullet sections (requires contrast evidence on that property)
+    if (!resolvedProperty) {
       const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
       const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
 
@@ -810,8 +859,10 @@ export function extractComparisonEvidence(text: string): {
           const paLower = pa.toLowerCase();
           const pbLower = pb.toLowerCase();
           if (paLower === pbLower || paLower.includes(pbLower) || pbLower.includes(paLower)) {
-            resolvedProperty = pa;
-            break;
+            if (hasPropertyContrast(secA, secB, pa)) {
+              resolvedProperty = pa;
+              break;
+            }
           }
         }
         if (resolvedProperty) break;
