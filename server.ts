@@ -678,7 +678,7 @@ export function extractComparisonEvidence(text: string): {
   }
 
   // 1. Contrast Predicate: must verify direct contrast relationship linking the subjects or comparative degree
-  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s+[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?(?:มี|พบ)|(?:มี|พบ)\s+[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?บาง|บาง[^.!?\n]{1,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?:มี|ยังมี)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
+  const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:มี|พบ)|(?:มี|พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?บาง|บาง[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?:มี|ยังมี)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
 
   // 2. Explicit Comparative Property Clause: must be introduced directly with ด้าน, ในด้าน, เรื่อง, ตรงที่
   const EXPLICIT_PROPERTY_CLAUSE_REGEX = /(?:ด้าน|ในด้าน|เรื่อง|ตรงที่)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*(?:โดย|ซึ่ง|คือ|ทำให้|เนื่องจาก|และ|[:\n,.]|$))/i;
@@ -701,43 +701,103 @@ export function extractComparisonEvidence(text: string): {
 
   const tokensA = getSubjectTokens(subA);
   const tokensB = getSubjectTokens(subB);
-  const mentionsA = (seg: string) => tokensA.some(t => seg.toLowerCase().includes(t));
-  const mentionsB = (seg: string) => tokensB.some(t => seg.toLowerCase().includes(t));
+  const mentionsA = (seg: string) => {
+    const s = seg.toLowerCase().trim();
+    return tokensA.some(t => s.includes(t) || t.includes(s));
+  };
+  const mentionsB = (seg: string) => {
+    const s = seg.toLowerCase().trim();
+    return tokensB.some(t => s.includes(t) || t.includes(s));
+  };
+
+  // Contrast clause regex anchored by clause delimiters to prevent swallowing preceding conjunctions/text
+  const contrastClauseRegex = /(?:^|[.\n,;!?]|(?:แต่|โดย|ซึ่ง|และ|ส่วน|ขณะที่|ในขณะที่|คือ|ตรงที่)\s*)([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี)\s*[^.!?\n]{1,40}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี|หนา|บาง)/gi;
 
   let resolvedProperty: string | undefined = undefined;
 
   // A. If subjects came from bullets / numbered items:
   // Contrast and property MUST be established within the items for subA and subB
   if (sourceKind === 'bullets' || sourceKind === 'numbered') {
-    const listScopeText = `**${subA}** ${bulletSectionA || ''}\n**${subB}** ${bulletSectionB || ''}`;
+    const secA = bulletSectionA || '';
+    const secB = bulletSectionB || '';
+    const listScopeText = `**${subA}** ${secA}\n**${subB}** ${secB}`;
     const contrastInList = listScopeText.match(CONTRAST_PREDICATE_REGEX);
-    const explicitPropInList = listScopeText.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
-    const generalPropInList = listScopeText.match(PROPERTY_KEYWORDS_REGEX);
 
-    // Reject if listScopeText contains an unrelated foreign subject pair (e.g. Serum vs Plasma)
-    const foreignPairMatch = listScopeText.match(/([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้)\s*[^.!?\n]{1,40}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี)/i);
-    if (foreignPairMatch) {
-      const fA = cleanSubject(foreignPairMatch[1]);
-      const fB = cleanSubject(foreignPairMatch[2]);
-      if (isValidSubject(fA) && isValidSubject(fB)) {
-        const fAMatches = mentionsA(fA) || mentionsB(fA);
-        const fBMatches = mentionsA(fB) || mentionsB(fB);
-        if (!fAMatches && !fBMatches) {
+    // Reject if listScopeText contains an unrelated foreign subject pair or partial overlap
+    // (e.g. Serum vs Plasma or Bacteria vs Plasma when subjects are Bacteria vs Virus)
+    const foreignPairMatches = Array.from(listScopeText.matchAll(contrastClauseRegex));
+    for (const match of foreignPairMatches) {
+      const fA = cleanSubject(match[1]);
+      const fB = cleanSubject(match[2]);
+      if (isValidSubject(fA) && isValidSubject(fB) && fA.toLowerCase() !== fB.toLowerCase()) {
+        const isTargetPair = (mentionsA(fA) && mentionsB(fB)) || (mentionsB(fA) && mentionsA(fB));
+        if (!isTargetPair) {
           return { isSupported: false, subjectA: subA, subjectB: subB };
         }
       }
     }
 
-    if (explicitPropInList) {
-      const candidateProp = explicitPropInList[1].trim();
+    // Root Cause B: Ensure property is evaluated across BOTH bullet items, not isolated to one
+    // Check 1: Explicit property clause in A or B
+    const explicitPropA = secA.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
+    const explicitPropB = secB.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
+
+    if (explicitPropA) {
+      const candidateProp = explicitPropA[1].trim();
       const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
-      if (kw) resolvedProperty = kw[0];
+      const targetKw = kw ? kw[0] : candidateProp;
+      const bAddressesProp = secB.toLowerCase().includes(targetKw.toLowerCase()) ||
+                             (kw && secB.toLowerCase().includes(kw[0].toLowerCase()));
+      const aComparesToB = mentionsB(secA) && Boolean(contrastInList);
+      if (bAddressesProp || aComparesToB) {
+        resolvedProperty = targetKw;
+      }
     }
 
-    if (!resolvedProperty && contrastInList && generalPropInList) {
-      resolvedProperty = generalPropInList[0];
-    } else if (!resolvedProperty && contrastInList) {
-      resolvedProperty = 'contrast_predicate';
+    if (!resolvedProperty && explicitPropB) {
+      const candidateProp = explicitPropB[1].trim();
+      const kw = candidateProp.match(PROPERTY_KEYWORDS_REGEX);
+      const targetKw = kw ? kw[0] : candidateProp;
+      const aAddressesProp = secA.toLowerCase().includes(targetKw.toLowerCase()) ||
+                             (kw && secA.toLowerCase().includes(kw[0].toLowerCase()));
+      const bComparesToA = mentionsA(secB) && Boolean(contrastInList);
+      if (aAddressesProp || bComparesToA) {
+        resolvedProperty = targetKw;
+      }
+    }
+
+    const hasBulletContrast = Boolean(contrastInList) ||
+      ((/หนา/.test(secA) && /บาง/.test(secB)) || (/บาง/.test(secA) && /หนา/.test(secB))) ||
+      ((/(?:มี|พบ)/.test(secA) && /(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secB)) || (/(?:ไม่มี|ปราศจาก|ไม่พบ)/.test(secA) && /(?:มี|พบ)/.test(secB))) ||
+      ((/(?:เชิงปริมาณ|quantitative)/.test(secA) && /(?:กึ่งปริมาณ|qualitative)/.test(secB)) || (/(?:กึ่งปริมาณ|qualitative)/.test(secA) && /(?:เชิงปริมาณ|quantitative)/.test(secB)));
+
+    // Check 2: Shared general property keywords present in BOTH bullet sections
+    if (!resolvedProperty && hasBulletContrast) {
+      const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+      const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+
+      for (const pa of propsInA) {
+        for (const pb of propsInB) {
+          const paLower = pa.toLowerCase();
+          const pbLower = pb.toLowerCase();
+          if (paLower === pbLower || paLower.includes(pbLower) || pbLower.includes(paLower)) {
+            resolvedProperty = pa;
+            break;
+          }
+        }
+        if (resolvedProperty) break;
+      }
+    }
+
+    // Check 3: One bullet has property and an explicit comparative predicate connects it directly to the other subject
+    if (!resolvedProperty && contrastInList) {
+      const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+      const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+      if (propsInA.length > 0 && mentionsB(secA)) {
+        resolvedProperty = propsInA[0];
+      } else if (propsInB.length > 0 && mentionsA(secB)) {
+        resolvedProperty = propsInB[0];
+      }
     }
 
     if (!resolvedProperty) {
@@ -795,15 +855,15 @@ export function extractComparisonEvidence(text: string): {
 
   // 3. Strict foreign subject pair detection in targetSentence
   // If the sentence contains a contrast between an unrelated foreign pair (e.g. Serum vs Plasma when subjects are Bacteria vs Virus),
+  // or a partial-overlap pair (e.g. Bacteria vs Plasma when subjects are Bacteria vs Virus),
   // immediately return isSupported: false
-  const foreignPairMatch = targetSentence.match(/([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้)\s*[^.!?\n]{1,40}?\s*(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|พบ|เป็น|ใช้|ปราศจาก|ไม่มี)/i);
-  if (foreignPairMatch) {
-    const fA = cleanSubject(foreignPairMatch[1]);
-    const fB = cleanSubject(foreignPairMatch[2]);
-    if (isValidSubject(fA) && isValidSubject(fB)) {
-      const fAMatches = mentionsA(fA) || mentionsB(fA);
-      const fBMatches = mentionsA(fB) || mentionsB(fB);
-      if (!fAMatches && !fBMatches) {
+  const foreignPairMatches = Array.from(targetSentence.matchAll(contrastClauseRegex));
+  for (const match of foreignPairMatches) {
+    const fA = cleanSubject(match[1]);
+    const fB = cleanSubject(match[2]);
+    if (isValidSubject(fA) && isValidSubject(fB) && fA.toLowerCase() !== fB.toLowerCase()) {
+      const isTargetPair = (mentionsA(fA) && mentionsB(fB)) || (mentionsB(fA) && mentionsA(fB));
+      if (!isTargetPair) {
         return { isSupported: false, subjectA: subA, subjectB: subB };
       }
     }
@@ -818,7 +878,7 @@ export function extractComparisonEvidence(text: string): {
     if (kw) {
       const propIndex = targetSentence.indexOf(explicitPropClauseMatch[0]);
       const prefixBeforeProp = targetSentence.slice(0, propIndex);
-      const hasInterveningForeignContrast = /(?:แต่|ในขณะที่|ขณะที่)\s+([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้)/i.test(prefixBeforeProp);
+      const hasInterveningForeignContrast = /(?:แต่|ในขณะที่|ขณะที่)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,30}?)\s*(?:มี|เป็น|ใช้|ต่างจาก|แตกต่างจาก)/i.test(prefixBeforeProp);
       if (!hasInterveningForeignContrast) {
         resolvedProperty = kw[0];
       }
