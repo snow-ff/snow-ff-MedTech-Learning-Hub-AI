@@ -821,6 +821,48 @@ export function extractComparisonEvidence(text: string): {
       return false;
     };
 
+    // Helper to verify direct comparative evidence linkage between section, property, predicate, and other subject
+    const hasVerifiedDirectComparativeLinkage = (sec: string, otherSub: string, prop: string): boolean => {
+      if (!sec.toLowerCase().includes(prop.toLowerCase())) {
+        return false;
+      }
+      const mentionsOther = otherSub === subB ? mentionsB : mentionsA;
+      if (!mentionsOther(sec)) {
+        return false;
+      }
+
+      const clauses = sec.split(/[;\n.]+/).map(c => c.trim()).filter(Boolean);
+      for (const clause of clauses) {
+        if (!clause.toLowerCase().includes(prop.toLowerCase()) || !mentionsOther(clause)) {
+          continue;
+        }
+        if (!COMPARATIVE_DEGREE_PAIR_REGEX.test(clause)) {
+          continue;
+        }
+        // Reject comparison against external reference ranges
+        if (/(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\s*(?:ใน\s*)?(?:เกณฑ์อ้างอิง|ค่าอ้างอิง|ค่าปกติ|มาตรฐาน|ระดับปกติ|ค่ามาตรฐาน)/i.test(clause)) {
+          continue;
+        }
+        // Reject mention of other subject as a table/reference source rather than comparison target
+        if (/(?:ตารางอ้างอิง|ในตาราง|ดูตาราง|ตาราง|ตามตาราง)\s*(?:ของ\s*)?[A-Za-z0-9\u0e00-\u0e7f\-_/ ]*?(?:plasma|serum|แบคทีเรีย|กล้อง)/i.test(clause) ||
+            /(?:ชื่อ|ข้อมูล|แถว|คอลัมน์)\s*[A-Za-z0-9\u0e00-\u0e7f\-_/ ]*?(?:plasma|serum|แบคทีเรีย|กล้อง)\s*(?:อยู่|ปรากฏ)?ในตาราง/i.test(clause)) {
+          continue;
+        }
+
+        const tokensOther = otherSub === subB ? tokensB : tokensA;
+        const otherPattern = tokensOther.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const directCompWithOtherRegex = new RegExp(
+          `(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\\s*(?:ใน\\s*)?(?:${otherPattern})|(?:เมื่อเทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})[^.!?\\n]*?(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)`,
+          'i'
+        );
+
+        if (directCompWithOtherRegex.test(clause)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     // Check 1: Explicit property clause in A or B (requires contrast evidence)
     const explicitPropA = secA.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
     const explicitPropB = secB.match(EXPLICIT_PROPERTY_CLAUSE_REGEX);
@@ -831,8 +873,9 @@ export function extractComparisonEvidence(text: string): {
       const targetKw = kw ? kw[0] : candidateProp;
       const bAddressesProp = secB.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secB.toLowerCase().includes(kw[0].toLowerCase()));
-      const aComparesToB = mentionsB(secA);
-      if ((bAddressesProp && hasPropertyContrast(secA, secB, targetKw)) || aComparesToB) {
+      if (bAddressesProp && hasPropertyContrast(secA, secB, targetKw)) {
+        resolvedProperty = targetKw;
+      } else if (hasVerifiedDirectComparativeLinkage(secA, subB, targetKw)) {
         resolvedProperty = targetKw;
       }
     }
@@ -843,8 +886,9 @@ export function extractComparisonEvidence(text: string): {
       const targetKw = kw ? kw[0] : candidateProp;
       const aAddressesProp = secA.toLowerCase().includes(targetKw.toLowerCase()) ||
                              (kw && secA.toLowerCase().includes(kw[0].toLowerCase()));
-      const bComparesToA = mentionsA(secB);
-      if ((aAddressesProp && hasPropertyContrast(secA, secB, targetKw)) || bComparesToA) {
+      if (aAddressesProp && hasPropertyContrast(secA, secB, targetKw)) {
+        resolvedProperty = targetKw;
+      } else if (hasVerifiedDirectComparativeLinkage(secB, subA, targetKw)) {
         resolvedProperty = targetKw;
       }
     }
@@ -870,13 +914,24 @@ export function extractComparisonEvidence(text: string): {
     }
 
     // Check 3: One bullet has property and an explicit comparative predicate connects it directly to the other subject
-    if (!resolvedProperty && (Boolean(contrastInList) || hasDirectCrossMention)) {
+    if (!resolvedProperty) {
       const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
       const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
-      if (propsInA.length > 0 && mentionsB(secA)) {
-        resolvedProperty = propsInA[0];
-      } else if (propsInB.length > 0 && mentionsA(secB)) {
-        resolvedProperty = propsInB[0];
+
+      for (const pa of propsInA) {
+        if (hasVerifiedDirectComparativeLinkage(secA, subB, pa)) {
+          resolvedProperty = pa;
+          break;
+        }
+      }
+
+      if (!resolvedProperty) {
+        for (const pb of propsInB) {
+          if (hasVerifiedDirectComparativeLinkage(secB, subA, pb)) {
+            resolvedProperty = pb;
+            break;
+          }
+        }
       }
     }
 

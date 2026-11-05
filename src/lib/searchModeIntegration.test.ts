@@ -1657,6 +1657,58 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
         expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
+
+      // =========================================================================
+      // P0-A: Direct Subject Linkage & Property Verification Cases 36-39
+      // =========================================================================
+      it('Case 36: Explicit Property Bypass - Mentioning other subject in reference table context is not comparison', () => {
+        const text = '- Serum: ในด้าน Fibrinogen สูงกว่าเกณฑ์อ้างอิง และมีชื่อ Plasma อยู่ในตารางอ้างอิง\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 37: Direct Cross-Mention Bypass - Cross-mention with reference range comparison must return isSupported false', () => {
+        const text = '- Serum: Fibrinogen สูงกว่าเกณฑ์อ้างอิงเมื่อดูตาราง Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 38: Unbolded Numbered List Positive - Unbolded numbered items with explicit contrast must return isSupported true', () => {
+        const text = '1. Serum: ไม่มี Fibrinogen\n2. Plasma: มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      it('Case 39: Unbolded Numbered List Negative - Unbolded numbered items with same negative assertion must return isSupported false', () => {
+        const text = '1. Serum: ไม่มี Fibrinogen\n2. Plasma: ไม่มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
     });
 
     // =========================================================================
