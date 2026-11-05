@@ -30,7 +30,8 @@ import {
   Layers,
   Check,
   Globe,
-  History
+  History,
+  Bookmark
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { isFirebaseReady, firebaseDatabaseId } from './lib/firebase';
@@ -46,6 +47,9 @@ import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationRepor
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { LearningDomainCatalogView } from './components/LearningDomainCatalogView';
+import { CourseNotesView } from './components/CourseNotesView';
+import { SaveNoteModal } from './components/SaveNoteModal';
+import { CourseNote, getCourseNotes } from './lib/courseNotesStorage';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
 import { rankRelevantChunks, retrieveGroundedChunks, decodeHtmlEntities, cleanChunkLocator, filterDisplayedReferences } from './lib/documentChunker';
 import { verifyAcademicAnswer } from './lib/academicVerifier';
@@ -216,7 +220,7 @@ export function getMockResponse(prompt: string): string {
 export default function App() {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOutUser, clearError } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'catalog' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'catalog' | 'documents' | 'vocabulary' | 'references' | 'curriculum' | 'notes'>('chat');
   const [activeStudyWorkflow, setActiveStudyWorkflow] = useState<StudyWorkflowType | null>(null);
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
@@ -290,6 +294,44 @@ export default function App() {
 
   const toggleVerification = (id: string) => {
     setExpandedVerifications(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Course Notes States
+  const [courseNotes, setCourseNotes] = useState<CourseNote[]>(() => getCourseNotes());
+  const [savingNoteMessage, setSavingNoteMessage] = useState<Message | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const refreshCourseNotes = () => {
+    setCourseNotes(getCourseNotes());
+  };
+
+  const handleSaveMessageAsNote = (msg: Message) => {
+    setSavingNoteMessage(msg);
+  };
+
+  const handleSaveLatestSummary = () => {
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistantMsg) {
+      setSavingNoteMessage(lastAssistantMsg);
+    } else {
+      setToastMessage('ยังไม่มีข้อความคำตอบของ AI ที่จะบันทึกสรุป');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleNoteSavedSuccess = (courseCode: string, noteTitle: string) => {
+    refreshCourseNotes();
+    setToastMessage(`บันทึกสรุป "${noteTitle}" ลงในวิชา ${courseCode} เรียบร้อยแล้ว`);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleAskAiWithNote = (note: CourseNote) => {
+    setActiveTab('chat');
+    const followUpPrompt = `[ทบทวนเนื้อหา] ช่วยสรุปประเด็นสำคัญและตั้งคำถามทดสอบความเข้าใจ 2 ข้อ จากบันทึกสรุปวิชา ${note.courseCode} (${note.courseTitle}) หัวข้อ "${note.title}":\n\n${note.content}`;
+    setInputQuery(followUpPrompt);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
   };
 
   // Curriculum Tab States (Track A4)
@@ -800,6 +842,20 @@ export default function App() {
             <GraduationCap className="w-4 h-4" />
             หลักสูตร DTM 2567
           </button>
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+              activeTab === 'notes'
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Bookmark className="w-4 h-4 text-cyan-400" />
+            <span>โน้ตสรุป</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[10px] text-cyan-300 font-mono">
+              {courseNotes.length}
+            </span>
+          </button>
         </nav>
 
         {/* Zone 3: Authentication & Status Modal Trigger */}
@@ -959,6 +1015,15 @@ export default function App() {
         >
           หลักสูตร
         </button>
+        <button
+          onClick={() => setActiveTab('notes')}
+          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 sm:flex-1 min-h-[40px] flex items-center justify-center gap-1 transition-all ${
+            activeTab === 'notes' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
+          }`}
+        >
+          <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+          <span>โน้ต ({courseNotes.length})</span>
+        </button>
       </div>
 
       {/* MAIN CONTENT AREA */}
@@ -975,6 +1040,14 @@ export default function App() {
                 <div className="text-xs text-slate-400 hidden sm:block">
                   หลักสูตร DTM 2567 มหาวิทยาลัยวลัยลักษณ์
                 </div>
+                <button
+                  onClick={() => setActiveTab('notes')}
+                  title="เปิดดูโน้ตสรุปรายวิชา"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white text-xs font-medium transition-all border border-slate-700 shadow-sm min-h-[44px] sm:min-h-[38px]"
+                >
+                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>โน้ตสรุป ({courseNotes.length})</span>
+                </button>
                 <button
                   onClick={handleClearChat}
                   title="ล้างประวัติแชท"
@@ -1007,6 +1080,14 @@ export default function App() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    onClick={() => setActiveTab('notes')}
+                    className="px-2.5 py-1.5 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-indigo-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-indigo-700/60 min-h-[36px]"
+                    title="เปิดดูโน้ตสรุปของวิชานี้"
+                  >
+                    <Bookmark className="w-3.5 h-3.5 text-indigo-300" />
+                    <span>โน้ตวิชานี้</span>
+                  </button>
                   <button
                     onClick={() => setActiveLearningGuideCourse(selectedLearningCourse)}
                     className="px-2.5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-800 text-indigo-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-indigo-700/60 min-h-[36px]"
@@ -1710,11 +1791,31 @@ export default function App() {
                       })()
                     )}
                     <div
-                      className={`text-[10px] mt-2 ${
-                        msg.role === 'user' ? 'text-blue-200 text-right' : 'text-slate-500'
+                      className={`text-[10px] mt-2.5 pt-2 border-t border-slate-800/40 flex items-center justify-between gap-2 ${
+                        msg.role === 'user' ? 'text-blue-200 justify-end border-t-0 pt-0' : 'text-slate-500'
                       }`}
                     >
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {msg.role === 'assistant' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveMessageAsNote(msg)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/90 text-indigo-300 hover:text-indigo-100 text-[11px] font-medium border border-indigo-800/60 shadow-sm transition-all cursor-pointer"
+                            title="บันทึกคำตอบนี้เป็นโน้ตสรุปบทเรียนรายวิชาใน localStorage"
+                          >
+                            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>บันทึกสรุป</span>
+                          </button>
+                          {selectedLearningCourse && (
+                            <span className="text-[10px] text-slate-400 hidden sm:inline font-mono">
+                              ({selectedLearningCourse.code})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <span className="shrink-0">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1865,6 +1966,16 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={handleSaveLatestSummary}
+                    title="บันทึกสรุปคำตอบล่าสุดของ AI ลงในรายวิชาที่กำลังเรียน"
+                    aria-label="บันทึกสรุป"
+                    className="px-3 py-2 sm:py-1.5 sm:px-2.5 rounded-xl bg-indigo-950/70 hover:bg-indigo-900/90 text-indigo-300 hover:text-indigo-100 text-xs flex items-center justify-center gap-1.5 border border-indigo-800/60 transition-colors min-h-[44px] sm:min-h-[38px] cursor-pointer"
+                  >
+                    <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>บันทึกสรุป</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleClearChat}
@@ -2651,6 +2762,18 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {activeTab === 'notes' && (
+          <div className="flex-1 flex flex-col bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden shadow-xl min-h-[650px]">
+            <CourseNotesView
+              notes={courseNotes}
+              onRefreshNotes={refreshCourseNotes}
+              selectedCourse={selectedLearningCourse}
+              onSelectCourse={setSelectedLearningCourse}
+              onAskAiWithNote={handleAskAiWithNote}
+            />
+          </div>
+        )}
       </main>
 
       {/* REFERENCE DETAIL MODAL */}
@@ -2922,6 +3045,32 @@ export default function App() {
             }
           }}
         />
+      )}
+
+      {/* SAVE NOTE MODAL */}
+      {savingNoteMessage && (
+        <SaveNoteModal
+          isOpen={Boolean(savingNoteMessage)}
+          onClose={() => setSavingNoteMessage(null)}
+          initialContent={savingNoteMessage.content}
+          sourceMessageId={savingNoteMessage.id}
+          activeCourse={selectedLearningCourse}
+          onSavedSuccess={handleNoteSavedSuccess}
+        />
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-900 border border-emerald-500/50 text-emerald-300 text-xs shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-slate-400 hover:text-white p-0.5"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );
