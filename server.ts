@@ -684,7 +684,7 @@ export function extractComparisonEvidence(text: string): {
   // 1. Contrast Predicate: must verify direct contrast relationship linking the subjects or comparative degree
   const CONTRAST_PREDICATE_REGEX = /(?:ปราศจาก|ไม่มี|ไม่พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?<!ไม่)(?:มี|พบ)|(?<!ไม่)(?:มี|พบ)\s*[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)\s*[^.!?\n]{0,40}?(?:ปราศจาก|ไม่มี|ไม่พบ)|หนา[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?บาง|บาง[^.!?\n]{0,30}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{0,30}?หนา|ใช้[^.!?\n]{1,40}?(?:ขณะที่|ในขณะที่|แต่|ส่วน)[^.!?\n]{1,40}?ใช้|(?:กึ่งปริมาณ|qualitative)[^]*?(?:เชิงปริมาณ|quantitative)|(?:ต้องใช้|ใช้)[^.!?\n]{1,60}?(?:เท่านั้น)?\s*เนื่องจาก[^.!?\n]{1,60}?(?:ไม่มี|ปราศจาก|ไม่พบ)|(?<!ไม่)(?:มี|ยังมี)\s*[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)[^]*?(?:ไม่มี|ปราศจาก)[^.!?\n]{1,80}?(?:Fibrinogen|แฟคเตอร์|ปัจจัยการแข็งตัว|สารกันเลือดแข็ง|โครงสร้าง)|ต่างกัน(?:อย่างชัดเจน|อย่างมีนัยสำคัญ|ในด้าน|ตรงที่|พื้นฐาน)/i;
 
-  const COMPARATIVE_DEGREE_PAIR_REGEX = /(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)/i;
+  const COMPARATIVE_DEGREE_PAIR_REGEX = /(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)/i;
 
   // 2. Explicit Comparative Property Clause: must be introduced directly with ด้าน, ในด้าน, เรื่อง, ตรงที่
   const EXPLICIT_PROPERTY_CLAUSE_REGEX = /(?:ด้าน|ในด้าน|เรื่อง|ตรงที่)\s*([A-Za-z0-9\u0e00-\u0e7f\-_/ ]{2,40}?)(?:\s*(?:โดย|ซึ่ง|คือ|ทำให้|เนื่องจาก|และ|[:\n,.]|$))/i;
@@ -814,30 +814,44 @@ export function extractComparisonEvidence(text: string): {
       const propClauses = clauses.filter(c => c.toLowerCase().includes(propLower));
       if (propClauses.length === 0) return 'absent';
 
-      const classifyClause = (clause: string): string => {
+      const extractClauseAssertions = (clause: string): string[] => {
+        const found: string[] = [];
+
         if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
-          return 'negative';
+          found.push('negative');
         }
-        if (/(?:หนากว่า)/i.test(clause)) return 'thick_comp';
-        if (/(?:บางกว่า)/i.test(clause)) return 'thin_comp';
-        if (/(?:สูงกว่า)/i.test(clause)) return 'higher_comp';
-        if (/(?:ต่ำกว่า)/i.test(clause)) return 'lower_comp';
-        if (/(?:มากกว่า)/i.test(clause)) return 'more_comp';
-        if (/(?:น้อยกว่า)/i.test(clause)) return 'less_comp';
-        if (/(?:หนา(?!\s*ของ))/i.test(clause)) return 'thick';
-        if (/(?:บาง)/i.test(clause)) return 'thin';
-        if (/(?:เชิงปริมาณ|quantitative)/i.test(clause)) return 'quantitative';
-        if (/(?:กึ่งปริมาณ|qualitative)/i.test(clause)) return 'qualitative';
-        if (/(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause)) {
-          return 'positive';
+
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*หนากว่า/i.test(clause)) found.push('thick_comp');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*บางกว่า/i.test(clause)) found.push('thin_comp');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*สูงกว่า/i.test(clause)) found.push('higher_comp');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*ต่ำกว่า/i.test(clause)) found.push('lower_comp');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*มากกว่า/i.test(clause)) found.push('more_comp');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*น้อยกว่า/i.test(clause)) found.push('less_comp');
+
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*หนา(?!\s*ของ)/i.test(clause) && !/(?:หนากว่า)/i.test(clause)) {
+          found.push('thick');
         }
-        return 'neutral';
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*บาง(?!\s*(?:กว่า|ส่วน))/i.test(clause)) {
+          found.push('thin');
+        }
+
+        if (/เชิงปริมาณ|quantitative/i.test(clause)) found.push('quantitative');
+        if (/กึ่งปริมาณ|qualitative/i.test(clause)) found.push('qualitative');
+
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย|ตรวจไม่|ยังไม่)\s*(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause) && !found.includes('negative')) {
+          found.push('positive');
+        }
+
+        return found;
       };
 
-      const assertions = propClauses.map(classifyClause).filter(a => a !== 'neutral');
-      if (assertions.length === 0) return 'neutral';
+      const allAssertions: string[] = [];
+      for (const clause of propClauses) {
+        allAssertions.push(...extractClauseAssertions(clause));
+      }
+      if (allAssertions.length === 0) return 'neutral';
 
-      const uniqueAssertions = new Set(assertions);
+      const uniqueAssertions = new Set(allAssertions);
       const hasDirectConflict =
         (uniqueAssertions.has('positive') && uniqueAssertions.has('negative')) ||
         (uniqueAssertions.has('higher_comp') && uniqueAssertions.has('lower_comp')) ||
@@ -856,7 +870,7 @@ export function extractComparisonEvidence(text: string): {
         }
       }
 
-      return assertions[0];
+      return allAssertions[0];
     };
 
     const hasPropertyContrast = (sA: string, sB: string, prop: string): boolean => {
@@ -909,7 +923,7 @@ export function extractComparisonEvidence(text: string): {
         const tokensOther = otherSub === subB ? tokensB : tokensA;
         const otherPattern = tokensOther.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
         const directCompWithOtherRegex = new RegExp(
-          `(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\\s*(?:ใน\\s*)?(?:${otherPattern})|(?:เมื่อเทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})[^.!?\\n]*?(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)`,
+          `(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\\s*(?:ใน\\s*)?(?:${otherPattern})|(?:เมื่อเทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})[^.!?\\n]*?(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)`,
           'i'
         );
 

@@ -1838,6 +1838,72 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         expect(formatted).toContain('Serum กับ Plasma');
       });
+
+      // =========================================================================
+      // R2: Assertion Classification Final Review Cases 48-52
+      // =========================================================================
+      it('Case 48: Same-Clause Contradiction - Opposing comparative predicates within same clause must trigger conflict and fail-closed', () => {
+        const text = '- Serum: Fibrinogen สูงกว่า Plasma และต่ำกว่าเกณฑ์อ้างอิง\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 49: Negated Comparative - Negated comparative predicate (ไม่สูงกว่า) must not be classified as higher_comp', () => {
+        const text = '- Serum: ระดับ Fibrinogen ไม่สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 50: Positive Comparative Control - Affirmative comparative statement against other subject is supported', () => {
+        const text = '- Serum: ระดับ Fibrinogen สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      it('Case 51: Multiple Properties with Differing Predicates - Predicates must not cross-pair across disjoint properties', () => {
+        const text = '- Serum: Fibrinogen ตรวจไม่พบ แต่ Albumin ตรวจพบ\n- Plasma: Fibrinogen ตรวจพบ แต่ Albumin ตรวจพบ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      it('Case 52: Thai Clause Boundary Compound vs Conjunction Invariance - Compound nouns with ส่วน preserved while connective ส่วน splits clauses', () => {
+        const text = 'ความแตกต่างระหว่าง Serum และ Plasma ตรงที่ Serum ตรวจพบส่วนประกอบสำคัญ ส่วน Plasma ตรวจไม่พบส่วนประกอบสำคัญ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('ส่วนประกอบ');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
     });
 
     // =========================================================================
