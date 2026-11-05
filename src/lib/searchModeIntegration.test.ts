@@ -1749,6 +1749,95 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         expect(formatted).toContain('Serum กับ Plasma');
       });
+
+      // =========================================================================
+      // R2: Edge-Case Verification Cases 43-47
+      // =========================================================================
+      it('Case 43: Word Morpheme "ส่วน" Protection - Morphemes like ส่วนประกอบ or ส่วนกลาง must not be split as clauses', () => {
+        // 43a: Positive contrast on entity with "ส่วนประกอบ" intact
+        const textA = '- Serum: มีส่วนประกอบของ Fibrinogen\n- Plasma: ไม่มีส่วนประกอบของ Fibrinogen';
+        const evidenceA = extractComparisonEvidence(textA);
+        expect(evidenceA.isSupported).toBe(true);
+        expect(evidenceA.subjectA).toBe('Serum');
+        expect(evidenceA.subjectB).toBe('Plasma');
+        expect(['ส่วนประกอบ', 'Fibrinogen']).toContain(evidenceA.property);
+
+        const formattedA = applyStudyWorkflowToFallbackText(textA, 'compare');
+        expect(formattedA).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formattedA).toContain('Serum กับ Plasma');
+
+        // 43b: Negative control where ส่วนกลาง must not split into spurious fragments
+        const textB = '- Serum: ส่วนกลางของเซลล์มีผนังเซลล์\n- Plasma: ส่วนกลางของเซลล์มีผนังเซลล์';
+        const evidenceB = extractComparisonEvidence(textB);
+        expect(evidenceB.isSupported).toBe(false);
+        expect(evidenceB.subjectA).toBe('Serum');
+        expect(evidenceB.subjectB).toBe('Plasma');
+
+        const formattedB = applyStudyWorkflowToFallbackText(textB, 'compare');
+        expect(formattedB).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formattedB).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 44: Connective "ส่วน" Clause Delimitation - Conjunction ส่วน separating clauses must isolate predicates', () => {
+        const text = '- Serum: Fibrinogen อยู่ในระดับปกติ ส่วน Albumin สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 45: Conflicting Assertions on Same Property Across Clauses - Deterministic order-independent rejection', () => {
+        // Order 1: positive then negative within same subject
+        const text1 = '- Serum: ในระยะแรกตรวจพบ Fibrinogen แต่ในระยะสุดท้ายไม่พบ Fibrinogen\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence1 = extractComparisonEvidence(text1);
+        expect(evidence1.isSupported).toBe(false);
+        expect(evidence1.subjectA).toBe('Serum');
+        expect(evidence1.subjectB).toBe('Plasma');
+
+        const formatted1 = applyStudyWorkflowToFallbackText(text1, 'compare');
+        expect(formatted1).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted1).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+
+        // Order 2: negative then positive within same subject
+        const text2 = '- Serum: ในระยะแรกไม่พบ Fibrinogen แต่ในระยะสุดท้ายตรวจพบ Fibrinogen\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence2 = extractComparisonEvidence(text2);
+        expect(evidence2.isSupported).toBe(false);
+        expect(evidence2.subjectA).toBe('Serum');
+        expect(evidence2.subjectB).toBe('Plasma');
+
+        const formatted2 = applyStudyWorkflowToFallbackText(text2, 'compare');
+        expect(formatted2).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted2).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 46: Disjoint Properties Must Not Cross-Pair Predicates - Different properties with differing predicates cannot cross-match', () => {
+        const text = '- Serum: Fibrinogen ตรวจไม่พบ แต่ Albumin ตรวจพบ\n- Plasma: Fibrinogen ตรวจไม่พบ แต่ Albumin ตรวจพบ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 47: Genuine Direct Comparative Positive Control with "ส่วน" Conjunction - Contrast between Serum and Plasma is verified', () => {
+        const text = '- Serum: ไม่มี Fibrinogen\n- Plasma: มี Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
     });
 
     // =========================================================================

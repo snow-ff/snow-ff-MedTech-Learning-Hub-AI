@@ -777,7 +777,7 @@ export function extractComparisonEvidence(text: string): {
     const hasBulletContrast = Boolean(contrastInList) || hasAdjectiveContrast || hasExistenceContrast || hasMethodContrast || hasDirectCrossMention;
 
     // Per-property assertion classifier to ensure contrast is linked to the specific property
-    const CLAUSE_SPLIT_REGEX = /(?:[;\n.]+|\s*(?:แต่|ในขณะที่|ขณะที่|ทว่า|ส่วน|โดยที่|ในขณะเดียวกัน|อย่างไรก็ตาม)\s*)/i;
+    const CLAUSE_SPLIT_REGEX = /(?:[;\n.]+|\s*(?:แต่|ในขณะที่|ขณะที่|ทว่า|(?<!สัด|บาง|มี|ใน|เป็น|ปัน|แบ่ง|จัด|ทุก|ราย)ส่วน(?!\s*(?:ประกอบ|กลาง|ต่าง|ใหญ่|น้อย|หนึ่ง|หน้า|หลัง|บน|ล่าง|หัว|ท้าย|ปลาย|ขยาย|เกิน|ควบ|ลด|ร่วม|รวม|บุคคล|ตัว|แบ่ง|ย่อย|ช่วย|ได้เสีย))|โดยที่|ในขณะเดียวกัน|อย่างไรก็ตาม)\s*)/i;
 
     const splitIntoClauses = (text: string): string[] => {
       return text
@@ -814,7 +814,7 @@ export function extractComparisonEvidence(text: string): {
       const propClauses = clauses.filter(c => c.toLowerCase().includes(propLower));
       if (propClauses.length === 0) return 'absent';
 
-      for (const clause of propClauses) {
+      const classifyClause = (clause: string): string => {
         if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
           return 'negative';
         }
@@ -831,15 +831,39 @@ export function extractComparisonEvidence(text: string): {
         if (/(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause)) {
           return 'positive';
         }
+        return 'neutral';
+      };
+
+      const assertions = propClauses.map(classifyClause).filter(a => a !== 'neutral');
+      if (assertions.length === 0) return 'neutral';
+
+      const uniqueAssertions = new Set(assertions);
+      const hasDirectConflict =
+        (uniqueAssertions.has('positive') && uniqueAssertions.has('negative')) ||
+        (uniqueAssertions.has('higher_comp') && uniqueAssertions.has('lower_comp')) ||
+        (uniqueAssertions.has('more_comp') && uniqueAssertions.has('less_comp')) ||
+        (uniqueAssertions.has('thick_comp') && uniqueAssertions.has('thin_comp')) ||
+        (uniqueAssertions.has('thick') && uniqueAssertions.has('thin')) ||
+        (uniqueAssertions.has('quantitative') && uniqueAssertions.has('qualitative'));
+
+      if (hasDirectConflict) {
+        return 'conflict';
       }
-      return 'neutral';
+
+      for (const compType of ['higher_comp', 'lower_comp', 'more_comp', 'less_comp', 'thick_comp', 'thin_comp', 'thick', 'thin', 'quantitative', 'qualitative', 'negative', 'positive']) {
+        if (uniqueAssertions.has(compType)) {
+          return compType;
+        }
+      }
+
+      return assertions[0];
     };
 
     const hasPropertyContrast = (sA: string, sB: string, prop: string): boolean => {
       const a = getPropertyAssertion(sA, prop);
       const b = getPropertyAssertion(sB, prop);
       if (a === 'absent' || b === 'absent') return false;
-      if (a === 'neutral' || b === 'neutral') return false;
+      if (a === 'neutral' || b === 'neutral' || a === 'conflict' || b === 'conflict') return false;
       if (a === b) return false;
       if ((a === 'positive' && b === 'negative') || (a === 'negative' && b === 'positive')) return true;
       if ((a === 'thick' && b === 'thin') || (a === 'thin' && b === 'thick')) return true;
@@ -854,6 +878,9 @@ export function extractComparisonEvidence(text: string): {
     const hasVerifiedDirectComparativeLinkage = (sec: string, otherSub: string, prop: string): boolean => {
       const propLower = prop.toLowerCase();
       if (!sec.toLowerCase().includes(propLower)) {
+        return false;
+      }
+      if (getPropertyAssertion(sec, prop) === 'conflict') {
         return false;
       }
       const mentionsOther = otherSub === subB ? mentionsB : mentionsA;
