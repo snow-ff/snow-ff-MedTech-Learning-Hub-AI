@@ -1709,6 +1709,46 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
         expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
       });
+
+      // =========================================================================
+      // R2: Property-to-Predicate Binding Remediation Cases 40-42
+      // =========================================================================
+      it('Case 40: Cross-Property Predicate Contamination - Predicate of another property must not bind to target property', () => {
+        const text = '- Serum: Fibrinogen อยู่ในระดับปกติ แต่ Albumin สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 41: Property and Reference Predicate Separation - Separate predicate for another property must not validate target property', () => {
+        const text = '- Serum: Fibrinogen อยู่ในระดับปกติ เมื่อเทียบกับ Plasma แต่ Albumin สูงกว่าเกณฑ์อ้างอิง\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(false);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+      });
+
+      it('Case 42: Genuine Direct Comparative Positive Control - Direct comparative statements across both subjects must return isSupported true', () => {
+        const text = '- Serum: ระดับ Fibrinogen สูงกว่า Plasma\n- Plasma: ระดับ Fibrinogen ต่ำกว่า Serum';
+        const evidence = extractComparisonEvidence(text);
+        expect(evidence.isSupported).toBe(true);
+        expect(evidence.subjectA).toBe('Serum');
+        expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
+
+        const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
+      });
     });
 
     // =========================================================================

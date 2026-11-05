@@ -777,31 +777,60 @@ export function extractComparisonEvidence(text: string): {
     const hasBulletContrast = Boolean(contrastInList) || hasAdjectiveContrast || hasExistenceContrast || hasMethodContrast || hasDirectCrossMention;
 
     // Per-property assertion classifier to ensure contrast is linked to the specific property
-    const getPropertyAssertion = (sec: string, prop: string): string => {
-      const pIdx = sec.toLowerCase().indexOf(prop.toLowerCase());
-      if (pIdx < 0) return 'absent';
-      const start = Math.max(0, sec.lastIndexOf(';', pIdx) + 1, sec.lastIndexOf('.', pIdx) + 1, sec.lastIndexOf('\n', pIdx) + 1);
-      let nextBreak = sec.indexOf(';', pIdx);
-      if (nextBreak < 0) nextBreak = sec.indexOf('.', pIdx);
-      if (nextBreak < 0) nextBreak = sec.indexOf('\n', pIdx);
-      const end = nextBreak >= 0 ? nextBreak : sec.length;
-      const clause = sec.slice(start, end).trim();
+    const CLAUSE_SPLIT_REGEX = /(?:[;\n.]+|\s*(?:แต่|ในขณะที่|ขณะที่|ทว่า|ส่วน|โดยที่|ในขณะเดียวกัน|อย่างไรก็ตาม)\s*)/i;
 
-      if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
-        return 'negative';
-      }
-      if (/(?:หนากว่า)/i.test(clause)) return 'thick_comp';
-      if (/(?:บางกว่า)/i.test(clause)) return 'thin_comp';
-      if (/(?:สูงกว่า)/i.test(clause)) return 'higher_comp';
-      if (/(?:ต่ำกว่า)/i.test(clause)) return 'lower_comp';
-      if (/(?:มากกว่า)/i.test(clause)) return 'more_comp';
-      if (/(?:น้อยกว่า)/i.test(clause)) return 'less_comp';
-      if (/(?:หนา(?!\s*ของ))/i.test(clause)) return 'thick';
-      if (/(?:บาง)/i.test(clause)) return 'thin';
-      if (/(?:เชิงปริมาณ|quantitative)/i.test(clause)) return 'quantitative';
-      if (/(?:กึ่งปริมาณ|qualitative)/i.test(clause)) return 'qualitative';
-      if (/(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause)) {
-        return 'positive';
+    const splitIntoClauses = (text: string): string[] => {
+      return text
+        .split(CLAUSE_SPLIT_REGEX)
+        .map(c => c.trim())
+        .filter(Boolean);
+    };
+
+    const GENERIC_QUALIFIER_PROPERTIES = new Set([
+      'ระดับ',
+      'ปริมาณ',
+      'สัดส่วน',
+      'ขนาด',
+      'ความเข้มข้น',
+      'ระยะเวลา',
+      'สภาวะ',
+      'กระบวนการ',
+      'parameter'
+    ]);
+
+    const sortProperties = (props: string[]): string[] => {
+      return Array.from(new Set(props)).sort((a, b) => {
+        const aGen = GENERIC_QUALIFIER_PROPERTIES.has(a.trim());
+        const bGen = GENERIC_QUALIFIER_PROPERTIES.has(b.trim());
+        if (aGen && !bGen) return 1;
+        if (!aGen && bGen) return -1;
+        return b.length - a.length;
+      });
+    };
+
+    const getPropertyAssertion = (sec: string, prop: string): string => {
+      const propLower = prop.toLowerCase();
+      const clauses = splitIntoClauses(sec);
+      const propClauses = clauses.filter(c => c.toLowerCase().includes(propLower));
+      if (propClauses.length === 0) return 'absent';
+
+      for (const clause of propClauses) {
+        if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
+          return 'negative';
+        }
+        if (/(?:หนากว่า)/i.test(clause)) return 'thick_comp';
+        if (/(?:บางกว่า)/i.test(clause)) return 'thin_comp';
+        if (/(?:สูงกว่า)/i.test(clause)) return 'higher_comp';
+        if (/(?:ต่ำกว่า)/i.test(clause)) return 'lower_comp';
+        if (/(?:มากกว่า)/i.test(clause)) return 'more_comp';
+        if (/(?:น้อยกว่า)/i.test(clause)) return 'less_comp';
+        if (/(?:หนา(?!\s*ของ))/i.test(clause)) return 'thick';
+        if (/(?:บาง)/i.test(clause)) return 'thin';
+        if (/(?:เชิงปริมาณ|quantitative)/i.test(clause)) return 'quantitative';
+        if (/(?:กึ่งปริมาณ|qualitative)/i.test(clause)) return 'qualitative';
+        if (/(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause)) {
+          return 'positive';
+        }
       }
       return 'neutral';
     };
@@ -823,7 +852,8 @@ export function extractComparisonEvidence(text: string): {
 
     // Helper to verify direct comparative evidence linkage between section, property, predicate, and other subject
     const hasVerifiedDirectComparativeLinkage = (sec: string, otherSub: string, prop: string): boolean => {
-      if (!sec.toLowerCase().includes(prop.toLowerCase())) {
+      const propLower = prop.toLowerCase();
+      if (!sec.toLowerCase().includes(propLower)) {
         return false;
       }
       const mentionsOther = otherSub === subB ? mentionsB : mentionsA;
@@ -831,9 +861,9 @@ export function extractComparisonEvidence(text: string): {
         return false;
       }
 
-      const clauses = sec.split(/[;\n.]+/).map(c => c.trim()).filter(Boolean);
+      const clauses = splitIntoClauses(sec);
       for (const clause of clauses) {
-        if (!clause.toLowerCase().includes(prop.toLowerCase()) || !mentionsOther(clause)) {
+        if (!clause.toLowerCase().includes(propLower) || !mentionsOther(clause)) {
           continue;
         }
         if (!COMPARATIVE_DEGREE_PAIR_REGEX.test(clause)) {
@@ -895,8 +925,8 @@ export function extractComparisonEvidence(text: string): {
 
     // Check 2: Shared general property keywords present in BOTH bullet sections (requires contrast evidence on that property)
     if (!resolvedProperty) {
-      const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
-      const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+      const propsInA = sortProperties(Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]));
+      const propsInB = sortProperties(Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]));
 
       for (const pa of propsInA) {
         for (const pb of propsInB) {
@@ -915,8 +945,8 @@ export function extractComparisonEvidence(text: string): {
 
     // Check 3: One bullet has property and an explicit comparative predicate connects it directly to the other subject
     if (!resolvedProperty) {
-      const propsInA = Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
-      const propsInB = Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]);
+      const propsInA = sortProperties(Array.from(secA.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]));
+      const propsInB = sortProperties(Array.from(secB.matchAll(new RegExp(PROPERTY_KEYWORDS_REGEX, 'gi'))).map(m => m[0]));
 
       for (const pa of propsInA) {
         if (hasVerifiedDirectComparativeLinkage(secA, subB, pa)) {
