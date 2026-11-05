@@ -808,74 +808,213 @@ export function extractComparisonEvidence(text: string): {
       });
     };
 
-    const getPropertyAssertion = (sec: string, prop: string): string => {
+    const REFERENCE_RANGE_REGEX = /(?:เกณฑ์อ้างอิง|ค่าอ้างอิง|ค่าปกติ|มาตรฐาน|ระดับปกติ|ค่ามาตรฐาน|reference\s*range)/i;
+
+    type AssertionType =
+      | 'positive'
+      | 'negative'
+      | 'higher_comp'
+      | 'lower_comp'
+      | 'more_comp'
+      | 'less_comp'
+      | 'thick_comp'
+      | 'thin_comp'
+      | 'thick'
+      | 'thin'
+      | 'quantitative'
+      | 'qualitative'
+      | 'negated_comp';
+
+    type TargetKind = 'other_subject' | 'reference_range' | 'none' | 'foreign' | 'self';
+
+    interface StructuredAssertion {
+      type: AssertionType;
+      targetKind: TargetKind;
+      rawTarget?: string;
+    }
+
+    const getPropertyAssertion = (sec: string, prop: string, targetSub?: string): string => {
       const propLower = prop.toLowerCase();
       const clauses = splitIntoClauses(sec);
       const propClauses = clauses.filter(c => c.toLowerCase().includes(propLower));
       if (propClauses.length === 0) return 'absent';
 
-      const extractClauseAssertions = (clause: string): string[] => {
-        const found: string[] = [];
+      const targetTokens = targetSub
+        ? (targetSub === subB ? tokensB : (targetSub === subA ? tokensA : getSubjectTokens(targetSub, '')))
+        : tokensB;
+      const selfTokens = targetSub
+        ? (targetSub === subB ? tokensA : tokensB)
+        : tokensA;
 
-        if (/(?:ไม่สามารถ|ไม่พบ|ไม่มี|ปราศจาก|ตรวจไม่พบ|ไม่ปรากฏ)/i.test(clause)) {
-          found.push('negative');
+      const otherPattern = targetTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+      const selfPattern = selfTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
+      const extractClauseStructuredAssertions = (clause: string): StructuredAssertion[] => {
+        const found: StructuredAssertion[] = [];
+
+        // 1. Existence assertions: Extract BOTH negative and positive independently (never suppress one because of the other)
+        const NEGATIVE_EXISTENCE_REGEX = /(?:ไม่สามารถ\s*(?:ที่จะ)?\s*(?:ตรวจพบ|พบ)|ตรวจไม่พบ|ไม่พบ|ไม่ได้พบ|มิได้พบ|ไม่เคยพบ|ยังไม่พบ|ไม่มี|ไม่ได้มี|ไม่เคยมี|ปราศจาก|ไม่ปรากฏ)/gi;
+        if (NEGATIVE_EXISTENCE_REGEX.test(clause)) {
+          found.push({ type: 'negative', targetKind: 'none' });
+        }
+        const cleanedForPositive = clause.replace(NEGATIVE_EXISTENCE_REGEX, ' ');
+        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย|ตรวจไม่|ยังไม่)\s*(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(cleanedForPositive)) {
+          found.push({ type: 'positive', targetKind: 'none' });
         }
 
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*หนากว่า/i.test(clause)) found.push('thick_comp');
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*บางกว่า/i.test(clause)) found.push('thin_comp');
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*สูงกว่า/i.test(clause)) found.push('higher_comp');
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*ต่ำกว่า/i.test(clause)) found.push('lower_comp');
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*มากกว่า/i.test(clause)) found.push('more_comp');
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*น้อยกว่า/i.test(clause)) found.push('less_comp');
+        // 2. Qualitative / Quantitative assertions
+        if (/เชิงปริมาณ|quantitative/i.test(clause)) found.push({ type: 'quantitative', targetKind: 'none' });
+        if (/กึ่งปริมาณ|qualitative/i.test(clause)) found.push({ type: 'qualitative', targetKind: 'none' });
 
+        // 3. Negated comparatives: Must NOT count as affirmative comparative degree
+        const negatedCompRegex = /(?:ไม่|ไม่ได้|มิได้|ไม่เคย)\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/i;
+        if (negatedCompRegex.test(clause)) {
+          found.push({ type: 'negated_comp', targetKind: 'none' });
+        }
+
+        // 4. Affirmative comparative predicates with strict target isolation
+        const compPredRegex = /(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*(หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/gi;
+        let match: RegExpExecArray | null;
+        while ((match = compPredRegex.exec(clause)) !== null) {
+          const pred = match[1];
+          let type: AssertionType;
+          if (pred === 'หนากว่า') type = 'thick_comp';
+          else if (pred === 'บางกว่า') type = 'thin_comp';
+          else if (pred === 'สูงกว่า') type = 'higher_comp';
+          else if (pred === 'ต่ำกว่า') type = 'lower_comp';
+          else if (pred === 'มากกว่า') type = 'more_comp';
+          else type = 'less_comp';
+
+          // Extract target from text immediately following the comparative predicate
+          const rest = clause.slice(match.index + match[0].length).replace(/^[\s:]*(?:ใน\s*)?/, '');
+          let targetKind: TargetKind = 'none';
+          let rawTarget: string | undefined = undefined;
+
+          if (REFERENCE_RANGE_REGEX.test(rest) && rest.search(REFERENCE_RANGE_REGEX) === 0) {
+            const m = rest.match(REFERENCE_RANGE_REGEX);
+            targetKind = 'reference_range';
+            rawTarget = m ? m[0] : undefined;
+          } else if (otherPattern && new RegExp(`^(?:${otherPattern})`, 'i').test(rest)) {
+            const m = rest.match(new RegExp(`^(?:${otherPattern})`, 'i'));
+            targetKind = 'other_subject';
+            rawTarget = m ? m[0] : undefined;
+          } else if (selfPattern && new RegExp(`^(?:${selfPattern})`, 'i').test(rest)) {
+            const m = rest.match(new RegExp(`^(?:${selfPattern})`, 'i'));
+            targetKind = 'self';
+            rawTarget = m ? m[0] : undefined;
+          } else {
+            // Check if preceded by "เมื่อเทียบกับ [other]" or "เทียบกับ [other]"
+            const preClause = clause.slice(0, match.index);
+            const compWithOtherMatch = otherPattern && new RegExp(`(?:เมื่อเทียบกับ|เทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})`, 'i').test(preClause);
+            if (compWithOtherMatch) {
+              targetKind = 'other_subject';
+              rawTarget = targetSub;
+            } else {
+              // Check first noun/token
+              const nounMatch = rest.match(/^([A-Za-z0-9\u0e00-\u0e7f\-_/]{2,30})/);
+              if (nounMatch && !/^(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ที่มี|ที่มีค่า)$/.test(nounMatch[1])) {
+                targetKind = 'foreign';
+                rawTarget = nounMatch[1];
+              }
+            }
+          }
+
+          found.push({ type, targetKind, rawTarget });
+        }
+
+        // 5. Positive adjectives (thick / thin) without comparative suffix
         if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*หนา(?!\s*ของ)/i.test(clause) && !/(?:หนากว่า)/i.test(clause)) {
-          found.push('thick');
+          found.push({ type: 'thick', targetKind: 'none' });
         }
         if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\s*บาง(?!\s*(?:กว่า|ส่วน))/i.test(clause)) {
-          found.push('thin');
-        }
-
-        if (/เชิงปริมาณ|quantitative/i.test(clause)) found.push('quantitative');
-        if (/กึ่งปริมาณ|qualitative/i.test(clause)) found.push('qualitative');
-
-        if (/(?<!ไม่|ไม่ได้|มิได้|ไม่เคย|ตรวจไม่|ยังไม่)\s*(?:ตรวจพบ|พบ|มี|ยังมี)/i.test(clause) && !found.includes('negative')) {
-          found.push('positive');
+          found.push({ type: 'thin', targetKind: 'none' });
         }
 
         return found;
       };
 
-      const allAssertions: string[] = [];
+      const allAssertions: StructuredAssertion[] = [];
       for (const clause of propClauses) {
-        allAssertions.push(...extractClauseAssertions(clause));
+        allAssertions.push(...extractClauseStructuredAssertions(clause));
       }
       if (allAssertions.length === 0) return 'neutral';
 
-      const uniqueAssertions = new Set(allAssertions);
-      const hasDirectConflict =
-        (uniqueAssertions.has('positive') && uniqueAssertions.has('negative')) ||
-        (uniqueAssertions.has('higher_comp') && uniqueAssertions.has('lower_comp')) ||
-        (uniqueAssertions.has('more_comp') && uniqueAssertions.has('less_comp')) ||
-        (uniqueAssertions.has('thick_comp') && uniqueAssertions.has('thin_comp')) ||
-        (uniqueAssertions.has('thick') && uniqueAssertions.has('thin')) ||
-        (uniqueAssertions.has('quantitative') && uniqueAssertions.has('qualitative'));
-
-      if (hasDirectConflict) {
+      // Conflict Detection:
+      // A. Intrinsic existence conflict: Positive vs Negative
+      const hasPositive = allAssertions.some(a => a.type === 'positive');
+      const hasNegative = allAssertions.some(a => a.type === 'negative');
+      if (hasPositive && hasNegative) {
         return 'conflict';
       }
 
-      for (const compType of ['higher_comp', 'lower_comp', 'more_comp', 'less_comp', 'thick_comp', 'thin_comp', 'thick', 'thin', 'quantitative', 'qualitative', 'negative', 'positive']) {
-        if (uniqueAssertions.has(compType)) {
-          return compType;
+      // B. Intrinsic qualitative vs quantitative conflict
+      const hasQuant = allAssertions.some(a => a.type === 'quantitative');
+      const hasQual = allAssertions.some(a => a.type === 'qualitative');
+      if (hasQuant && hasQual) {
+        return 'conflict';
+      }
+
+      // C. Intrinsic thickness conflict
+      const hasThick = allAssertions.some(a => a.type === 'thick');
+      const hasThin = allAssertions.some(a => a.type === 'thin');
+      if (hasThick && hasThin) {
+        return 'conflict';
+      }
+
+      // D. Comparative conflict against the SAME target kind and subject:
+      const comparatives = allAssertions.filter(a =>
+        ['higher_comp', 'lower_comp', 'more_comp', 'less_comp', 'thick_comp', 'thin_comp'].includes(a.type)
+      );
+
+      for (let i = 0; i < comparatives.length; i++) {
+        for (let j = i + 1; j < comparatives.length; j++) {
+          const c1 = comparatives[i];
+          const c2 = comparatives[j];
+          const sameTarget = (c1.targetKind === c2.targetKind && c1.targetKind !== 'none') ||
+            (c1.targetKind === 'none' && c2.targetKind === 'none');
+          if (sameTarget) {
+            if ((c1.type === 'higher_comp' && c2.type === 'lower_comp') ||
+                (c1.type === 'lower_comp' && c2.type === 'higher_comp') ||
+                (c1.type === 'more_comp' && c2.type === 'less_comp') ||
+                (c1.type === 'less_comp' && c2.type === 'more_comp') ||
+                (c1.type === 'thick_comp' && c2.type === 'thin_comp') ||
+                (c1.type === 'thin_comp' && c2.type === 'thick_comp')) {
+              return 'conflict';
+            }
+          }
         }
       }
 
-      return allAssertions[0];
+      // Selection priority:
+      // 1. If an affirmative comparative explicitly targeting 'other_subject' exists, prefer it
+      const otherComp = comparatives.find(c => c.targetKind === 'other_subject');
+      if (otherComp) {
+        return otherComp.type;
+      }
+
+      // 2. Any other comparative (unanchored or reference range)
+      if (comparatives.length > 0) {
+        return comparatives[0].type;
+      }
+
+      // 3. Adjectives, method, existence
+      for (const type of ['thick', 'thin', 'quantitative', 'qualitative', 'negative', 'positive'] as AssertionType[]) {
+        if (allAssertions.some(a => a.type === type)) {
+          return type;
+        }
+      }
+
+      // If only negated_comp was found, return 'neutral'
+      if (allAssertions.every(a => a.type === 'negated_comp')) {
+        return 'neutral';
+      }
+
+      return 'neutral';
     };
 
     const hasPropertyContrast = (sA: string, sB: string, prop: string): boolean => {
-      const a = getPropertyAssertion(sA, prop);
-      const b = getPropertyAssertion(sB, prop);
+      const a = getPropertyAssertion(sA, prop, subB);
+      const b = getPropertyAssertion(sB, prop, subA);
       if (a === 'absent' || b === 'absent') return false;
       if (a === 'neutral' || b === 'neutral' || a === 'conflict' || b === 'conflict') return false;
       if (a === b) return false;
@@ -894,7 +1033,7 @@ export function extractComparisonEvidence(text: string): {
       if (!sec.toLowerCase().includes(propLower)) {
         return false;
       }
-      if (getPropertyAssertion(sec, prop) === 'conflict') {
+      if (getPropertyAssertion(sec, prop, otherSub) === 'conflict') {
         return false;
       }
       const mentionsOther = otherSub === subB ? mentionsB : mentionsA;
@@ -908,10 +1047,6 @@ export function extractComparisonEvidence(text: string): {
           continue;
         }
         if (!COMPARATIVE_DEGREE_PAIR_REGEX.test(clause)) {
-          continue;
-        }
-        // Reject comparison against external reference ranges
-        if (/(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\s*(?:ใน\s*)?(?:เกณฑ์อ้างอิง|ค่าอ้างอิง|ค่าปกติ|มาตรฐาน|ระดับปกติ|ค่ามาตรฐาน)/i.test(clause)) {
           continue;
         }
         // Reject mention of other subject as a table/reference source rather than comparison target

@@ -1842,16 +1842,17 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
       // =========================================================================
       // R2: Assertion Classification Final Review Cases 48-52
       // =========================================================================
-      it('Case 48: Same-Clause Contradiction - Opposing comparative predicates within same clause must trigger conflict and fail-closed', () => {
+      it('Case 48: Multi-Target Predicate Disambiguation - Higher than other subject while lower than reference range must be supported', () => {
         const text = '- Serum: Fibrinogen สูงกว่า Plasma และต่ำกว่าเกณฑ์อ้างอิง\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
         const evidence = extractComparisonEvidence(text);
-        expect(evidence.isSupported).toBe(false);
+        expect(evidence.isSupported).toBe(true);
         expect(evidence.subjectA).toBe('Serum');
         expect(evidence.subjectB).toBe('Plasma');
+        expect(evidence.property).toBe('Fibrinogen');
 
         const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
-        expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
-        expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        expect(formatted).toContain('Serum กับ Plasma');
       });
 
       it('Case 49: Negated Comparative - Negated comparative predicate (ไม่สูงกว่า) must not be classified as higher_comp', () => {
@@ -1903,6 +1904,134 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
         const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
         expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         expect(formatted).toContain('Serum กับ Plasma');
+      });
+
+      // =========================================================================
+      // R2: Mandatory Root Cause Fix - Tests A-J (Semantic & Target Integrity)
+      // =========================================================================
+      describe('R2 Mandatory Root Cause: Semantic Assertion & Comparison Target Tests A-J', () => {
+        it('Test A: Distinct targets (higher than Plasma but lower than Reference Range) is supported without false conflict', () => {
+          const text = '- Serum: Fibrinogen สูงกว่า Plasma แต่ต่ำกว่าเกณฑ์อ้างอิง\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(true);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+          expect(evidence.property).toBe('Fibrinogen');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+          expect(formatted).toContain('Serum กับ Plasma');
+        });
+
+        it('Test B: Opposing predicates against the SAME target (higher than Plasma AND lower than Plasma) must trigger conflict and fail-closed', () => {
+          const text = '- Serum: Fibrinogen สูงกว่า Plasma และต่ำกว่า Plasma\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test C: Negated comparative (ไม่สูงกว่า Plasma) must not be classified as affirmative higher_comp and must fail-closed', () => {
+          const text = '- Serum: ระดับ Fibrinogen ไม่สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test D: Affirmative comparative targeting other subject (สูงกว่า Plasma) is supported', () => {
+          const text = '- Serum: ระดับ Fibrinogen สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(true);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+          expect(evidence.property).toBe('Fibrinogen');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+          expect(formatted).toContain('Serum กับ Plasma');
+        });
+
+        it('Test E: Intrinsic existence conflict (negative then positive within same subject/clause) must trigger conflict and fail-closed', () => {
+          const text = '- Serum: ในระยะแรกไม่พบ Fibrinogen ก่อนจะตรวจพบในระยะหลัง\n- Plasma: ตรวจพบ Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test F: Intrinsic existence conflict (positive then negative within same subject/clause) must trigger conflict and fail-closed', () => {
+          const text = '- Serum: ในระยะแรกตรวจพบ Fibrinogen ก่อนจะไม่พบในระยะหลัง\n- Plasma: ตรวจพบ Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test G: Disjoint properties must not cross-pair predicates across properties', () => {
+          const text = '- Serum: Fibrinogen ตรวจไม่พบ แต่ Albumin ตรวจพบ\n- Plasma: Fibrinogen ตรวจไม่พบ แต่ Albumin ตรวจพบ';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test H: Negation in separate clause must not bleed into adjacent property clause', () => {
+          const text = '- Serum: Fibrinogen อยู่ในระดับปกติ ส่วน Albumin ตรวจไม่พบ\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test I: Multiple properties with specific target matching binds predicate directly to correct property', () => {
+          const text = '- Serum: Fibrinogen สูงกว่า Plasma แต่ Albumin ต่ำกว่า Plasma\n- Plasma: Fibrinogen ต่ำกว่า Serum แต่ Albumin สูงกว่า Serum';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(true);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+          expect(evidence.property).toBe('Fibrinogen');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+          expect(formatted).toContain('Serum กับ Plasma');
+        });
+
+        it('Test J: Ambiguous non-contrast data fails closed', () => {
+          const text = '- Serum: มีข้อมูล Fibrinogen\n- Plasma: มีข้อมูล Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
       });
     });
 
