@@ -47,7 +47,6 @@ import { CourseItem, LearningDocument, EvidenceStatus, AcademicVerificationRepor
 import { DocumentLibrary } from './components/DocumentLibrary';
 import { LearningGuideModal } from './components/LearningGuideModal';
 import { LearningDomainCatalogView } from './components/LearningDomainCatalogView';
-import { CourseNotesView } from './components/CourseNotesView';
 import { SaveNoteModal } from './components/SaveNoteModal';
 import { CourseNote, getCourseNotes } from './lib/courseNotesStorage';
 import { hasDtmLearningGuide } from './data/dtmLearningGuides';
@@ -220,7 +219,7 @@ export function getMockResponse(prompt: string): string {
 export default function App() {
   const { user, loading: authLoading, error: authError, signInWithGoogle, signOutUser, clearError } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'chat' | 'catalog' | 'documents' | 'vocabulary' | 'references' | 'curriculum' | 'notes'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'catalog' | 'documents' | 'vocabulary' | 'references' | 'curriculum'>('chat');
   const [activeStudyWorkflow, setActiveStudyWorkflow] = useState<StudyWorkflowType | null>(null);
   const [activeDocument, setActiveDocument] = useState<LearningDocument | null>(null);
   const [selectedLearningCourse, setSelectedLearningCourse] = useState<CourseItem | null>(null);
@@ -323,15 +322,6 @@ export default function App() {
     refreshCourseNotes();
     setToastMessage(`บันทึกสรุป "${noteTitle}" ลงในวิชา ${courseCode} เรียบร้อยแล้ว`);
     setTimeout(() => setToastMessage(null), 4000);
-  };
-
-  const handleAskAiWithNote = (note: CourseNote) => {
-    setActiveTab('chat');
-    const followUpPrompt = `[ทบทวนเนื้อหา] ช่วยสรุปประเด็นสำคัญและตั้งคำถามทดสอบความเข้าใจ 2 ข้อ จากบันทึกสรุปวิชา ${note.courseCode} (${note.courseTitle}) หัวข้อ "${note.title}":\n\n${note.content}`;
-    setInputQuery(followUpPrompt);
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 100);
   };
 
   // Curriculum Tab States (Track A4)
@@ -842,20 +832,6 @@ export default function App() {
             <GraduationCap className="w-4 h-4" />
             หลักสูตร DTM 2567
           </button>
-          <button
-            onClick={() => setActiveTab('notes')}
-            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-              activeTab === 'notes'
-                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-            }`}
-          >
-            <Bookmark className="w-4 h-4 text-cyan-400" />
-            <span>โน้ตสรุป</span>
-            <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[10px] text-cyan-300 font-mono">
-              {courseNotes.length}
-            </span>
-          </button>
         </nav>
 
         {/* Zone 3: Authentication & Status Modal Trigger */}
@@ -1015,15 +991,6 @@ export default function App() {
         >
           หลักสูตร
         </button>
-        <button
-          onClick={() => setActiveTab('notes')}
-          className={`py-2 px-3 rounded-lg text-xs font-medium text-center shrink-0 sm:flex-1 min-h-[40px] flex items-center justify-center gap-1 transition-all ${
-            activeTab === 'notes' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 bg-slate-950 hover:text-slate-200'
-          }`}
-        >
-          <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-          <span>โน้ต ({courseNotes.length})</span>
-        </button>
       </div>
 
       {/* MAIN CONTENT AREA */}
@@ -1040,14 +1007,6 @@ export default function App() {
                 <div className="text-xs text-slate-400 hidden sm:block">
                   หลักสูตร DTM 2567 มหาวิทยาลัยวลัยลักษณ์
                 </div>
-                <button
-                  onClick={() => setActiveTab('notes')}
-                  title="เปิดดูโน้ตสรุปรายวิชา"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white text-xs font-medium transition-all border border-slate-700 shadow-sm min-h-[44px] sm:min-h-[38px]"
-                >
-                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>โน้ตสรุป ({courseNotes.length})</span>
-                </button>
                 <button
                   onClick={handleClearChat}
                   title="ล้างประวัติแชท"
@@ -1080,14 +1039,6 @@ export default function App() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap shrink-0">
-                  <button
-                    onClick={() => setActiveTab('notes')}
-                    className="px-2.5 py-1.5 rounded-lg bg-indigo-900/90 hover:bg-indigo-800 text-indigo-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-indigo-700/60 min-h-[36px]"
-                    title="เปิดดูโน้ตสรุปของวิชานี้"
-                  >
-                    <Bookmark className="w-3.5 h-3.5 text-indigo-300" />
-                    <span>โน้ตวิชานี้</span>
-                  </button>
                   <button
                     onClick={() => setActiveLearningGuideCourse(selectedLearningCourse)}
                     className="px-2.5 py-1.5 rounded-lg bg-indigo-900 hover:bg-indigo-800 text-indigo-200 text-xs font-medium flex items-center gap-1.5 transition-colors border border-indigo-700/60 min-h-[36px]"
@@ -2760,18 +2711,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'notes' && (
-          <div className="flex-1 flex flex-col bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden shadow-xl min-h-[650px]">
-            <CourseNotesView
-              notes={courseNotes}
-              onRefreshNotes={refreshCourseNotes}
-              selectedCourse={selectedLearningCourse}
-              onSelectCourse={setSelectedLearningCourse}
-              onAskAiWithNote={handleAskAiWithNote}
-            />
           </div>
         )}
       </main>

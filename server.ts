@@ -823,7 +823,13 @@ export function extractComparisonEvidence(text: string): {
       | 'thin'
       | 'quantitative'
       | 'qualitative'
-      | 'negated_comp';
+      | 'negated_comp'
+      | 'negated_higher_comp'
+      | 'negated_lower_comp'
+      | 'negated_more_comp'
+      | 'negated_less_comp'
+      | 'negated_thick_comp'
+      | 'negated_thin_comp';
 
     type TargetKind = 'other_subject' | 'reference_range' | 'none' | 'foreign' | 'self';
 
@@ -832,6 +838,31 @@ export function extractComparisonEvidence(text: string): {
       targetKind: TargetKind;
       rawTarget?: string;
     }
+
+    const areSameTarget = (a: StructuredAssertion, b: StructuredAssertion): boolean => {
+      if (a.targetKind !== b.targetKind) {
+        return false;
+      }
+      if (a.targetKind === 'none') {
+        return true;
+      }
+      if (a.targetKind === 'other_subject') {
+        return true;
+      }
+      if (a.targetKind === 'reference_range') {
+        return true;
+      }
+      if (a.targetKind === 'self') {
+        return true;
+      }
+      if (a.targetKind === 'foreign') {
+        const tA = (a.rawTarget || '').trim().toLowerCase();
+        const tB = (b.rawTarget || '').trim().toLowerCase();
+        if (!tA || !tB) return false;
+        return tA === tB || tA.includes(tB) || tB.includes(tA);
+      }
+      return false;
+    };
 
     const getPropertyAssertion = (sec: string, prop: string, targetSub?: string): string => {
       const propLower = prop.toLowerCase();
@@ -866,10 +897,56 @@ export function extractComparisonEvidence(text: string): {
         if (/เชิงปริมาณ|quantitative/i.test(clause)) found.push({ type: 'quantitative', targetKind: 'none' });
         if (/กึ่งปริมาณ|qualitative/i.test(clause)) found.push({ type: 'qualitative', targetKind: 'none' });
 
-        // 3. Negated comparatives: Must NOT count as affirmative comparative degree
-        const negatedCompRegex = /(?:ไม่|ไม่ได้|มิได้|ไม่เคย)\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/i;
-        if (negatedCompRegex.test(clause)) {
-          found.push({ type: 'negated_comp', targetKind: 'none' });
+        // 3. Negated comparatives with strict target isolation
+        const negatedCompPredRegex = /(?:ไม่|ไม่ได้|มิได้|ไม่เคย)\s*(หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/gi;
+        let negMatch: RegExpExecArray | null;
+        while ((negMatch = negatedCompPredRegex.exec(clause)) !== null) {
+          const pred = negMatch[1];
+          let type: AssertionType;
+          if (pred === 'หนากว่า') type = 'negated_thick_comp';
+          else if (pred === 'บางกว่า') type = 'negated_thin_comp';
+          else if (pred === 'สูงกว่า') type = 'negated_higher_comp';
+          else if (pred === 'ต่ำกว่า') type = 'negated_lower_comp';
+          else if (pred === 'มากกว่า') type = 'negated_more_comp';
+          else type = 'negated_less_comp';
+
+          const rest = clause.slice(negMatch.index + negMatch[0].length).replace(/^[\s:]*(?:ใน\s*)?/, '');
+          let targetKind: TargetKind = 'none';
+          let rawTarget: string | undefined = undefined;
+
+          if (REFERENCE_RANGE_REGEX.test(rest) && rest.search(REFERENCE_RANGE_REGEX) === 0) {
+            const m = rest.match(REFERENCE_RANGE_REGEX);
+            targetKind = 'reference_range';
+            rawTarget = m ? m[0] : undefined;
+          } else if (otherPattern && new RegExp(`^(?:${otherPattern})`, 'i').test(rest)) {
+            const m = rest.match(new RegExp(`^(?:${otherPattern})`, 'i'));
+            targetKind = 'other_subject';
+            rawTarget = m ? m[0] : undefined;
+          } else if (selfPattern && new RegExp(`^(?:${selfPattern})`, 'i').test(rest)) {
+            const m = rest.match(new RegExp(`^(?:${selfPattern})`, 'i'));
+            targetKind = 'self';
+            rawTarget = m ? m[0] : undefined;
+          } else {
+            const preClause = clause.slice(0, negMatch.index);
+            const compWithOtherMatch = otherPattern && new RegExp(`(?:เมื่อเทียบกับ|เทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})`, 'i').test(preClause);
+            if (compWithOtherMatch) {
+              targetKind = 'other_subject';
+              rawTarget = targetSub;
+            } else if (/^(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ขณะที่|ในขณะที่|ที่มี|ที่มีค่า)(?:\s+|$|[A-Za-z0-9\u0e00-\u0e7f])/i.test(rest)) {
+              targetKind = 'none';
+            } else {
+              const nounMatch = rest.match(/^([A-Za-z0-9\u0e00-\u0e7f\-_/]+(?:\s+[A-Za-z0-9\u0e00-\u0e7f\-_/]+)?)/);
+              if (nounMatch) {
+                const cleanedNoun = nounMatch[1].trim();
+                if (!/(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ขณะที่|ในขณะที่|หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/i.test(cleanedNoun)) {
+                  targetKind = 'foreign';
+                  rawTarget = cleanedNoun;
+                }
+              }
+            }
+          }
+
+          found.push({ type, targetKind, rawTarget });
         }
 
         // 4. Affirmative comparative predicates with strict target isolation
@@ -909,12 +986,16 @@ export function extractComparisonEvidence(text: string): {
             if (compWithOtherMatch) {
               targetKind = 'other_subject';
               rawTarget = targetSub;
+            } else if (/^(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ขณะที่|ในขณะที่|ที่มี|ที่มีค่า)(?:\s+|$|[A-Za-z0-9\u0e00-\u0e7f])/i.test(rest)) {
+              targetKind = 'none';
             } else {
-              // Check first noun/token
-              const nounMatch = rest.match(/^([A-Za-z0-9\u0e00-\u0e7f\-_/]{2,30})/);
-              if (nounMatch && !/^(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ที่มี|ที่มีค่า)$/.test(nounMatch[1])) {
-                targetKind = 'foreign';
-                rawTarget = nounMatch[1];
+              const nounMatch = rest.match(/^([A-Za-z0-9\u0e00-\u0e7f\-_/]+(?:\s+[A-Za-z0-9\u0e00-\u0e7f\-_/]+)?)/);
+              if (nounMatch) {
+                const cleanedNoun = nounMatch[1].trim();
+                if (!/(?:และ|แต่|หรือ|กับ|ส่วน|โดย|ซึ่ง|ขณะที่|ในขณะที่|หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|มากกว่า|น้อยกว่า)/i.test(cleanedNoun)) {
+                  targetKind = 'foreign';
+                  rawTarget = cleanedNoun;
+                }
               }
             }
           }
@@ -930,6 +1011,21 @@ export function extractComparisonEvidence(text: string): {
           found.push({ type: 'thin', targetKind: 'none' });
         }
 
+        // 6. Check clause-level coexistence of Affirmative & Negated comparatives
+        const clauseAffs = found.filter(a =>
+          ['higher_comp', 'lower_comp', 'more_comp', 'less_comp', 'thick_comp', 'thin_comp'].includes(a.type)
+        );
+        const clauseNegs = found.filter(a =>
+          ['negated_higher_comp', 'negated_lower_comp', 'negated_more_comp', 'negated_less_comp', 'negated_thick_comp', 'negated_thin_comp'].includes(a.type)
+        );
+        if (clauseAffs.length > 0 && clauseNegs.length > 0) {
+          if (clauseAffs.some(a => a.targetKind === 'none') || clauseNegs.some(a => a.targetKind === 'none')) {
+            found.push({ type: 'conflict' as any, targetKind: 'none' });
+          } else if (clauseAffs.some(a => clauseNegs.some(n => areSameTarget(a, n)))) {
+            found.push({ type: 'conflict' as any, targetKind: 'none' });
+          }
+        }
+
         return found;
       };
 
@@ -938,6 +1034,10 @@ export function extractComparisonEvidence(text: string): {
         allAssertions.push(...extractClauseStructuredAssertions(clause));
       }
       if (allAssertions.length === 0) return 'neutral';
+
+      if (allAssertions.some(a => (a.type as string) === 'conflict')) {
+        return 'conflict';
+      }
 
       // Conflict Detection:
       // A. Intrinsic existence conflict: Positive vs Negative
@@ -961,18 +1061,20 @@ export function extractComparisonEvidence(text: string): {
         return 'conflict';
       }
 
-      // D. Comparative conflict against the SAME target kind and subject:
+      // D. Comparative conflict against the SAME target kind and rawTarget:
       const comparatives = allAssertions.filter(a =>
         ['higher_comp', 'lower_comp', 'more_comp', 'less_comp', 'thick_comp', 'thin_comp'].includes(a.type)
       );
+      const negatedComparatives = allAssertions.filter(a =>
+        ['negated_higher_comp', 'negated_lower_comp', 'negated_more_comp', 'negated_less_comp', 'negated_thick_comp', 'negated_thin_comp'].includes(a.type)
+      );
 
+      // D1. Affirmative vs Affirmative conflict on SAME target
       for (let i = 0; i < comparatives.length; i++) {
         for (let j = i + 1; j < comparatives.length; j++) {
           const c1 = comparatives[i];
           const c2 = comparatives[j];
-          const sameTarget = (c1.targetKind === c2.targetKind && c1.targetKind !== 'none') ||
-            (c1.targetKind === 'none' && c2.targetKind === 'none');
-          if (sameTarget) {
+          if (areSameTarget(c1, c2)) {
             if ((c1.type === 'higher_comp' && c2.type === 'lower_comp') ||
                 (c1.type === 'lower_comp' && c2.type === 'higher_comp') ||
                 (c1.type === 'more_comp' && c2.type === 'less_comp') ||
@@ -985,14 +1087,44 @@ export function extractComparisonEvidence(text: string): {
         }
       }
 
-      // Selection priority:
+      // D2. Affirmative vs Negated conflict on SAME target
+      for (const aff of comparatives) {
+        for (const neg of negatedComparatives) {
+          if (areSameTarget(aff, neg)) {
+            if ((aff.type === 'higher_comp' && neg.type === 'negated_higher_comp') ||
+                (aff.type === 'lower_comp' && neg.type === 'negated_lower_comp') ||
+                (aff.type === 'more_comp' && neg.type === 'negated_more_comp') ||
+                (aff.type === 'less_comp' && neg.type === 'negated_less_comp') ||
+                (aff.type === 'thick_comp' && neg.type === 'negated_thick_comp') ||
+                (aff.type === 'thin_comp' && neg.type === 'negated_thin_comp')) {
+              return 'conflict';
+            }
+          }
+        }
+      }
+
+      // Selection priority with Negation Guard:
+      // If there is any negated comparative targeting 'other_subject', the affirmative relation with 'other_subject' is negated!
+      const negOther = negatedComparatives.find(c => c.targetKind === 'other_subject');
+      if (negOther) {
+        if (comparatives.some(c => c.targetKind === 'other_subject')) {
+          return 'conflict';
+        }
+        return 'neutral';
+      }
+
+      // If there is an unanchored negated comparative whose scope cannot be proven separate:
+      if (negatedComparatives.some(c => c.targetKind === 'none')) {
+        return 'neutral';
+      }
+
       // 1. If an affirmative comparative explicitly targeting 'other_subject' exists, prefer it
       const otherComp = comparatives.find(c => c.targetKind === 'other_subject');
       if (otherComp) {
         return otherComp.type;
       }
 
-      // 2. Any other comparative (unanchored or reference range)
+      // 2. Any other comparative (unanchored, reference range, or foreign)
       if (comparatives.length > 0) {
         return comparatives[0].type;
       }
@@ -1002,11 +1134,6 @@ export function extractComparisonEvidence(text: string): {
         if (allAssertions.some(a => a.type === type)) {
           return type;
         }
-      }
-
-      // If only negated_comp was found, return 'neutral'
-      if (allAssertions.every(a => a.type === 'negated_comp')) {
-        return 'neutral';
       }
 
       return 'neutral';
@@ -1033,7 +1160,8 @@ export function extractComparisonEvidence(text: string): {
       if (!sec.toLowerCase().includes(propLower)) {
         return false;
       }
-      if (getPropertyAssertion(sec, prop, otherSub) === 'conflict') {
+      const propAssertion = getPropertyAssertion(sec, prop, otherSub);
+      if (propAssertion === 'conflict' || propAssertion === 'neutral') {
         return false;
       }
       const mentionsOther = otherSub === subB ? mentionsB : mentionsA;
@@ -1057,6 +1185,16 @@ export function extractComparisonEvidence(text: string): {
 
         const tokensOther = otherSub === subB ? tokensB : tokensA;
         const otherPattern = tokensOther.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
+        // Reject if clause has negated comparative targeting otherPattern
+        const negCompWithOtherRegex = new RegExp(
+          `(?:ไม่|ไม่ได้|มิได้|ไม่เคย)\\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\\s*(?:ใน\\s*)?(?:${otherPattern})`,
+          'i'
+        );
+        if (negCompWithOtherRegex.test(clause)) {
+          continue;
+        }
+
         const directCompWithOtherRegex = new RegExp(
           `(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)\\s*(?:ใน\\s*)?(?:${otherPattern})|(?:เมื่อเทียบกับ|ต่างจาก|แตกต่างจาก)\\s*(?:${otherPattern})[^.!?\\n]*?(?<!ไม่|ไม่ได้|มิได้|ไม่เคย)\\s*(?:หนากว่า|บางกว่า|สูงกว่า|ต่ำกว่า|เร็วกว่า|ช้ากว่า|มากกว่า|น้อยกว่า|ดีกว่า|กว้างกว่า|แคบกว่า)`,
           'i'

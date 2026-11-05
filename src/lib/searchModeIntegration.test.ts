@@ -2032,6 +2032,67 @@ describe('Track B1.7: Search Mode Integration & Verification Audit', () => {
           expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
           expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
         });
+
+        it('Test K: Distinct foreign targets must not trigger false conflict', () => {
+          const text = '- Serum: Fibrinogen สูงกว่า Whole Blood แต่ต่ำกว่า Clot\n- Plasma: Fibrinogen ต่ำกว่า Whole Blood แต่สูงกว่า Clot';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(true);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+          expect(evidence.property).toBe('Fibrinogen');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+          expect(formatted).toContain('Serum กับ Plasma');
+        });
+
+        it('Test L: Opposing predicates against the SAME foreign target must trigger conflict and fail-closed', () => {
+          const text = '- Serum: Fibrinogen สูงกว่า Whole Blood และต่ำกว่า Whole Blood\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(false);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('ไม่มีข้อมูลเปรียบเทียบคุณสมบัติหรือข้อมูลไม่เพียงพอ');
+          expect(formatted).not.toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+        });
+
+        it('Test M: Negated comparative coexisting with affirmative comparative must not bypass negation', () => {
+          // M1: Same target negation contradiction
+          const textM1 = '- Serum: Fibrinogen ไม่สูงกว่า Plasma แต่สูงกว่า Plasma\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidenceM1 = extractComparisonEvidence(textM1);
+          expect(evidenceM1.isSupported).toBe(false);
+          expect(evidenceM1.subjectA).toBe('Serum');
+          expect(evidenceM1.subjectB).toBe('Plasma');
+
+          // M2: Negated target of interest with external affirmative comparative must fail-closed
+          const textM2 = '- Serum: Fibrinogen ไม่สูงกว่า Plasma แต่สูงกว่าเกณฑ์อ้างอิง\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidenceM2 = extractComparisonEvidence(textM2);
+          expect(evidenceM2.isSupported).toBe(false);
+          expect(evidenceM2.subjectA).toBe('Serum');
+          expect(evidenceM2.subjectB).toBe('Plasma');
+
+          // M3: Ambiguous negation scope in same clause
+          const textM3 = '- Serum: Fibrinogen ไม่สูงกว่า และสูงกว่า Plasma\n- Plasma: Fibrinogen อยู่ในระดับปกติ';
+          const evidenceM3 = extractComparisonEvidence(textM3);
+          expect(evidenceM3.isSupported).toBe(false);
+          expect(evidenceM3.subjectA).toBe('Serum');
+          expect(evidenceM3.subjectB).toBe('Plasma');
+        });
+
+        it('Test N: Affirmative comparative without negation remains fully supported', () => {
+          const text = '- Serum: ระดับ Fibrinogen สูงกว่า Plasma\n- Plasma: ตรวจพบ Fibrinogen';
+          const evidence = extractComparisonEvidence(text);
+          expect(evidence.isSupported).toBe(true);
+          expect(evidence.subjectA).toBe('Serum');
+          expect(evidence.subjectB).toBe('Plasma');
+          expect(evidence.property).toBe('Fibrinogen');
+
+          const formatted = applyStudyWorkflowToFallbackText(text, 'compare');
+          expect(formatted).toContain('การวิเคราะห์เปรียบเทียบจากแหล่งข้อมูลต้นทาง:');
+          expect(formatted).toContain('Serum กับ Plasma');
+        });
       });
     });
 

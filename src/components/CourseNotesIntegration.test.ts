@@ -66,4 +66,48 @@ describe('Course Notes Feature Integration', () => {
     expect(dtm211Only.length).toBe(1);
     expect(dtm211Only[0].courseCode).toBe('DTM67-211');
   });
+
+  it('should verify that Desktop and Mobile navigation have NO Notes entrance remaining', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const appTsxPath = path.resolve(__dirname, '../App.tsx');
+    const appSource = fs.readFileSync(appTsxPath, 'utf-8');
+
+    // 1. Desktop & Mobile Nav have no setActiveTab('notes')
+    expect(appSource).not.toContain("setActiveTab('notes')");
+
+    // 2. No activeTab === 'notes' view rendering
+    expect(appSource).not.toContain("activeTab === 'notes'");
+
+    // 3. No Notes entrance buttons in chat header or course header
+    expect(appSource).not.toContain('title="เปิดดูโน้ตสรุปรายวิชา"');
+    expect(appSource).not.toContain('title="เปิดดูโน้ตสรุปของวิชานี้"');
+    expect(appSource).not.toContain('<span>โน้ตวิชานี้</span>');
+  });
+
+  it('should preserve saving notes from AI messages and SaveNoteModal integration', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const appTsxPath = path.resolve(__dirname, '../App.tsx');
+    const appSource = fs.readFileSync(appTsxPath, 'utf-8');
+
+    // SaveNoteModal is rendered
+    expect(appSource).toContain('<SaveNoteModal');
+
+    // Save note from AI message buttons exist
+    expect(appSource).toContain('handleSaveMessageAsNote');
+    expect(appSource).toContain('handleSaveLatestSummary');
+    expect(appSource).toContain('title="บันทึกคำตอบนี้เป็นโน้ตสรุปบทเรียนรายวิชาใน localStorage"');
+
+    // Saving note functionality remains operational
+    const note = saveCourseNote({
+      courseCode: 'DTM67-111',
+      courseTitle: 'พื้นฐานห้องปฏิบัติการทางการแพทย์',
+      title: 'ข้อความคำตอบ AI เรื่อง Fibrinogen',
+      content: 'Fibrinogen พบใน Plasma แต่ไม่พบใน Serum',
+      sourceType: 'chat_summary'
+    });
+    expect(note.id).toBeDefined();
+    expect(getCourseNotes().length).toBeGreaterThan(0);
+  });
 });
